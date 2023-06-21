@@ -1,7 +1,7 @@
 # rcognita
 rcognita: learn in the loop. A framework for reinforcement learning, simulation and control
 
-# Original authorship
+# Origin
 
-Pavel Osinenko, 2015
+Pavel Osinenko, 2015-2016
 Dresden/Chemnitz, Germany
