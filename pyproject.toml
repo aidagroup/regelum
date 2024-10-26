@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "regelum"
+version = "0.1.0"
+description = ""
+authors = ["Georgiy Malaniya <pwlsd.gm@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+casadi = "^3.6.7"
+torch = "^2.4.1"
+pandas = "^2.2.3"
+omegaconf = "^2.3.0"
+pytest = "^8.3.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
