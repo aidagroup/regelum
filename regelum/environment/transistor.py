@@ -54,7 +54,7 @@ class Transistor:
         state_updates = {}
 
         if "default" in self.transition_map:
-            new_state_values = self.transition_map["default"](inputs)
+            new_state_values = self.transition_map["default"]()
             state_updates.update(new_state_values)
         else:
             # Use registered transition methods
@@ -170,9 +170,9 @@ class CasADiTransistor(ODETransistor):
         )
         self.integrator = self.integrator_interface.create()
 
-    def ode_transition(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    def ode_transition(self) -> Dict[str, Any]:
         """Compute the new state using the CasADi integrator."""
-
+        inputs = self.collect_inputs()
         # Prepare the initial state
         x0 = self.node.state.value["value"]
         if isinstance(x0, np.ndarray):

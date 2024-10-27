@@ -22,7 +22,7 @@ class State:
     """A wrapper class for the state of a node in the environment."""
 
     name: str
-    dims: Optional[Tuple[int, ...]] = None
+    shape: Optional[Tuple[int, ...]] = None
     _value: Optional[Union[Any, List["State"]]] = (
         None  # Use _value to store the actual value
     )
@@ -53,14 +53,14 @@ class State:
             val = self.to_casadi_symbolic() if symbolic else self._value
             return {
                 "name": self.name,
-                "dims": self.dims,
+                "shape": self.shape,
                 "value": val,
             }
         else:
             # Hierarchical state
             return {
                 "name": self.name,
-                "dims": self.dims,
+                "shape": self.shape,
                 "states": [substate.value for substate in self._value],
             }
 
@@ -71,8 +71,8 @@ class State:
     def to_casadi_symbolic(self) -> Optional[cs.MX]:
         """Convert the state to a CasADi symbolic object."""
         if not hasattr(self, "symbolic_value"):
-            if self.dims:
-                self.symbolic_value = cs.MX.sym(self.name, *self.dims)
+            if self.shape:
+                self.symbolic_value = cs.MX.sym(self.name, *self.shape)
             else:
                 self.symbolic_value = cs.MX.sym(self.name)
         return self.symbolic_value
@@ -190,29 +190,27 @@ class Inputs:
 class Node(ABC):
     """An entity representing an atomic unit with time-dependent state."""
 
-    def __init__(
-        self,
-        inputs: Optional[Union[List[str], Inputs]] = None,
-        state: Optional[State] = None,
-        is_root: bool = False,
-    ) -> None:
-        """Instantiate a Node object."""
-        if not hasattr(self, "inputs"):
-            if inputs is not None:
-                self.inputs = Inputs(inputs) if isinstance(inputs, list) else inputs
-            else:
-                self.inputs = Inputs([])
+    inputs: Optional[Union[List[str], Inputs]] = None
+    state: Optional[State] = None
+    is_root: bool = False
 
-        if not hasattr(self, "state"):
-            if state is not None:
-                self.state = state
-            else:
-                raise ValueError("State must be fully specified.")
-        if is_root:
+    def __init__(self, is_root: bool = False) -> None:
+        """Instantiate a Node object."""
+        if self.inputs is not None:
+            self.inputs = (
+                Inputs(self.inputs) if isinstance(self.inputs, list) else self.inputs
+            )
+        else:
+            self.inputs = Inputs([])
+
+        if self.state is None:
+            raise ValueError("State must be fully specified.")
+
+        self.is_root = is_root
+        if self.is_root:
             assert (
                 self.state.is_defined
             ), f"Initial state must be defined for the root node {self.state.name}"
-        self.is_root = is_root
         self.transistor = None  # Transistor will be set later
 
     def with_transistor(self, transistor: Type[Transistor], **transistor_kwargs):

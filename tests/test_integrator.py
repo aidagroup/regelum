@@ -13,7 +13,7 @@ class InvPendulum(Node):
     def compute_state_dynamics(self, inputs):
         state: RgArray = self.state.value
         Dstate = rg.zeros(
-            self.state.dims,
+            self.state.shape,
             prototype=(state),
         )
         Dstate[0] = state[1]
