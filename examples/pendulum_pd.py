@@ -2,10 +2,17 @@ from regelum.environment.node import Node, State, Inputs, Graph
 from regelum.environment.transistor import Transistor, CasADiTransistor
 import numpy as np
 from regelum.utils import rg
-from dataclasses import dataclass
+from logging import getLogger
+import logging
+import time
+
+# Add this before creating your nodes
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 
-class PendulumPDControl(Node):
+class PendulumPDController(Node):
     state = State("pendulum_pd_control", (1,))
     inputs = Inputs(["pendulum_state"])
 
@@ -46,15 +53,43 @@ class Pendulum(Node):
         return {"pendulum_state": rg.vstack([d_angle, d_angular_velocity])}
 
 
-pd_controller = PendulumPDControl()
+class Logger(Node):
+    state = State("logger_state", (1,))
+    inputs = Inputs(["pendulum_state", "pendulum_pd_control"])
+
+    def __init__(self, log_wait_time: float = 0.0):
+        super().__init__()
+        self.logger = getLogger(__name__)
+        # Set logging level to INFO to see all info messages
+        self.logger.setLevel("INFO")
+        self.log_wait_time = log_wait_time
+        self._last_log_time = time.time()
+
+    def compute_state_dynamics(self):
+        pendulum_state = self.inputs["pendulum_state"].value["value"]
+        pendulum_pd_control = self.inputs["pendulum_pd_control"].value["value"]
+
+        # Only log every self.wait_time seconds
+        current_time = time.time()
+        if (current_time - self._last_log_time) >= self.log_wait_time:
+            self.logger.info(f"Pendulum state: {pendulum_state}")
+            self.logger.info(f"Pendulum pd control: {pendulum_pd_control}")
+            self._last_log_time = current_time
+
+        return {"logger_state": pendulum_state}
+
+
+pd_controller = PendulumPDController()
 pendulum = Pendulum(is_root=True)
-graph = Graph([pd_controller, pendulum])
+logger = Logger(log_wait_time=0.05)
+graph = Graph([pd_controller, pendulum, logger])
 
 
 pd_controller.with_transistor(Transistor, step_size=0.01)
 pendulum.with_transistor(CasADiTransistor, step_size=0.01)
+logger.with_transistor(Transistor, step_size=0.01)
 
+n_steps = 1000
 
-for _ in range(100):
+for _ in range(n_steps):
     graph.step()
-    print(pendulum.state.value["value"])
