@@ -22,7 +22,7 @@ class PendulumPDController(Node):
         self.kd = kd
 
     def compute_state_dynamics(self):
-        pendulum_state = self.inputs["pendulum_state"].value["value"]
+        pendulum_state = self.inputs["pendulum_state"].data
 
         angle = pendulum_state[0]
         angular_velocity = pendulum_state[1]
@@ -38,10 +38,10 @@ class Pendulum(Node):
     gravity_acceleration = 9.81
 
     def compute_state_dynamics(self):
-        pendulum_pd_control = self.inputs["pendulum_pd_control"].value["value"]
+        pendulum_pd_control = self.inputs["pendulum_pd_control"].data
 
-        angle = self.state.value["value"][0]
-        angular_velocity = self.state.value["value"][1]
+        angle = self.state.data[0]
+        angular_velocity = self.state.data[1]
         torque = pendulum_pd_control
 
         d_angle = angular_velocity
@@ -66,8 +66,8 @@ class Logger(Node):
         self._last_log_time = time.time()
 
     def compute_state_dynamics(self):
-        pendulum_state = self.inputs["pendulum_state"].value["value"]
-        pendulum_pd_control = self.inputs["pendulum_pd_control"].value["value"]
+        pendulum_state = self.inputs["pendulum_state"].data
+        pendulum_pd_control = self.inputs["pendulum_pd_control"].data
 
         # Only log every self.wait_time seconds
         current_time = time.time()

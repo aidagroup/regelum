@@ -1,7 +1,7 @@
 """This module contains the base class for all transistors that compute transitions of nodes composing an environment."""
 
 from __future__ import annotations
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any, List
 from abc import abstractmethod, ABC
 from regelum.environment.node import Node, State, Inputs
 from casadi import integrator, MX, vertcat, vec, DM
@@ -110,10 +110,12 @@ class ODETransistor(Transistor):
         step_size: float,
         time_final: Optional[float] = None,
         time_start: float = 0.0,
+        dynamic_variable_paths: Optional[List[str]] = None,
     ) -> None:
         """Instantiate an ODETransistor."""
         super().__init__(node=node, step_size=step_size, time_final=time_final)
         self.time = self.time_start = time_start
+        self.dynamic_variable_paths = dynamic_variable_paths
         self.integrator = None
         self.setup_integrator()
 
@@ -139,8 +141,18 @@ class CasADiTransistor(ODETransistor):
     class CasADiIntegrator(ODETransistor.IntegratorInterface):
         """An ODE integrator that uses CasADi for state transitions."""
 
-        def create(self):
+        def __init__(
+            self,
+            state: State,
+            inputs: Inputs,
+            step_size: float,
+            state_dynamics_function: Callable,
+            dynamic_variable_paths: Optional[List[str]] = None,
+        ) -> None:
+            super().__init__(state, inputs, step_size, state_dynamics_function)
+            self.dynamic_variable_paths = dynamic_variable_paths
 
+        def create(self):
             import regelum as rg
 
             with rg.symbolic_inference():
@@ -150,35 +162,72 @@ class CasADiTransistor(ODETransistor):
                     if inputs_symbolic_dict
                     else MX([])
                 )
+
+                if self.dynamic_variable_paths:
+                    state_components = []
+                    for path in self.dynamic_variable_paths:
+                        state = self.state_info.search_by_path(path)
+                        if not state:
+                            raise ValueError(
+                                f"Dynamic variable path '{path}' not found in state"
+                            )
+                        state_components.append(state.data)
+                    state_vector = vertcat(*[vec(k) for k in state_components])
+                else:
+                    if isinstance(self.state_info.data, dict):
+                        raise ValueError(
+                            "Tree-like state requires dynamic_variable_paths to be specified"
+                        )
+                    state_vector = self.state_info.data
+
                 state_dynamics = self.state_dynamics_function()
 
                 DAE = {
-                    "x": self.state_info.value["value"],
+                    "x": state_vector,
                     "p": inputs_symbolic_vector,
                     "ode": list(state_dynamics.values())[0],
                 }
 
-            # options = {"tf": self.step_size}
             return integrator("integrator", "rk", DAE, 0, self.step_size)
 
     def setup_integrator(self):
-        self.integrator_interface = self.CasADiIntegrator(
+        self.integrator = self.CasADiIntegrator(
             state=self.node.state,
             inputs=self.node.inputs,
             step_size=self.step_size,
             state_dynamics_function=self.node.compute_state_dynamics,
-        )
-        self.integrator = self.integrator_interface.create()
+            dynamic_variable_paths=self.dynamic_variable_paths,
+        ).create()
 
     def ode_transition(self) -> Dict[str, Any]:
         """Compute the new state using the CasADi integrator."""
         inputs = self.collect_inputs()
-        # Prepare the initial state
-        x0 = self.node.state.value["value"]
-        if isinstance(x0, np.ndarray):
-            x0 = DM(x0)
+
+        if self.dynamic_variable_paths:
+            state_components = []
+            for path in self.dynamic_variable_paths:
+                state = self.node.state.search_by_path(path)
+                if not state:
+                    raise ValueError(
+                        f"Dynamic variable path '{path}' not found in state"
+                    )
+                state_val = state.data
+                if isinstance(state_val, np.ndarray):
+                    state_val = DM(state_val)
+                else:
+                    state_val = DM([state_val])
+                state_components.append(state_val)
+            x0 = vertcat(*[vec(k) for k in state_components])
         else:
-            x0 = DM([x0])
+            x0 = self.node.state.data
+            if isinstance(x0, dict):
+                raise ValueError(
+                    "Tree-like state requires dynamic_variable_paths to be specified"
+                )
+            if isinstance(x0, np.ndarray):
+                x0 = DM(x0)
+            else:
+                x0 = DM([x0])
 
         inputs_values = [
             inputs[state.name]["value"] for state in self.node.inputs.states
@@ -187,5 +236,22 @@ class CasADiTransistor(ODETransistor):
 
         res = self.integrator(x0=x0, p=p)
         xf = res["xf"]
+        shapes = self.node.state.get_shapes()
         new_state_value = np.array(xf.full()).flatten()
-        return {self.node.state.name: new_state_value}
+        result = {}
+        start_idx = 0
+        if self.dynamic_variable_paths:
+            for path in self.dynamic_variable_paths:
+                size = int(np.prod(shapes[path]))
+                slice_value = new_state_value[start_idx : start_idx + size]
+
+                if len(shapes[path]) > 0:
+                    result[path] = slice_value.reshape(shapes[path])
+                else:
+                    result[path] = slice_value[0]
+
+                start_idx += size
+        else:
+            result = {self.node.state.name: new_state_value}
+
+        return result

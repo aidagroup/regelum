@@ -14,7 +14,7 @@ logging.basicConfig(
 
 
 class PendulumMPCController(Node):
-    state = State("pendulum_pd_control", (1,))
+    state = State("pendulum_mpc_control", (1,))
     inputs = Inputs(["pendulum_state"])
 
     def __init__(self, prediction_horizon: int = 10, is_root: bool = False):
@@ -94,22 +94,22 @@ class PendulumMPCController(Node):
             # Fallback control if optimization fails
             u_optimal = 0
 
-        return {"pendulum_pd_control": np.array([u_optimal])}
+        return {"pendulum_mpc_control": np.array([u_optimal])}
 
 
 class Pendulum(Node):
     state = State("pendulum_state", (2,), np.array([np.pi, 0]))
-    inputs = Inputs(["pendulum_pd_control"])
+    inputs = Inputs(["pendulum_mpc_control"])
     length = 1
     mass = 1
     gravity_acceleration = 9.81
 
     def compute_state_dynamics(self):
-        pendulum_pd_control = self.inputs["pendulum_pd_control"].value["value"]
+        pendulum_mpc_control = self.inputs["pendulum_mpc_control"].data
 
-        angle = self.state.value["value"][0]
-        angular_velocity = self.state.value["value"][1]
-        torque = pendulum_pd_control
+        angle = self.state.data[0]
+        angular_velocity = self.state.data[1]
+        torque = pendulum_mpc_control
 
         d_angle = angular_velocity
         d_angular_velocity = (
@@ -122,7 +122,7 @@ class Pendulum(Node):
 
 class Logger(Node):
     state = State("logger_state", (1,))
-    inputs = Inputs(["pendulum_state", "pendulum_pd_control"])
+    inputs = Inputs(["pendulum_state", "pendulum_mpc_control"])
 
     def __init__(self, log_wait_time: float = 0.0):
         super().__init__()
@@ -133,14 +133,14 @@ class Logger(Node):
         self._last_log_time = time.time()
 
     def compute_state_dynamics(self):
-        pendulum_state = self.inputs["pendulum_state"].value["value"]
-        pendulum_pd_control = self.inputs["pendulum_pd_control"].value["value"]
+        pendulum_state = self.inputs["pendulum_state"].data
+        pendulum_mpc_control = self.inputs["pendulum_mpc_control"].data
 
         # Only log every self.wait_time seconds
         current_time = time.time()
         if (current_time - self._last_log_time) >= self.log_wait_time:
             self.logger.info(f"Pendulum state: {pendulum_state}")
-            self.logger.info(f"Pendulum pd control: {pendulum_pd_control}")
+            self.logger.info(f"Pendulum pd control: {pendulum_mpc_control}")
             self._last_log_time = current_time
 
         return {"logger_state": pendulum_state}

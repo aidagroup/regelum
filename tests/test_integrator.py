@@ -1,64 +1,55 @@
+import pytest
+import numpy as np
+from regelum.environment.node import State, Node, Inputs
+from regelum.environment.transistor import CasADiTransistor
 from regelum.utils import rg
-from regelum.typing import RgArray
-from regelum.environment.commutator import Commutator
-from regelum.environment.transistor import CasADi, DiscreteTransistor
-from regelum.environment.node import Node, Terminate, Clock, State, Inputs, Graph
-from regelum.environment.graph_builder import GraphBuilder
 
 
-class InvPendulum(Node):
-    state = State("plant", (2, 1), rg.DM([3.14, 0.0]))
-    inputs = Inputs(["action"])
+class TestNode(Node):
+    state = State(
+        "test_state",
+        None,
+        [
+            State("substate1", (1,), np.array([1.0])),
+            State("substate2", (1,), np.array([2.0])),
+        ],
+    )
+    inputs = Inputs([])
 
-    def compute_state_dynamics(self, inputs):
-        state: RgArray = self.state.value
-        Dstate = rg.zeros(
-            self.state.shape,
-            prototype=(state),
-        )
-        Dstate[0] = state[1]
-        Dstate[1] = rg.sin(state[0]) + inputs["action"][0]
-        return Dstate
+    def compute_state_dynamics(self):
+        return {
+            "test_state": rg.vstack(
+                (
+                    self.state["test_state/substate1"].data,
+                    self.state["test_state/substate2"].data,
+                )
+            )
+        }
 
 
-class Agent(Node):
-    state = State("action", (1, 1))
-    inputs = Inputs(["plant"])
-
-    def compute_state_dynamics(self, inputs):
-        return inputs["plant"]
+@pytest.fixture
+def test_node():
+    return TestNode(is_root=True)
 
 
-inv_pendulum_node = InvPendulum(
-    transistor=CasADi(10.0, 0.01, time_start=0.0),
-    is_root=True,
-)
+def test_casadi_transistor_with_dynamic_variable_paths(test_node):
+    transistor = CasADiTransistor(
+        node=test_node,
+        step_size=0.01,
+        dynamic_variable_paths=["test_state/substate1", "test_state/substate2"],
+    )
 
-clock = Clock([inv_pendulum_node])
-terminate_inv_pendulum_node = Terminate(inv_pendulum_node)
+    # Perform a step to test the transition
+    transistor.step()
 
-graph = Graph(
-    [
-        Agent(DiscreteTransistor(10.0, 0.01)),
-        inv_pendulum_node,
-        clock,
-        terminate_inv_pendulum_node,
-    ]
-)
-# whole_node = ComposedNode([inv_pendulum_node, clock, terminate_inv_pendulum_node])
+    # Check if the state has been updated correctly
+    assert np.allclose(test_node.state["test_state/substate1"].data, 1.01005017)
+    assert np.allclose(test_node.state["test_state/substate2"].data, 2.02010033)
 
-# commutator = dict()  # {"action": rg.array([1.0])}
-# print(commutator)
-# new_state = whole_node.transistor.step(commutator)
-# print(new_state)
 
-# part_node = ComposedNode([inv_pendulum_node, clock], is_root=True)
-# whole_node = ComposedNode([part_node, terminate_inv_pendulum_node])
-
-# commutator = Commutator({})
-# print(commutator.flat_state)
-# whole_node.transistor.step(commutator)
-# commutator["action"] = rg.array([1.0])
-# print(commutator.flat_state)
-# whole_node.transistor.step(commutator)
-# print(commutator.flat_state)
+def test_casadi_transistor_without_dynamic_variable_paths_raises_error(test_node):
+    with pytest.raises(
+        ValueError,
+        match="Tree-like state requires dynamic_variable_paths to be specified",
+    ):
+        CasADiTransistor(node=test_node, step_size=0.01)

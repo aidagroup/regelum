@@ -82,23 +82,27 @@ class State:
 
     def search_by_path(self, path: str) -> Optional["State"]:
         """Search for a substate by its path."""
-        path_parts = [state for state in path.split("/") if state]
+        path_parts = [part for part in path.split("/") if part]
         if not path_parts:
             return None
 
-        if path_parts[0] == self.name:
-            if len(path_parts) == 1:
-                return self
-            else:
-                if self.is_leaf:
-                    return None
-                else:
-                    for substate in self._value:
-                        result = substate.search_by_path("/".join(path_parts[1:]))
-                        if result is not None:
-                            return result
-        else:
+        current_node = path_parts[0]
+        remaining_path = "/".join(path_parts[1:])
+
+        if current_node != self.name:
             return None
+
+        if not remaining_path:
+            return self
+
+        if self.is_leaf:
+            return None
+
+        for substate in self._value:
+            if result := substate.search_by_path(remaining_path):
+                return result
+
+        return None
 
     @property
     def paths(self) -> List[str]:
@@ -135,6 +139,24 @@ class State:
         """Check if all leaf states have a defined value."""
         return all(state._value is not None for state in self.get_all_states())
 
+    @property
+    def data(self):
+        """Direct accessor for state value data."""
+        state_value = self.value
+        if "value" in state_value:
+            return state_value["value"]
+        else:
+            return state_value["states"][0]
+
+    @data.setter
+    def data(self, new_value):
+        """Setter for state value data."""
+        self._value = new_value
+
+    def get_shapes(self) -> Dict[str, Tuple[int, ...]]:
+        """Get the shapes of all leaf states."""
+        return {path: self[path].shape for path in self.paths}
+
 
 @dataclass
 class Inputs:
@@ -147,25 +169,28 @@ class Inputs:
     def resolve(self, states: List[State]):
         """Resolve the input paths to actual State instances."""
         found_states: List[State] = []
+
         for path in self.paths_to_states:
-            for state in states:
-                found_state = state.search_by_path(path=path)
-                if found_state is not None:
-                    found_states.append(found_state)
-                    break
-        if len(self.paths_to_states) == len(found_states):
-            assert all(
-                state.is_leaf for state in found_states
-            ), "All inputs must be leaf states."
-            self.states = found_states
-            self._resolved = True
-        else:
-            missing_paths = set(self.paths_to_states) - {
-                state.name for state in found_states
-            }
-            raise ValueError(
-                f"Could not resolve all input paths. Missing: {missing_paths}"
+            found = next(
+                (
+                    state.search_by_path(path=path)
+                    for state in states
+                    if state.search_by_path(path=path)
+                ),
+                None,
             )
+            if found:
+                found_states.append(found)
+
+        if len(found_states) != len(self.paths_to_states):
+            missing = set(self.paths_to_states) - {state.name for state in found_states}
+            raise ValueError(f"Could not resolve all input paths. Missing: {missing}")
+
+        assert all(
+            state.is_leaf for state in found_states
+        ), "All inputs must be leaf states"
+        self.states = found_states
+        self._resolved = True
 
     def collect(self) -> Dict[str, Any]:
         """Collect the values of the input states, symbolic or numeric depending on context."""
@@ -244,8 +269,9 @@ class Graph:
 
     @staticmethod
     def resolve(nodes: List[Node]) -> List[Node]:
-        """Resolves the order of nodes in the graph so that every node is executed only if all of its inputs are available as states of previously executed nodes."""
-        node_state_inputs_map = {
+        """Resolves node execution order based on input dependencies."""
+        # Create mapping of node info
+        node_map = {
             node.state.name: {
                 "state": node.state,
                 "inputs": node.inputs.states,
@@ -253,38 +279,38 @@ class Graph:
             }
             for node in nodes
         }
-        assert len(set(node_state_inputs_map.keys())) == len(
-            node_state_inputs_map
-        ), "Duplicate node states detected"
 
-        ordered_node_names: List[str] = []
-        n_times_max = len(node_state_inputs_map)
-        n_times_elapsed = 0
-        while len(ordered_node_names) < len(node_state_inputs_map):
-            assert n_times_elapsed < n_times_max, (
-                "Graph cannot be resolved. Nodes not resolved "
-                f"after {n_times_elapsed} interatons "
-                f"are: {node_state_inputs_map.keys() - set(ordered_node_names)}."
-            )
-            for node_name, node_info in node_state_inputs_map.items():
-                ordered_nodes_states: List[State] = [
-                    node_state_inputs_map[n]["state"] for n in ordered_node_names
-                ]
-                if node_name not in ordered_node_names:
-                    if all(
-                        input_name in ordered_nodes_states
-                        for input_name in node_info["inputs"]
-                    ) or (node_info["is_root"]):
-                        ordered_node_names.append(node_name)
-            n_times_elapsed += 1
+        # Check for duplicates
+        assert len(set(node_map)) == len(node_map), "Duplicate node states detected"
 
-        ordered_nodes: List[Node] = []
-        for node_name in ordered_node_names:
-            ordered_nodes.append(
-                [node for node in nodes if node.state.name == node_name][0]
-            )
+        ordered_names: List[str] = []
+        max_iterations = len(node_map)
+        iterations = 0
 
-        return ordered_nodes
+        # Resolve order
+        while len(ordered_names) < len(node_map):
+            if iterations >= max_iterations:
+                unresolved = node_map.keys() - set(ordered_names)
+                raise ValueError(
+                    f"Circular dependency detected. Unresolved nodes: {unresolved}"
+                )
+
+            resolved_states = [node_map[n]["state"] for n in ordered_names]
+
+            for name, info in node_map.items():
+                if name not in ordered_names:
+                    inputs_available = all(
+                        input_state in resolved_states for input_state in info["inputs"]
+                    )
+                    if inputs_available or info["is_root"]:
+                        ordered_names.append(name)
+
+            iterations += 1
+
+        # Map back to original nodes
+        return [
+            next(n for n in nodes if n.state.name == name) for name in ordered_names
+        ]
 
     def step(self):
         """Execute a single time step for all nodes in the graph in resolved order."""
