@@ -1,5 +1,5 @@
-from regelum.environment.node import Node, State, Inputs, Graph, Clock
-from regelum.environment.transistor import Transistor, CasADiTransistor
+from regelum.environment.node import Node, State, Inputs, Graph
+from regelum.environment.transistor import Transistor, CasADiTransistor, ScipyTransistor
 import numpy as np
 from regelum.utils import rg
 import logging
@@ -139,7 +139,7 @@ graph = Graph(
 
 
 pd_controller.with_transistor(Transistor)
-pendulum.with_transistor(CasADiTransistor)
+pendulum.with_transistor(ScipyTransistor)  ## There can be CasADiTransistor
 step_counter.with_transistor(Transistor)
 n_steps = 1000
 

@@ -6,6 +6,7 @@ from abc import abstractmethod, ABC
 from regelum.environment.node import Node, State, Inputs
 from casadi import integrator, MX, vertcat, vec, DM
 import numpy as np
+from scipy.integrate import solve_ivp
 
 
 def register_transition(*paths):
@@ -245,6 +246,108 @@ class CasADiTransistor(ODETransistor):
     def _process_results(self, xf: DM) -> Dict[str, Any]:
         shapes = self.node.state.get_shapes()
         new_state_value = np.array(xf.full()).flatten()
+
+        if not self.dynamic_variable_paths:
+            return {self.node.state.name: new_state_value}
+
+        result = {}
+        start_idx = 0
+        for path in self.dynamic_variable_paths:
+            size = int(np.prod(shapes[path]))
+            slice_value = new_state_value[start_idx : start_idx + size]
+            result[path] = (
+                slice_value.reshape(shapes[path])
+                if len(shapes[path]) > 0
+                else slice_value[0]
+            )
+            start_idx += size
+        return result
+
+
+class ScipyTransistor(ODETransistor):
+    """ODETransistor using scipy's solve_ivp for numerical integration."""
+
+    class ScipyIntegrator(ODETransistor.IntegratorInterface):
+        def create(self):
+            def wrapped_dynamics(t, x, *args):
+                # Convert args tuple to numpy array for reshaping
+                args = np.array(args)
+
+                # Reshape inputs for the dynamics function
+                inputs_dict = {}
+                start_idx = 0
+                for state in self.inputs_info.states:
+                    shape = (
+                        state.value["value"].shape
+                        if hasattr(state.value["value"], "shape")
+                        else (1,)
+                    )
+                    size = int(np.prod(shape))
+                    inputs_dict[state.name] = {
+                        "value": args[start_idx : start_idx + size].reshape(shape)
+                    }
+                    start_idx += size
+
+                # Call dynamics and return flattened result
+                dynamics_result = self.state_dynamics_function()
+                return np.array(list(dynamics_result.values())[0]).flatten()
+
+            return wrapped_dynamics
+
+    def setup_integrator(self):
+        self.integrator = self.ScipyIntegrator(
+            state=self.node.state,
+            inputs=self.node.inputs,
+            step_size=self.step_size,
+            state_dynamics_function=self.node.compute_state_dynamics,
+        ).create()
+
+    def ode_transition(self) -> Dict[str, Any]:
+        inputs = self.collect_inputs()
+        x0 = self._prepare_initial_state()
+        p = self._prepare_parameters(inputs)
+
+        solution = solve_ivp(
+            fun=self.integrator,
+            t_span=(0, self.step_size),
+            y0=x0.flatten(),
+            args=tuple(p.flatten()),
+            method="RK45",
+            t_eval=[self.step_size],
+        )
+
+        return self._process_results(solution.y[:, -1])
+
+    def _prepare_initial_state(self) -> np.ndarray:
+        if self.dynamic_variable_paths:
+            return self._prepare_dynamic_state()
+        return self._prepare_simple_state()
+
+    def _prepare_dynamic_state(self) -> np.ndarray:
+        state_components = []
+        for path in self.dynamic_variable_paths:
+            state = self.node.state.search_by_path(path)
+            if not state:
+                raise ValueError(f"Dynamic variable path '{path}' not found in state")
+            state_val = np.array(state.data).flatten()
+            state_components.append(state_val)
+        return np.concatenate(state_components)
+
+    def _prepare_simple_state(self) -> np.ndarray:
+        x0 = self.node.state.data
+        if isinstance(x0, dict):
+            raise ValueError("Tree-like state requires dynamic_variable_paths")
+        return np.array(x0).flatten()
+
+    def _prepare_parameters(self, inputs: Dict[str, Any]) -> np.ndarray:
+        input_values = [
+            inputs[state.name]["value"] for state in self.node.inputs.states
+        ]
+        return np.concatenate([np.array(val).flatten() for val in input_values])
+
+    def _process_results(self, xf: np.ndarray) -> Dict[str, Any]:
+        shapes = self.node.state.get_shapes()
+        new_state_value = xf.flatten()
 
         if not self.dynamic_variable_paths:
             return {self.node.state.name: new_state_value}
