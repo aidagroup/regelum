@@ -57,7 +57,6 @@ class Transistor:
             new_state_values = self.transition_map["default"]()
             state_updates.update(new_state_values)
         else:
-            # Use registered transition methods
             for path, method in self.transition_map.items():
                 state_to_update = self.current_state.search_by_path(path)
                 if state_to_update is None:
@@ -77,6 +76,16 @@ class Transistor:
 
     def collect_inputs(self):
         return {state.name: state.value for state in self.node.inputs.states}
+
+    @classmethod
+    def with_modifier(cls, modifier):
+        class ModifiedTransistor(cls):
+            def __init__(self, node, **kwargs):
+                super().__init__(node, **kwargs)
+                modifier.node = self.node  # Bind the node to the modifier
+                self.transition_map = modifier.transition_modifier(self.transition_map)
+
+        return ModifiedTransistor
 
 
 class ODETransistor(Transistor):
@@ -270,10 +279,7 @@ class ScipyTransistor(ODETransistor):
     class ScipyIntegrator(ODETransistor.IntegratorInterface):
         def create(self):
             def wrapped_dynamics(t, x, *args):
-                # Convert args tuple to numpy array for reshaping
                 args = np.array(args)
-
-                # Reshape inputs for the dynamics function
                 inputs_dict = {}
                 start_idx = 0
                 for state in self.inputs_info.states:
@@ -288,7 +294,8 @@ class ScipyTransistor(ODETransistor):
                     }
                     start_idx += size
 
-                # Call dynamics and return flattened result
+                # Set the current state before computing dynamics
+                self.state_info.data = x
                 dynamics_result = self.state_dynamics_function()
                 return np.array(list(dynamics_result.values())[0]).flatten()
 
@@ -364,3 +371,52 @@ class ScipyTransistor(ODETransistor):
             )
             start_idx += size
         return result
+
+
+class TransistorFactory:
+    """Factory for creating modified transistors with custom transition maps."""
+
+    def __init__(
+        self, transition_modifier: Callable[[Dict[str, Callable]], Dict[str, Callable]]
+    ) -> None:
+        self.transition_modifier = transition_modifier
+
+    def create(self, transistor: Transistor) -> Transistor:
+        new_transistor = type(transistor)(
+            node=transistor.node, time_final=transistor.time_final
+        )
+        new_transistor.transition_map = self.transition_modifier(
+            transistor.transition_map
+        )
+        return new_transistor
+
+
+class SampleAndHoldFactory(TransistorFactory):
+    def __init__(self) -> None:
+        super().__init__(self._create_sample_and_hold_transition)
+
+    def _create_sample_and_hold_transition(
+        self, transition_map: Dict[str, Callable]
+    ) -> Dict[str, Callable]:
+        original_transition = transition_map["default"]
+        last_update_time = 0.0
+        cached_state = None
+
+        def sample_and_hold_transition(transistor_self) -> Dict[str, Any]:
+            nonlocal last_update_time, cached_state
+            inputs = transistor_self.node.inputs.collect()
+            current_time = float(inputs["Clock"])
+
+            if (
+                cached_state is None
+                or current_time >= last_update_time + transistor_self.node.step_size
+            ):
+                cached_state = original_transition()
+                last_update_time = current_time
+
+            return cached_state
+
+        def bound_transition():
+            return sample_and_hold_transition(self)
+
+        return {"default": bound_transition}

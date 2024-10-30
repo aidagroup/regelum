@@ -1,5 +1,10 @@
 from regelum.environment.node import Node, State, Inputs, Graph
-from regelum.environment.transistor import Transistor, CasADiTransistor, ScipyTransistor
+from regelum.environment.transistor import (
+    Transistor,
+    CasADiTransistor,
+    ScipyTransistor,
+    SampleAndHoldFactory,
+)
 import numpy as np
 from regelum.utils import rg
 import logging
@@ -13,7 +18,7 @@ logging.basicConfig(
 
 class PendulumMPCController(Node):
     state = State("pendulum_mpc_control", (1,))
-    inputs = Inputs(["pendulum_state"])
+    inputs = Inputs(["pendulum_state", "Clock"])
 
     def __init__(
         self,
@@ -23,7 +28,7 @@ class PendulumMPCController(Node):
     ):
         super().__init__(is_root, step_size)
         self.N = prediction_horizon
-        self.dt = 0.01
+        self.dt = self.step_size
         self.length = 1
         self.mass = 1
         self.g = 9.81
@@ -76,7 +81,7 @@ class PendulumMPCController(Node):
         return ca.vertcat(d_angle, d_angular_velocity)
 
     def compute_state_dynamics(self):
-        pendulum_state = self.inputs["pendulum_state"].value["value"]
+        pendulum_state = self.inputs["pendulum_state"].data
 
         # Set current state parameter
         self.opti.set_value(self.x0, pendulum_state)
@@ -127,19 +132,19 @@ class LoggerStepCounter(Node):
         return {"step_counter": self.state.data + 1}
 
 
-pd_controller = PendulumMPCController(step_size=0.01)
+mpc_controller = PendulumMPCController(step_size=0.05)
 pendulum = Pendulum(is_root=True, step_size=0.01)
 step_counter = LoggerStepCounter()
 
 graph = Graph(
-    [pd_controller, pendulum, step_counter],
+    [mpc_controller, pendulum, step_counter],
     states_to_log=["pendulum_state", "pendulum_mpc_control", "step_counter"],
-    logger_cooldown=1,
+    logger_cooldown=0.5,
 )
 
-
-pd_controller.with_transistor(Transistor)
-pendulum.with_transistor(ScipyTransistor)  ## There can be CasADiTransistor
+zoh = SampleAndHoldFactory()
+mpc_controller.with_transistor(Transistor.with_modifier(zoh))
+pendulum.with_transistor(ScipyTransistor)  # Can be CasADiTransistor
 step_counter.with_transistor(Transistor)
 n_steps = 1000
 
