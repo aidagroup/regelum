@@ -5,6 +5,10 @@ description = ""
 authors = ["Georgiy Malaniya <pwlsd.gm@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+packages = [
+    { include = "regelum", from = "." },
+    { include = "regelum/**/*.py" },
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
