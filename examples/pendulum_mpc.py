@@ -1,10 +1,8 @@
-from regelum.environment.node import Node, State, Inputs, Graph
+from regelum.environment.node import Node, State, Inputs, Graph, Clock
 from regelum.environment.transistor import Transistor, CasADiTransistor
 import numpy as np
 from regelum.utils import rg
-from logging import getLogger
 import logging
-import time
 import casadi as ca
 
 # Add this before creating your nodes
@@ -17,21 +15,19 @@ class PendulumMPCController(Node):
     state = State("pendulum_mpc_control", (1,))
     inputs = Inputs(["pendulum_state"])
 
-    def __init__(self, prediction_horizon: int = 10, is_root: bool = False):
-        super().__init__(is_root)
-        # MPC parameters
-        self.N = prediction_horizon  # Prediction horizon
-        self.dt = 0.01  # Time step (should match transistor step size)
-
-        # System parameters (matching Pendulum class)
+    def __init__(
+        self,
+        prediction_horizon: int = 10,
+        is_root: bool = False,
+        step_size: float = 0.01,
+    ):
+        super().__init__(is_root, step_size)
+        self.N = prediction_horizon
+        self.dt = 0.01
         self.length = 1
         self.mass = 1
         self.g = 9.81
-
-        # Initialize optimization problem
         self.opti = ca.Opti()
-
-        # Decision variables
         self.X = self.opti.variable(2, self.N + 1)  # States [angle, angular_velocity]
         self.U = self.opti.variable(1, self.N)  # Control inputs [torque]
 
@@ -120,42 +116,31 @@ class Pendulum(Node):
         return {"pendulum_state": rg.vstack([d_angle, d_angular_velocity])}
 
 
-class Logger(Node):
-    state = State("logger_state", (1,))
-    inputs = Inputs(["pendulum_state", "pendulum_mpc_control"])
+class LoggerStepCounter(Node):
+    state = State("step_counter", (1,), 0)
+    inputs = Inputs(["Clock"])
 
-    def __init__(self, log_wait_time: float = 0.0):
-        super().__init__()
-        self.logger = getLogger(__name__)
-        # Set logging level to INFO to see all info messages
-        self.logger.setLevel("INFO")
-        self.log_wait_time = log_wait_time
-        self._last_log_time = time.time()
+    def __init__(self):
+        super().__init__(is_root=False)
 
     def compute_state_dynamics(self):
-        pendulum_state = self.inputs["pendulum_state"].data
-        pendulum_mpc_control = self.inputs["pendulum_mpc_control"].data
-
-        # Only log every self.wait_time seconds
-        current_time = time.time()
-        if (current_time - self._last_log_time) >= self.log_wait_time:
-            self.logger.info(f"Pendulum state: {pendulum_state}")
-            self.logger.info(f"Pendulum pd control: {pendulum_mpc_control}")
-            self._last_log_time = current_time
-
-        return {"logger_state": pendulum_state}
+        return {"step_counter": self.state.data + 1}
 
 
-pd_controller = PendulumMPCController()
-pendulum = Pendulum(is_root=True)
-logger = Logger(log_wait_time=0.05)
-graph = Graph([pd_controller, pendulum, logger])
+pd_controller = PendulumMPCController(step_size=0.01)
+pendulum = Pendulum(is_root=True, step_size=0.01)
+step_counter = LoggerStepCounter()
+
+graph = Graph(
+    [pd_controller, pendulum, step_counter],
+    states_to_log=["pendulum_state", "pendulum_mpc_control", "step_counter"],
+    logger_cooldown=1,
+)
 
 
-pd_controller.with_transistor(Transistor, step_size=0.01)
-pendulum.with_transistor(CasADiTransistor, step_size=0.01)
-logger.with_transistor(Transistor, step_size=0.01)
-
+pd_controller.with_transistor(Transistor)
+pendulum.with_transistor(CasADiTransistor)
+step_counter.with_transistor(Transistor)
 n_steps = 1000
 
 for _ in range(n_steps):

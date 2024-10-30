@@ -24,12 +24,11 @@ class Transistor:
     def __init__(
         self,
         node: Node,
-        step_size: float = 1.0,  # default step size
         time_final: Optional[float] = None,
     ) -> None:
         """Instantiate a Transistor with the associated Node."""
         self.node = node
-        self.step_size = step_size
+        self.step_size = node.step_size
         self.time_final = time_final
         self.current_state = node.state
         self.transition_map = {}
@@ -107,13 +106,12 @@ class ODETransistor(Transistor):
     def __init__(
         self,
         node: Node,
-        step_size: float,
         time_final: Optional[float] = None,
         time_start: float = 0.0,
         dynamic_variable_paths: Optional[List[str]] = None,
     ) -> None:
         """Instantiate an ODETransistor."""
-        super().__init__(node=node, step_size=step_size, time_final=time_final)
+        super().__init__(node=node, time_final=time_final)
         self.time = self.time_start = time_start
         self.dynamic_variable_paths = dynamic_variable_paths
         self.integrator = None
@@ -156,39 +154,45 @@ class CasADiTransistor(ODETransistor):
             import regelum as rg
 
             with rg.symbolic_inference():
-                inputs_symbolic_dict = self.inputs_info.collect()
-                inputs_symbolic_vector = (
-                    vertcat(*[vec(k) for k in inputs_symbolic_dict.values()])
-                    if inputs_symbolic_dict
-                    else MX([])
-                )
-
-                if self.dynamic_variable_paths:
-                    state_components = []
-                    for path in self.dynamic_variable_paths:
-                        state = self.state_info.search_by_path(path)
-                        if not state:
-                            raise ValueError(
-                                f"Dynamic variable path '{path}' not found in state"
-                            )
-                        state_components.append(state.data)
-                    state_vector = vertcat(*[vec(k) for k in state_components])
-                else:
-                    if isinstance(self.state_info.data, dict):
-                        raise ValueError(
-                            "Tree-like state requires dynamic_variable_paths to be specified"
-                        )
-                    state_vector = self.state_info.data
-
+                inputs_symbolic_vector = self._create_inputs_vector()
+                state_vector = self._create_state_vector()
                 state_dynamics = self.state_dynamics_function()
 
-                DAE = {
-                    "x": state_vector,
-                    "p": inputs_symbolic_vector,
-                    "ode": list(state_dynamics.values())[0],
-                }
+                return integrator(
+                    "integrator",
+                    "rk",
+                    {
+                        "x": state_vector,
+                        "p": inputs_symbolic_vector,
+                        "ode": list(state_dynamics.values())[0],
+                    },
+                    0,
+                    self.step_size,
+                )
 
-            return integrator("integrator", "rk", DAE, 0, self.step_size)
+        def _create_inputs_vector(self) -> MX:
+            inputs_symbolic_dict = self.inputs_info.collect()
+            return (
+                vertcat(*[vec(k) for k in inputs_symbolic_dict.values()])
+                if inputs_symbolic_dict
+                else MX([])
+            )
+
+        def _create_state_vector(self) -> MX:
+            if not self.dynamic_variable_paths:
+                if isinstance(self.state_info.data, dict):
+                    raise ValueError("Tree-like state requires dynamic_variable_paths")
+                return self.state_info.data
+
+            state_components = []
+            for path in self.dynamic_variable_paths:
+                state = self.state_info.search_by_path(path)
+                if not state:
+                    raise ValueError(
+                        f"Dynamic variable path '{path}' not found in state"
+                    )
+                state_components.append(state.data)
+            return vertcat(*[vec(k) for k in state_components])
 
     def setup_integrator(self):
         self.integrator = self.CasADiIntegrator(
@@ -200,58 +204,60 @@ class CasADiTransistor(ODETransistor):
         ).create()
 
     def ode_transition(self) -> Dict[str, Any]:
-        """Compute the new state using the CasADi integrator."""
         inputs = self.collect_inputs()
-
-        if self.dynamic_variable_paths:
-            state_components = []
-            for path in self.dynamic_variable_paths:
-                state = self.node.state.search_by_path(path)
-                if not state:
-                    raise ValueError(
-                        f"Dynamic variable path '{path}' not found in state"
-                    )
-                state_val = state.data
-                if isinstance(state_val, np.ndarray):
-                    state_val = DM(state_val)
-                else:
-                    state_val = DM([state_val])
-                state_components.append(state_val)
-            x0 = vertcat(*[vec(k) for k in state_components])
-        else:
-            x0 = self.node.state.data
-            if isinstance(x0, dict):
-                raise ValueError(
-                    "Tree-like state requires dynamic_variable_paths to be specified"
-                )
-            if isinstance(x0, np.ndarray):
-                x0 = DM(x0)
-            else:
-                x0 = DM([x0])
-
-        inputs_values = [
-            inputs[state.name]["value"] for state in self.node.inputs.states
-        ]
-        p = vertcat(*[vec(DM(val)) for val in inputs_values])
+        x0 = self._prepare_initial_state()
+        p = self._prepare_parameters(inputs)
 
         res = self.integrator(x0=x0, p=p)
-        xf = res["xf"]
+        return self._process_results(res["xf"])
+
+    def _prepare_initial_state(self) -> DM:
+        if self.dynamic_variable_paths:
+            return self._prepare_dynamic_state()
+        return self._prepare_simple_state()
+
+    def _prepare_dynamic_state(self) -> DM:
+        state_components = []
+        for path in self.dynamic_variable_paths:
+            state = self.node.state.search_by_path(path)
+            if not state:
+                raise ValueError(f"Dynamic variable path '{path}' not found in state")
+            state_val = (
+                DM(state.data)
+                if isinstance(state.data, np.ndarray)
+                else DM([state.data])
+            )
+            state_components.append(state_val)
+        return vertcat(*[vec(k) for k in state_components])
+
+    def _prepare_simple_state(self) -> DM:
+        x0 = self.node.state.data
+        if isinstance(x0, dict):
+            raise ValueError("Tree-like state requires dynamic_variable_paths")
+        return DM(x0) if isinstance(x0, np.ndarray) else DM([x0])
+
+    def _prepare_parameters(self, inputs: Dict[str, Any]) -> DM:
+        input_values = [
+            inputs[state.name]["value"] for state in self.node.inputs.states
+        ]
+        return vertcat(*[vec(DM(val)) for val in input_values])
+
+    def _process_results(self, xf: DM) -> Dict[str, Any]:
         shapes = self.node.state.get_shapes()
         new_state_value = np.array(xf.full()).flatten()
+
+        if not self.dynamic_variable_paths:
+            return {self.node.state.name: new_state_value}
+
         result = {}
         start_idx = 0
-        if self.dynamic_variable_paths:
-            for path in self.dynamic_variable_paths:
-                size = int(np.prod(shapes[path]))
-                slice_value = new_state_value[start_idx : start_idx + size]
-
-                if len(shapes[path]) > 0:
-                    result[path] = slice_value.reshape(shapes[path])
-                else:
-                    result[path] = slice_value[0]
-
-                start_idx += size
-        else:
-            result = {self.node.state.name: new_state_value}
-
+        for path in self.dynamic_variable_paths:
+            size = int(np.prod(shapes[path]))
+            slice_value = new_state_value[start_idx : start_idx + size]
+            result[path] = (
+                slice_value.reshape(shapes[path])
+                if len(shapes[path]) > 0
+                else slice_value[0]
+            )
+            start_idx += size
         return result

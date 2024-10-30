@@ -1,5 +1,5 @@
 import pytest
-from regelum.environment.node import State, Inputs, Node, Graph, Clock, Terminate
+from regelum.environment.node import State, Inputs, Node, Graph, Clock
 from regelum.environment.transistor import Transistor
 import numpy as np
 

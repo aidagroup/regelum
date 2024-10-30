@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 import casadi as cs
 import numpy as np
 from regelum import _SYMBOLIC_INFERENCE_ACTIVE
+from functools import lru_cache
+import logging
 
 if TYPE_CHECKING:
     from .transistor import Transistor
@@ -29,6 +31,7 @@ class State:
     is_leaf: bool = field(init=False)
 
     def __post_init__(self):
+
         if (
             isinstance(self._value, list)
             and len(self._value) > 0
@@ -42,6 +45,8 @@ class State:
             raise TypeError(
                 f"The _value of a hierarchical State '{self.name}' must be a list of State instances."
             )
+        self._path_cache = {}
+        self._build_path_cache()
 
     @property
     def value(self):
@@ -81,28 +86,8 @@ class State:
         return self.search_by_path(key)
 
     def search_by_path(self, path: str) -> Optional["State"]:
-        """Search for a substate by its path."""
-        path_parts = [part for part in path.split("/") if part]
-        if not path_parts:
-            return None
-
-        current_node = path_parts[0]
-        remaining_path = "/".join(path_parts[1:])
-
-        if current_node != self.name:
-            return None
-
-        if not remaining_path:
-            return self
-
-        if self.is_leaf:
-            return None
-
-        for substate in self._value:
-            if result := substate.search_by_path(remaining_path):
-                return result
-
-        return None
+        """Search for a substate by its path using cache."""
+        return self._path_cache.get(path)
 
     @property
     def paths(self) -> List[str]:
@@ -157,6 +142,19 @@ class State:
         """Get the shapes of all leaf states."""
         return {path: self[path].shape for path in self.paths}
 
+    def _build_path_cache(self):
+        """Build a cache of all possible paths to substates"""
+
+        def _recurse(state: State, current_path: str):
+            full_path = f"{current_path}/{state.name}" if current_path else state.name
+            self._path_cache[full_path] = state
+
+            if not state.is_leaf:
+                for substate in state._value:
+                    _recurse(substate, full_path)
+
+        _recurse(self, "")
+
 
 @dataclass
 class Inputs:
@@ -197,7 +195,7 @@ class Inputs:
         if len(self.paths_to_states) > 0:
             if not self._resolved:
                 raise ValueError("Resolve inputs before collecting")
-            return {state.name: state.value["value"] for state in self.states}
+            return {state.name: state.data for state in self.states}
         else:
             return {}
 
@@ -219,7 +217,9 @@ class Node(ABC):
     state: Optional[State] = None
     is_root: bool = False
 
-    def __init__(self, is_root: bool = False) -> None:
+    def __init__(
+        self, is_root: bool = False, step_size: Optional[float] = None
+    ) -> None:
         """Instantiate a Node object."""
         if self.inputs is not None:
             self.inputs = (
@@ -232,30 +232,63 @@ class Node(ABC):
             raise ValueError("State must be fully specified.")
 
         self.is_root = is_root
+        self.step_size = step_size
         if self.is_root:
             assert (
                 self.state.is_defined
             ), f"Initial state must be defined for the root node {self.state.name}"
-        self.transistor = None  # Transistor will be set later
+        self.transistor = None
 
     def with_transistor(self, transistor: Type[Transistor], **transistor_kwargs):
         self.transistor = transistor(node=self, **transistor_kwargs)
         return self
 
     @abstractmethod
-    def compute_state_dynamics(
-        self, state: Dict[str, Any], inputs: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def compute_state_dynamics(self) -> Dict[str, Any]:
         """Compute the state dynamics given inputs."""
         pass
 
 
 class Graph:
-    def __init__(self, nodes: List[Node]) -> None:
-        self.nodes = nodes
-        # Collect all states from nodes
+    def __init__(
+        self,
+        nodes: List[Node],
+        states_to_log: Optional[List[str]] = None,
+        logger_cooldown: float = 0.0,
+    ) -> None:
+        # Resolve step sizes
+        defined_step_sizes = [
+            node.step_size for node in nodes if node.step_size is not None
+        ]
+        if not defined_step_sizes:
+            raise ValueError("At least one node must have a defined step_size")
+
+        min_step_size = min(defined_step_sizes)
+        for node in nodes:
+            if node.step_size is None:
+                node.step_size = min_step_size
+
+        if states_to_log:
+            step_sizes = []
+            for node in nodes:
+                for path in states_to_log:
+                    if any(
+                        state.search_by_path(path)
+                        for state in node.state.get_all_states()
+                    ):
+                        step_sizes.append(node.step_size)
+                        break
+
+            min_step_size = min(step_sizes) if step_sizes else nodes[0].step_size
+            logger = Logger(states_to_log, min_step_size, cooldown=logger_cooldown)
+            nodes.append(logger)
+            self.logger = logger
+        else:
+            self.logger = None
+
+        self.nodes = nodes + [Clock(nodes)]
         states: List[State] = reduce(
-            lambda x, y: x + y, [node.state.get_all_states() for node in nodes]
+            lambda x, y: x + y, [node.state.get_all_states() for node in self.nodes]
         )
         # Resolve inputs for each node
         for node in self.nodes:
@@ -328,7 +361,7 @@ class Clock(Node):
 
     def __init__(self, nodes: List[Node], time_start: float = 0.0) -> None:
         """Instantiate a Clock node with a fixed time step size."""
-        step_sizes = [node.transistor.step_size for node in nodes]
+        step_sizes = [node.step_size for node in nodes]
 
         def float_gcd(a: float, b: float) -> float:
             precision = 1e-9
@@ -339,35 +372,68 @@ class Clock(Node):
             reduce(float_gcd, step_sizes) if len(set(step_sizes)) > 1 else step_sizes[0]
         )
 
-        self.state.value = np.array([time_start])
-        super().__init__(state=self.state)
-        self.with_transistor(Transistor, step_size=self.fundamental_step_size)
+        self.state.data = np.array([time_start])
+        super().__init__(is_root=False, step_size=self.fundamental_step_size)
+        from regelum.environment.transistor import Transistor
 
-    def compute_state_dynamics(self, inputs: Dict[str, RgArray]) -> Dict[str, RgArray]:
-        assert isinstance(self.state.value, np.ndarray)
-        return {"Clock": self.state.value[0] + self.fundamental_step_size}
+        self.with_transistor(Transistor)
+
+    def compute_state_dynamics(self) -> Dict[str, RgArray]:
+        return {"Clock": self.state.data + self.fundamental_step_size}
 
 
-class Terminate(Node):
-    """A node representing a termination condition."""
+class Logger(Node):
+    """A node that logs specified states at each time step."""
 
-    postfix = "_terminate"
-    inputs = Inputs(["Clock", "plant"])
+    def __init__(
+        self, states_to_log: List[str], step_size: float, cooldown: float = 0.0
+    ) -> None:
+        self.states_to_log = states_to_log
+        self.state = State("Logger", (1,))
+        self.state.data = np.array([0.0])
+        self.cooldown = cooldown
+        self.last_log_time = -float("inf")  # Ensure first log happens immediately
 
-    def __init__(self, node_to_terminate: Node) -> None:
-        """Instantiate a Terminate node."""
-        self.node_to_terminate = node_to_terminate
-        self.state = State(node_to_terminate.state.name + self.postfix, (1,))
-        super().__init__(state=self.state, inputs=self.inputs)
-        self.with_transistor(Transistor, step_size=0.01)
+        self.inputs = Inputs(["Clock"] + states_to_log)
+        super().__init__(is_root=False, step_size=step_size)
+        from regelum.environment.transistor import Transistor
 
-    def compute_state_dynamics(self, inputs: Dict[str, RgArray]) -> Dict[str, bool]:
-        if self.node_to_terminate.transistor.time_final is not None:
-            return {
-                self.state.name: (
-                    False
-                    if inputs["Clock"] < self.node_to_terminate.transistor.time_final
-                    else True
-                )
-            }
-        return {self.state.name: False}
+        self.with_transistor(Transistor)
+
+        self.logs = {path: [] for path in states_to_log}
+        self.logs["time"] = []
+
+        # Setup logging - modified to prevent duplication
+        self.logger = logging.getLogger(__name__)
+        self.logger.handlers = []  # Clear any existing handlers
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter("%(asctime)s - %(message)s")
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.INFO)
+        self.logger.propagate = False  # Prevent propagation to root logger
+
+    def compute_state_dynamics(self) -> Dict[str, Any]:
+        inputs = self.inputs.collect()
+        current_time = float(inputs["Clock"][0])
+
+        if current_time - self.last_log_time >= self.cooldown:
+            self.logs["time"].append(current_time)
+            self.last_log_time = current_time
+
+            # Build log message
+            log_parts = [f"t={current_time:.3f}"]
+            for path in self.states_to_log:
+                value = inputs[path]
+                self.logs[path].append(value)
+                if isinstance(value, np.ndarray):
+                    formatted_value = np.array2string(
+                        value, precision=3, suppress_small=True
+                    )
+                else:
+                    formatted_value = f"{value:.3f}"
+                log_parts.append(f"{path}={formatted_value}")
+
+            self.logger.info(" | ".join(log_parts))
+
+        return {"Logger": self.state.data}
