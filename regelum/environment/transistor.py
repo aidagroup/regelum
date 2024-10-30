@@ -10,12 +10,14 @@ This module provides base classes for implementing different types of state tran
 """
 
 from __future__ import annotations
-from typing import Callable, Optional, Dict, Any, List
+from typing import Callable, Optional, Dict, Any, List, TYPE_CHECKING
 from abc import abstractmethod, ABC
-from regelum.environment.node import Node, State, Inputs
 from casadi import integrator, MX, vertcat, vec, DM
 import numpy as np
 from scipy.integrate import solve_ivp
+
+if TYPE_CHECKING:
+    from regelum.environment.node import Node, State, Inputs
 
 
 def register_transition(*paths):

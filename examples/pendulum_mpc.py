@@ -56,9 +56,9 @@ class LoggerStepCounter(Node):
         return {"step_counter": self.state.data + 1}
 
 
-pendulum = Pendulum(is_root=True, step_size=0.01)
+pendulum = Pendulum(is_root=True, is_continuous=True)
 step_counter = LoggerStepCounter()
-mpc_node = MPCNode(pendulum, control_shape=1, prediction_horizon=4)
+mpc_node = MPCNode(pendulum, control_shape=1, prediction_horizon=4, step_size=0.1)
 
 graph = Graph(
     [mpc_node, pendulum, step_counter],
@@ -66,11 +66,6 @@ graph = Graph(
     logger_cooldown=0.5,
 )
 
-zoh = SampleAndHoldFactory()
-mpc_node.with_transistor(Transistor.with_modifier(zoh))
-# pendulum.with_transistor(CasADiTransistor) # Uncomment to use CasADi
-pendulum.with_transistor(ScipyTransistor)
-step_counter.with_transistor(Transistor)
 n_steps = 1000
 
 for _ in range(n_steps):

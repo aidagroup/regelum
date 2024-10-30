@@ -41,12 +41,13 @@ import numpy as np
 from regelum import _SYMBOLIC_INFERENCE_ACTIVE
 import logging
 
-if TYPE_CHECKING:
-    from .transistor import Transistor
+# if TYPE_CHECKING:
+from regelum.environment.transistor import Transistor
 from regelum.typing import (
     RgArray,
 )
 from math import gcd
+from regelum.environment.transistor import ScipyTransistor, SampleAndHoldFactory
 
 T = TypeVar("T")
 
@@ -285,6 +286,8 @@ class Node(ABC):
         step_size: Optional[float] = None,
         state: Optional[State] = None,
         inputs: Optional[List[str]] = None,
+        is_continuous: bool = False,
+        default_transistor_configuration: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Instantiate a Node object."""
         if not hasattr(self, "state"):
@@ -306,7 +309,7 @@ class Node(ABC):
 
         if self.state is None:
             raise ValueError("State must be fully specified.")
-
+        self.is_continuous = is_continuous
         self.is_root = is_root
         self.step_size = step_size
         if self.is_root:
@@ -314,6 +317,19 @@ class Node(ABC):
                 self.state.is_defined
             ), f"Initial state must be defined for the root node {self.state.name}"
         self.transistor = None
+        if default_transistor_configuration is not None:
+            self.default_transistor_configuration = default_transistor_configuration
+        else:
+            if self.is_continuous:
+                self.default_transistor_configuration = {
+                    "transistor": ScipyTransistor,
+                    "transistor_kwargs": {},
+                }
+            else:
+                self.default_transistor_configuration = {
+                    "transistor": Transistor,
+                    "transistor_kwargs": {},
+                }
 
     def with_transistor(self, transistor: Type[Transistor], **transistor_kwargs):
         self.transistor = transistor(node=self, **transistor_kwargs)
@@ -396,6 +412,17 @@ class Graph:
 
         self.ordered_nodes = self.resolve(self.nodes)
         self._log_node_order()
+        zoh = SampleAndHoldFactory()
+        for node in self.ordered_nodes:
+            if node.transistor is None:
+                if not node.is_continuous:
+                    node.default_transistor_configuration["transistor"].with_modifier(
+                        zoh
+                    )
+                node.with_transistor(
+                    node.default_transistor_configuration["transistor"],
+                    **node.default_transistor_configuration["transistor_kwargs"],
+                )
 
     def _log_node_order(self):
         self.ordered_nodes_str = " -> ".join(
@@ -469,7 +496,7 @@ class Clock(Node):
 
     def __init__(self, nodes: List[Node], time_start: float = 0.0) -> None:
         """Instantiate a Clock node with a fixed time step size."""
-        step_sizes = [node.step_size for node in nodes]
+        step_sizes = [node.step_size for node in nodes if not node.is_continuous]
 
         def float_gcd(a: float, b: float) -> float:
             precision = 1e-9
