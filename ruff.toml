@@ -1,0 +1,27 @@
+# Enable flake8-bugbear (`B`) rules.
+select = ["E", "F", "B", "D"]
+
+# Never enforce `E501` (line length violations).
+ignore = ["E501", "B905", "B027", "E741", "B024", "D102", "D103", "D105", "F821", "D213", "D203", "E999"]
+
+# Avoid trying to fix flake8-bugbear (`B`) violations.
+unfixable = ["B"]
+
+# Ignore `E402` (import violations) in all `__init__.py` files, and in `path/to/file.py`.
+[per-file-ignores]
+"vis_inverted_pendulum.py" = ["D"]
+"vis_lunar_lander.py" = ["D"]
+"vis_grid_world.py" = ["D"]
+"vis_3wrobot.py" = ["D"]
+"vis_2tank.py" = ["D"]
+"animator.py" = ["D"]
+"__fake_plugins.py" = ["D"]
+"__hydra_main.py" = ["D"]
+"__instantiate.py" = ["D"]
+"__internal_utils.py" = ["D"]
+"__init__.py" = ["F401", "F403"]
+"callback.py" = ["F403", "E402"]
+#"path/to/file.py" = ["E402"]
+
+[pydocstyle]
+convention = "google"

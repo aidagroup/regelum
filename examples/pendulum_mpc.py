@@ -1,4 +1,5 @@
-from regelum.environment.node import Node, State, Inputs, Graph
+from regelum.environment.node import Node, State, Inputs, Graph, MPCNode
+from typing import Tuple, Optional, Dict, Any, Type
 from regelum.environment.transistor import (
     Transistor,
     CasADiTransistor,
@@ -16,100 +17,18 @@ logging.basicConfig(
 )
 
 
-class PendulumMPCController(Node):
-    state = State("pendulum_mpc_control", (1,))
-    inputs = Inputs(["pendulum_state", "Clock"])
-
-    def __init__(
-        self,
-        prediction_horizon: int = 10,
-        is_root: bool = False,
-        step_size: float = 0.01,
-    ):
-        super().__init__(is_root, step_size)
-        self.N = prediction_horizon
-        self.dt = self.step_size
-        self.length = 1
-        self.mass = 1
-        self.g = 9.81
-        self.opti = ca.Opti()
-        self.X = self.opti.variable(2, self.N + 1)  # States [angle, angular_velocity]
-        self.U = self.opti.variable(1, self.N)  # Control inputs [torque]
-
-        # Parameters for current state
-        self.x0 = self.opti.parameter(2, 1)
-
-        # Define objective function
-        objective = 0
-        for k in range(self.N):
-            # Penalize state deviation from upright position and control effort
-            objective += (
-                (self.X[0, k]) ** 2
-                + 0.1 * (self.X[1, k]) ** 2
-                + 0.01 * (self.U[0, k]) ** 2
-            )
-
-        self.opti.minimize(objective)
-
-        # System dynamics constraints
-        for k in range(self.N):
-            x_next = self.X[:, k] + self.dt * self.system_dynamics(
-                self.X[:, k], self.U[:, k]
-            )
-            self.opti.subject_to(self.X[:, k + 1] == x_next)
-
-        # Input constraints
-        self.opti.subject_to(self.opti.bounded(-5, self.U, 5))  # Limit torque
-
-        # Initial condition constraints
-        self.opti.subject_to(self.X[:, 0] == self.x0)
-
-        # Set solver options
-        opts = {"ipopt.print_level": 0, "print_time": 0}
-        self.opti.solver("ipopt", opts)
-
-    def system_dynamics(self, x, u):
-        """Pendulum dynamics for MPC model"""
-        angle, angular_velocity = x[0], x[1]
-        torque = u[0]
-
-        d_angle = angular_velocity
-        d_angular_velocity = (
-            -3 * self.g / (2 * self.length) * ca.sin(angle) + torque / self.mass
-        )
-
-        return ca.vertcat(d_angle, d_angular_velocity)
-
-    def compute_state_dynamics(self):
-        pendulum_state = self.inputs["pendulum_state"].data
-
-        # Set current state parameter
-        self.opti.set_value(self.x0, pendulum_state)
-
-        try:
-            # Solve optimization problem
-            sol = self.opti.solve()
-            # Extract first control input
-            u_optimal = sol.value(self.U[:, 0])
-        except:
-            # Fallback control if optimization fails
-            u_optimal = 0
-
-        return {"pendulum_mpc_control": np.array([u_optimal])}
-
-
 class Pendulum(Node):
     state = State("pendulum_state", (2,), np.array([np.pi, 0]))
-    inputs = Inputs(["pendulum_mpc_control"])
+    inputs = Inputs(["mpc_pendulum_state_control"])
     length = 1
     mass = 1
     gravity_acceleration = 9.81
 
-    def compute_state_dynamics(self):
-        pendulum_mpc_control = self.inputs["pendulum_mpc_control"].data
+    def system_dynamics(self, x, u):
+        pendulum_mpc_control = u
 
-        angle = self.state.data[0]
-        angular_velocity = self.state.data[1]
+        angle = x[0]
+        angular_velocity = x[1]
         torque = pendulum_mpc_control
 
         d_angle = angular_velocity
@@ -119,6 +38,11 @@ class Pendulum(Node):
         )
 
         return {"pendulum_state": rg.vstack([d_angle, d_angular_velocity])}
+
+    def compute_state_dynamics(self):
+        pendulum_mpc_control = self.inputs["mpc_pendulum_state_control"].data
+
+        return self.system_dynamics(self.state.data, pendulum_mpc_control)
 
 
 class LoggerStepCounter(Node):
@@ -132,19 +56,20 @@ class LoggerStepCounter(Node):
         return {"step_counter": self.state.data + 1}
 
 
-mpc_controller = PendulumMPCController(step_size=0.05)
 pendulum = Pendulum(is_root=True, step_size=0.01)
 step_counter = LoggerStepCounter()
+mpc_node = MPCNode(pendulum, control_shape=1, prediction_horizon=4)
 
 graph = Graph(
-    [mpc_controller, pendulum, step_counter],
-    states_to_log=["pendulum_state", "pendulum_mpc_control", "step_counter"],
+    [mpc_node, pendulum, step_counter],
+    states_to_log=["pendulum_state", "mpc_pendulum_state_control", "step_counter"],
     logger_cooldown=0.5,
 )
 
 zoh = SampleAndHoldFactory()
-mpc_controller.with_transistor(Transistor.with_modifier(zoh))
-pendulum.with_transistor(ScipyTransistor)  # Can be CasADiTransistor
+mpc_node.with_transistor(Transistor.with_modifier(zoh))
+# pendulum.with_transistor(CasADiTransistor) # Uncomment to use CasADi
+pendulum.with_transistor(ScipyTransistor)
 step_counter.with_transistor(Transistor)
 n_steps = 1000
 

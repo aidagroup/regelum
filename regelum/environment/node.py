@@ -1,14 +1,44 @@
-"""This module contains the base class for all nodes in the environment."""
+"""Environment node module for building hierarchical state-based systems.
+
+This module provides base classes for creating nodes in a computational graph,
+managing state hierarchies, and implementing MPC controllers.
+
+The module includes:
+    - State: Wrapper for hierarchical state management
+    - Inputs: Handler for node input dependencies
+    - Node: Base class for all computational nodes
+    - Graph: Manages node execution and dependencies
+    - Clock: Provides timing functionality
+    - Logger: Records state evolution
+    - MPCNode: Implements Model Predictive Control
+"""
 
 from __future__ import annotations
 from functools import reduce
-from typing import Dict, Optional, Tuple, TYPE_CHECKING, Union, List, Any, Type
+from typing import (
+    Dict,
+    Optional,
+    Tuple,
+    TYPE_CHECKING,
+    Union,
+    List,
+    Any,
+    Type,
+    TypeVar,
+    overload,
+    Literal,
+    cast,
+)
+
+try:
+    from typing import TypeGuard  # Python 3.10+
+except ImportError:
+    from typing_extensions import TypeGuard  # Python < 3.10
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 import casadi as cs
 import numpy as np
 from regelum import _SYMBOLIC_INFERENCE_ACTIVE
-from functools import lru_cache
 import logging
 
 if TYPE_CHECKING:
@@ -18,56 +48,64 @@ from regelum.typing import (
 )
 from math import gcd
 
+T = TypeVar("T")
+
 
 @dataclass
 class State:
-    """A wrapper class for the state of a node in the environment."""
+    """Hierarchical state container with path-based access.
+
+    Args:
+        name: State identifier
+        shape: Shape of the state data
+        _value: State data or list of child states
+        is_leaf: Auto-determined leaf status
+    """
 
     name: str
     shape: Optional[Tuple[int, ...]] = None
-    _value: Optional[Union[Any, List["State"]]] = (
-        None  # Use _value to store the actual value
-    )
+    _value: Union[Any, List["State"], None] = None
     is_leaf: bool = field(init=False)
 
     def __post_init__(self):
+        self.is_leaf = self._determine_leaf_status()
+        self._validate_hierarchical_state()
+        self._path_cache = {}
+        self._build_path_cache()
 
-        if (
+    def _determine_leaf_status(self) -> bool:
+        return not (
             isinstance(self._value, list)
             and len(self._value) > 0
             and all(isinstance(s, State) for s in self._value)
+        )
+
+    def _validate_hierarchical_state(self):
+        if not self.is_leaf and not all(
+            isinstance(s, State) for s in self.get_value(is_leaf=False)
         ):
-            self.is_leaf = False
-        else:
-            self.is_leaf = True
-        # If _value is a list, but not all elements are State instances, and it's supposed to be hierarchical
-        if not self.is_leaf and not all(isinstance(s, State) for s in self._value):
             raise TypeError(
-                f"The _value of a hierarchical State '{self.name}' must be a list of State instances."
+                f"The _value of hierarchical State '{self.name}' must be a list of State instances."
             )
-        self._path_cache = {}
-        self._build_path_cache()
 
     @property
     def value(self):
         """Return a dict representation of the state."""
-        symbolic = getattr(_SYMBOLIC_INFERENCE_ACTIVE, "value", False)
+        return (
+            self._get_leaf_value() if self.is_leaf else self._get_hierarchical_value()
+        )
 
-        if self.is_leaf:
-            # Leaf state
-            val = self.to_casadi_symbolic() if symbolic else self._value
-            return {
-                "name": self.name,
-                "shape": self.shape,
-                "value": val,
-            }
-        else:
-            # Hierarchical state
-            return {
-                "name": self.name,
-                "shape": self.shape,
-                "states": [substate.value for substate in self._value],
-            }
+    def _get_leaf_value(self):
+        symbolic = getattr(_SYMBOLIC_INFERENCE_ACTIVE, "value", False)
+        val = self.to_casadi_symbolic() if symbolic else self._value
+        return {"name": self.name, "shape": self.shape, "value": val}
+
+    def _get_hierarchical_value(self):
+        return {
+            "name": self.name,
+            "shape": self.shape,
+            "states": [substate.value for substate in self.get_value(is_leaf=False)],
+        }
 
     @value.setter
     def value(self, new_value):
@@ -102,7 +140,7 @@ class State:
         if self.is_leaf:
             paths.append(current_path)
         else:
-            for substate in self._value:
+            for substate in self.get_value(is_leaf=False):
                 substate._collect_paths(prefix=current_path, paths=paths)
 
     def get_all_states(self) -> List["State"]:
@@ -112,11 +150,10 @@ class State:
         return states
 
     def _collect_states(self, states: List["State"]):
-        """Helper method to collect states recursively."""
         if self.is_leaf:
             states.append(self)
         else:
-            for substate in self._value:
+            for substate in self.get_value(is_leaf=False):
                 substate._collect_states(states=states)
 
     @property
@@ -155,10 +192,32 @@ class State:
 
         _recurse(self, "")
 
+    @property
+    def hierarchical_value(self) -> TypeGuard[List["State"]]:
+        """Type guard to ensure _value is List[State] when not leaf."""
+        return not self.is_leaf and isinstance(self._value, list)
+
+    @overload
+    def get_value(self: "State", *, is_leaf: Literal[True]) -> Any: ...
+
+    @overload
+    def get_value(self: "State", *, is_leaf: Literal[False]) -> List["State"]: ...
+
+    def get_value(self, *, is_leaf: bool) -> Union[Any, List["State"]]:
+        if is_leaf:
+            return self._value
+        return cast(List["State"], self._value)
+
 
 @dataclass
 class Inputs:
-    """A wrapper class for the inputs of a node in the environment."""
+    """Input dependency manager for nodes.
+
+    Args:
+        paths_to_states: List of state paths required as inputs
+        states: Resolved State objects
+        _resolved: Resolution status flag
+    """
 
     paths_to_states: List[str]
     states: List[State] = field(default_factory=list)
@@ -211,22 +270,39 @@ class Inputs:
 
 
 class Node(ABC):
-    """An entity representing an atomic unit with time-dependent state."""
+    """Base class for computational nodes.
 
-    inputs: Optional[Union[List[str], Inputs]] = None
-    state: Optional[State] = None
-    is_root: bool = False
+    Args:
+        is_root: Whether node is a root node
+        step_size: Node's time step size
+        state: Node's state object
+        inputs: Required input state paths
+    """
 
     def __init__(
-        self, is_root: bool = False, step_size: Optional[float] = None
+        self,
+        is_root: bool = False,
+        step_size: Optional[float] = None,
+        state: Optional[State] = None,
+        inputs: Optional[List[str]] = None,
     ) -> None:
         """Instantiate a Node object."""
-        if self.inputs is not None:
-            self.inputs = (
-                Inputs(self.inputs) if isinstance(self.inputs, list) else self.inputs
-            )
+        if not hasattr(self, "state"):
+            if state is None:
+                raise ValueError("State must be fully specified.")
+            self.state = state
+
+        if not hasattr(self, "inputs"):
+            if inputs is None:
+                inputs = []
+            self.inputs = Inputs(inputs)
         else:
-            self.inputs = Inputs([])
+            if isinstance(self.inputs, list):
+                self.inputs = Inputs(self.inputs)
+            elif isinstance(self.inputs, Inputs):
+                pass
+            else:
+                raise ValueError("Inputs must be a list of strings")
 
         if self.state is None:
             raise ValueError("State must be fully specified.")
@@ -250,13 +326,25 @@ class Node(ABC):
 
 
 class Graph:
+    """Manages node execution order and dependencies.
+
+    Args:
+        nodes: List of nodes to manage
+        states_to_log: State paths to record
+        logger_cooldown: Minimum time between logs
+    """
+
     def __init__(
         self,
         nodes: List[Node],
         states_to_log: Optional[List[str]] = None,
         logger_cooldown: float = 0.0,
     ) -> None:
-        # Resolve step sizes
+        self._validate_and_set_step_sizes(nodes)
+        self._setup_logger(nodes, states_to_log, logger_cooldown)
+        self._initialize_graph(nodes)
+
+    def _validate_and_set_step_sizes(self, nodes: List[Node]):
         defined_step_sizes = [
             node.step_size for node in nodes if node.step_size is not None
         ]
@@ -268,33 +356,48 @@ class Graph:
             if node.step_size is None:
                 node.step_size = min_step_size
 
-        if states_to_log:
-            step_sizes = []
-            for node in nodes:
-                for path in states_to_log:
-                    if any(
-                        state.search_by_path(path)
-                        for state in node.state.get_all_states()
-                    ):
-                        step_sizes.append(node.step_size)
-                        break
-
-            min_step_size = min(step_sizes) if step_sizes else nodes[0].step_size
-            logger = Logger(states_to_log, min_step_size, cooldown=logger_cooldown)
-            nodes.append(logger)
-            self.logger = logger
-        else:
+    def _setup_logger(
+        self,
+        nodes: List[Node],
+        states_to_log: Optional[List[str]],
+        logger_cooldown: float,
+    ):
+        if not states_to_log:
             self.logger = None
+            return
 
+        step_sizes = self._get_logger_step_sizes(nodes, states_to_log)
+        min_step_size = min(step_sizes) if step_sizes else nodes[0].step_size
+        self.logger = Logger(states_to_log, min_step_size, cooldown=logger_cooldown)
+        nodes.append(self.logger)
+
+    def _get_logger_step_sizes(
+        self, nodes: List[Node], states_to_log: List[str]
+    ) -> List[float]:
+        return [
+            node.step_size
+            for node in nodes
+            if node.step_size is not None
+            and any(
+                state.search_by_path(path)
+                for state in node.state.get_all_states()
+                for path in states_to_log
+            )
+        ]
+
+    def _initialize_graph(self, nodes: List[Node]):
         self.nodes = nodes + [Clock(nodes)]
-        states: List[State] = reduce(
+        states = reduce(
             lambda x, y: x + y, [node.state.get_all_states() for node in self.nodes]
         )
-        # Resolve inputs for each node
+
         for node in self.nodes:
             node.inputs.resolve(states)
 
         self.ordered_nodes = self.resolve(self.nodes)
+        self._log_node_order()
+
+    def _log_node_order(self):
         self.ordered_nodes_str = " -> ".join(
             [node.state.name for node in self.ordered_nodes]
         )
@@ -355,7 +458,12 @@ class Graph:
 
 
 class Clock(Node):
-    """A node representing a clock with a fixed time step size."""
+    """Time management node.
+
+    Args:
+        nodes: List of nodes to synchronize
+        time_start: Initial time value
+    """
 
     state = State("Clock", (1,))
 
@@ -383,7 +491,13 @@ class Clock(Node):
 
 
 class Logger(Node):
-    """A node that logs specified states at each time step."""
+    """State recording node.
+
+    Args:
+        states_to_log: State paths to record
+        step_size: Logging interval
+        cooldown: Minimum time between logs
+    """
 
     def __init__(
         self, states_to_log: List[str], step_size: float, cooldown: float = 0.0
@@ -395,7 +509,7 @@ class Logger(Node):
         self.last_log_time = -float("inf")  # Ensure first log happens immediately
 
         self.inputs = Inputs(["Clock"] + states_to_log)
-        super().__init__(is_root=False, step_size=step_size)
+        super().__init__(is_root=False, step_size=step_size, inputs=self.states_to_log)
         from regelum.environment.transistor import Transistor
 
         self.with_transistor(Transistor)
@@ -437,3 +551,113 @@ class Logger(Node):
             self.logger.info(" | ".join(log_parts))
 
         return {"Logger": self.state.data}
+
+
+class MPCNode(Node):
+    """Model Predictive Control node.
+
+    Args:
+        target_node: Node to control
+        control_shape: Control input dimension
+        prediction_horizon: MPC horizon length
+        is_root: Whether node is a root node
+        step_size: Control interval
+        input_bounds: Control input constraints
+        state_weights: State cost weights
+        input_weights: Control cost weights
+    """
+
+    def __init__(
+        self,
+        target_node: Node,
+        control_shape: int,
+        prediction_horizon: int = 10,
+        is_root: bool = False,
+        step_size: Optional[float] = None,
+        input_bounds: Optional[Dict[str, tuple[float, float]]] = None,
+        state_weights: Optional[Dict[str, float]] = None,
+        input_weights: Optional[Dict[str, float]] = None,
+    ) -> None:
+        if step_size is None:
+            step_size = target_node.step_size
+
+        assert hasattr(
+            target_node, "system_dynamics"
+        ), "Target node must have a system dynamics method of the form system_dynamics(x, u) -> Dict[str, RgArray]"
+
+        self.control_shape = control_shape
+        self.target_node = target_node
+        self.state = State(
+            f"mpc_{target_node.state.name}_control", (self.control_shape,)
+        )
+        self.inputs = Inputs([target_node.state.name, "Clock"])
+
+        super().__init__(is_root, step_size)
+
+        self.N = prediction_horizon
+        self.dt = self.step_size
+        self.state_weights = state_weights or {target_node.state.name: 1.0}
+        self.input_weights = input_weights or {self.state.name: 0.01}
+        self.input_bounds = input_bounds
+
+    def with_transistor(self, transistor: Type[Transistor], **transistor_kwargs):
+        self.setup_optimization(self.input_bounds or {})
+        return super().with_transistor(transistor, **transistor_kwargs)
+
+    def setup_optimization(self, input_bounds: Dict[str, tuple[float, float]]) -> None:
+        import regelum as rg
+
+        with rg.symbolic_inference():
+            state_dynamics = self.target_node.compute_state_dynamics()
+            state_dim = state_dynamics[self.target_node.state.name].shape[0]
+            input_dim = self.state.data.shape[0]
+
+        self.opti = cs.Opti()
+        self.X = self.opti.variable(state_dim, self.N + 1)
+        self.U = self.opti.variable(input_dim, self.N)
+        self.x0 = self.opti.parameter(state_dim)
+
+        objective = 0
+        for k in range(self.N):
+            state_error = self.X[:, k]
+            objective += sum(
+                w * (state_error[i]) ** 2
+                for i in range(state_dim)
+                for _, w in self.state_weights.items()
+            )
+            objective += sum(
+                w * (self.U[:, k][i]) ** 2
+                for i in range(input_dim)
+                for _, w in self.input_weights.items()
+            )
+
+        self.opti.minimize(objective)
+
+        # Initial condition
+        self.opti.subject_to(self.X[:, 0] == self.x0)
+
+        # System dynamics
+        for k in range(self.N):
+            dynamics = self.target_node.system_dynamics(self.X[:, k], self.U[:, k])
+            x_next = self.X[:, k] + self.dt * dynamics[self.target_node.state.name]
+            self.opti.subject_to(self.X[:, k + 1] == x_next)
+
+        # Input bounds
+        if input_bounds:
+            lb, ub = input_bounds.get(self.state.name, (-float("inf"), float("inf")))
+            self.opti.subject_to(self.opti.bounded(lb, self.U, ub))
+
+        opts = {"ipopt.print_level": 0, "print_time": 0, "ipopt.sb": "yes"}
+        self.opti.solver("ipopt", opts)
+
+    def compute_state_dynamics(self):
+        current_state = self.inputs[self.target_node.state.name].data
+        self.opti.set_value(self.x0, current_state)
+
+        try:
+            sol = self.opti.solve()
+            u_optimal = sol.value(self.U[:, 0])
+        except:
+            u_optimal = np.zeros(self.control_shape)
+
+        return {self.state.name: u_optimal}

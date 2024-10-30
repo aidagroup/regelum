@@ -1,4 +1,13 @@
-"""This module contains the base class for all transistors that compute transitions of nodes composing an environment."""
+"""Transistor module for computing state transitions in environment nodes.
+
+This module provides base classes for implementing different types of state transitions:
+    - Transistor: Base class for state transitions
+    - ODETransistor: Base class for ODE-based transitions
+    - CasADiTransistor: CasADi-based ODE solver
+    - ScipyTransistor: SciPy-based ODE solver
+    - TransistorFactory: Factory for creating modified transistors
+    - SampleAndHoldFactory: Factory for sample-and-hold behavior
+"""
 
 from __future__ import annotations
 from typing import Callable, Optional, Dict, Any, List
@@ -20,7 +29,12 @@ def register_transition(*paths):
 
 
 class Transistor:
-    """An entity representing a state transition of a node in the environment."""
+    """Base transistor for computing state transitions.
+
+    Args:
+        node: Node to compute transitions for
+        time_final: Optional end time for simulation
+    """
 
     def __init__(
         self,
@@ -89,10 +103,24 @@ class Transistor:
 
 
 class ODETransistor(Transistor):
-    """A base class for computing the evolution of the state of a node represented as an ODE."""
+    """Base class for ODE-based state transitions.
+
+    Args:
+        node: Node to compute transitions for
+        time_final: Optional end time for simulation
+        time_start: Initial time
+        dynamic_variable_paths: Paths to dynamic state variables
+    """
 
     class IntegratorInterface(ABC):
-        """An interface for an ODE integrator."""
+        """Interface for ODE integrators.
+
+        Args:
+            state: State to integrate
+            inputs: Input dependencies
+            step_size: Integration step size
+            state_dynamics_function: System dynamics function
+        """
 
         def __init__(
             self,
@@ -144,10 +172,21 @@ class ODETransistor(Transistor):
 
 
 class CasADiTransistor(ODETransistor):
-    """An ODETransistor that uses CasADi to compute the state transitions."""
+    """CasADi-based ODE solver for state transitions.
+
+    Uses CasADi's numerical integration tools for computing state evolution.
+    """
 
     class CasADiIntegrator(ODETransistor.IntegratorInterface):
-        """An ODE integrator that uses CasADi for state transitions."""
+        """CasADi-specific ODE integrator implementation.
+
+        Args:
+            state: State to integrate
+            inputs: Input dependencies
+            step_size: Integration step size
+            state_dynamics_function: System dynamics function
+            dynamic_variable_paths: Paths to dynamic state variables
+        """
 
         def __init__(
             self,
@@ -274,9 +313,14 @@ class CasADiTransistor(ODETransistor):
 
 
 class ScipyTransistor(ODETransistor):
-    """ODETransistor using scipy's solve_ivp for numerical integration."""
+    """SciPy-based ODE solver for state transitions.
+
+    Uses SciPy's solve_ivp for numerical integration of system dynamics.
+    """
 
     class ScipyIntegrator(ODETransistor.IntegratorInterface):
+        """SciPy-specific ODE integrator implementation."""
+
         def create(self):
             def wrapped_dynamics(t, x, *args):
                 args = np.array(args)
@@ -302,6 +346,7 @@ class ScipyTransistor(ODETransistor):
             return wrapped_dynamics
 
     def setup_integrator(self):
+        assert self.step_size is not None, "Step size must be set"
         self.integrator = self.ScipyIntegrator(
             state=self.node.state,
             inputs=self.node.inputs,
@@ -374,7 +419,11 @@ class ScipyTransistor(ODETransistor):
 
 
 class TransistorFactory:
-    """Factory for creating modified transistors with custom transition maps."""
+    """Factory for creating modified transistors.
+
+    Args:
+        transition_modifier: Function to modify transition mappings
+    """
 
     def __init__(
         self, transition_modifier: Callable[[Dict[str, Callable]], Dict[str, Callable]]
@@ -392,6 +441,11 @@ class TransistorFactory:
 
 
 class SampleAndHoldFactory(TransistorFactory):
+    """Factory for creating sample-and-hold behavior in transistors.
+
+    Creates transistors that update state at fixed intervals and hold values between updates.
+    """
+
     def __init__(self) -> None:
         super().__init__(self._create_sample_and_hold_transition)
 
