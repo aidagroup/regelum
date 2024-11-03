@@ -19,7 +19,6 @@ from typing import (
     Dict,
     Optional,
     Tuple,
-    TYPE_CHECKING,
     Union,
     List,
     Any,
@@ -89,6 +88,10 @@ class State:
                 f"The _value of hierarchical State '{self.name}' must be a list of State instances."
             )
 
+    def with_altered_name(self, new_name: str):
+        self.name = new_name
+        return self
+
     @property
     def value(self):
         """Return a dict representation of the state."""
@@ -154,6 +157,7 @@ class State:
         if self.is_leaf:
             states.append(self)
         else:
+            states.append(self)
             for substate in self.get_value(is_leaf=False):
                 substate._collect_states(states=states)
 
@@ -181,7 +185,7 @@ class State:
         return {path: self[path].shape for path in self.paths}
 
     def _build_path_cache(self):
-        """Build a cache of all possible paths to substates"""
+        """Build a cache of all possible paths to substates."""
 
         def _recurse(state: State, current_path: str):
             full_path = f"{current_path}/{state.name}" if current_path else state.name
@@ -266,8 +270,8 @@ class Inputs:
         try:
             index = self.paths_to_states.index(key)
             return self.states[index]
-        except ValueError:
-            raise KeyError(f"Input '{key}' not found in paths_to_states")
+        except ValueError as err:
+            raise KeyError(f"Input '{key}' not found in paths_to_states") from err
 
 
 class Node(ABC):
@@ -289,7 +293,16 @@ class Node(ABC):
         is_continuous: bool = False,
         default_transistor_configuration: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Instantiate a Node object."""
+        """Initialize the Node.
+
+        Args:
+            is_root: Whether node is a root node.
+            step_size: Node's time step size.
+            state: Node's state object.
+            inputs: Required input state paths.
+            is_continuous: Whether node represents continuous dynamics.
+            default_transistor_configuration: Default configuration for transistor.
+        """
         if not hasattr(self, "state"):
             if state is None:
                 raise ValueError("State must be fully specified.")
@@ -356,6 +369,13 @@ class Graph:
         states_to_log: Optional[List[str]] = None,
         logger_cooldown: float = 0.0,
     ) -> None:
+        """Initialize the Graph.
+
+        Args:
+            nodes: List of nodes to manage.
+            states_to_log: State paths to record.
+            logger_cooldown: Minimum time between logs.
+        """
         self._validate_and_set_step_sizes(nodes)
         self._setup_logger(nodes, states_to_log, logger_cooldown)
         self._initialize_graph(nodes)
@@ -433,47 +453,50 @@ class Graph:
     @staticmethod
     def resolve(nodes: List[Node]) -> List[Node]:
         """Resolves node execution order based on input dependencies."""
-        # Create mapping of node info
-        node_map = {
-            node.state.name: {
+        # Create unique identifiers for nodes
+        node_map = {}
+        for idx, node in enumerate(nodes):
+            unique_id = f"{node.state.name}_{idx}"
+            node_map[unique_id] = {
+                "node": node,
                 "state": node.state,
-                "inputs": node.inputs.states,
+                "inputs": node.inputs.paths_to_states,
                 "is_root": node.is_root,
             }
-            for node in nodes
-        }
 
-        # Check for duplicates
-        assert len(set(node_map)) == len(node_map), "Duplicate node states detected"
-
-        ordered_names: List[str] = []
+        ordered_ids: List[str] = []
         max_iterations = len(node_map)
         iterations = 0
 
+        def is_input_available(input_path: str, resolved_states: List[State]) -> bool:
+            for resolved_state in resolved_states:
+                if resolved_state.search_by_path(input_path) is not None:
+                    return True
+            return False
+
         # Resolve order
-        while len(ordered_names) < len(node_map):
+        while len(ordered_ids) < len(node_map):
             if iterations >= max_iterations:
-                unresolved = node_map.keys() - set(ordered_names)
+                unresolved = set(node_map.keys()) - set(ordered_ids)
                 raise ValueError(
                     f"Circular dependency detected. Unresolved nodes: {unresolved}"
                 )
 
-            resolved_states = [node_map[n]["state"] for n in ordered_names]
+            resolved_states = [node_map[n]["state"] for n in ordered_ids]
 
-            for name, info in node_map.items():
-                if name not in ordered_names:
+            for unique_id, info in node_map.items():
+                if unique_id not in ordered_ids:
                     inputs_available = all(
-                        input_state in resolved_states for input_state in info["inputs"]
+                        is_input_available(input_path, resolved_states)
+                        for input_path in info["inputs"]
                     )
                     if inputs_available or info["is_root"]:
-                        ordered_names.append(name)
+                        ordered_ids.append(unique_id)
 
             iterations += 1
 
         # Map back to original nodes
-        return [
-            next(n for n in nodes if n.state.name == name) for name in ordered_names
-        ]
+        return [node_map[unique_id]["node"] for unique_id in ordered_ids]
 
     def step(self):
         """Execute a single time step for all nodes in the graph in resolved order."""
@@ -495,7 +518,12 @@ class Clock(Node):
     state = State("Clock", (1,))
 
     def __init__(self, nodes: List[Node], time_start: float = 0.0) -> None:
-        """Instantiate a Clock node with a fixed time step size."""
+        """Initialize the Clock node.
+
+        Args:
+            nodes: List of nodes to synchronize.
+            time_start: Initial time value.
+        """
         step_sizes = [node.step_size for node in nodes if not node.is_continuous]
 
         def float_gcd(a: float, b: float) -> float:
@@ -529,6 +557,13 @@ class Logger(Node):
     def __init__(
         self, states_to_log: List[str], step_size: float, cooldown: float = 0.0
     ) -> None:
+        """Initialize the Logger node.
+
+        Args:
+            states_to_log: State paths to record.
+            step_size: Logging interval.
+            cooldown: Minimum time between logs.
+        """
         self.states_to_log = states_to_log
         self.state = State("Logger", (1,))
         self.state.data = np.array([0.0])
@@ -580,7 +615,7 @@ class Logger(Node):
         return {"Logger": self.state.data}
 
 
-class MPCNode(Node):
+class MPCNodeFactory(Node):
     """Model Predictive Control node.
 
     Args:
@@ -605,6 +640,18 @@ class MPCNode(Node):
         state_weights: Optional[Dict[str, float]] = None,
         input_weights: Optional[Dict[str, float]] = None,
     ) -> None:
+        """Initialize the MPC node.
+
+        Args:
+            target_node: Node to control.
+            control_shape: Control input dimension.
+            prediction_horizon: MPC horizon length.
+            is_root: Whether node is a root node.
+            step_size: Control interval.
+            input_bounds: Control input constraints.
+            state_weights: State cost weights.
+            input_weights: Control cost weights.
+        """
         if step_size is None:
             step_size = target_node.step_size
 
@@ -681,10 +728,7 @@ class MPCNode(Node):
         current_state = self.inputs[self.target_node.state.name].data
         self.opti.set_value(self.x0, current_state)
 
-        try:
-            sol = self.opti.solve()
-            u_optimal = sol.value(self.U[:, 0])
-        except:
-            u_optimal = np.zeros(self.control_shape)
+        sol = self.opti.solve()
+        u_optimal = sol.value(self.U[:, 0])
 
         return {self.state.name: u_optimal}

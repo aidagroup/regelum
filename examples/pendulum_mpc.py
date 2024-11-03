@@ -1,15 +1,7 @@
-from regelum.environment.node import Node, State, Inputs, Graph, MPCNode
-from typing import Tuple, Optional, Dict, Any, Type
-from regelum.environment.transistor import (
-    Transistor,
-    CasADiTransistor,
-    ScipyTransistor,
-    SampleAndHoldFactory,
-)
+from regelum.environment.node.base import Node, State, Inputs, Graph, MPCNodeFactory
 import numpy as np
 from regelum.utils import rg
 import logging
-import casadi as ca
 
 # Add this before creating your nodes
 logging.basicConfig(
@@ -58,7 +50,9 @@ class LoggerStepCounter(Node):
 
 pendulum = Pendulum(is_root=True, is_continuous=True)
 step_counter = LoggerStepCounter()
-mpc_node = MPCNode(pendulum, control_shape=1, prediction_horizon=4, step_size=0.1)
+mpc_node = MPCNodeFactory(
+    pendulum, control_shape=1, prediction_horizon=4, step_size=0.1
+)
 
 graph = Graph(
     [mpc_node, pendulum, step_counter],

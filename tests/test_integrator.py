@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from regelum.environment.node import State, Node, Inputs
+from regelum.environment.node.base import State, Node, Inputs
 from regelum.environment.transistor import CasADiTransistor
 from regelum.utils import rg
 

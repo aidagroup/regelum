@@ -16,6 +16,7 @@ casadi = "^3.6.7"
 torch = "^2.4.1"
 pandas = "^2.2.3"
 omegaconf = "^2.3.0"
+scipy = "^1.14.1"
 
 # Dev dependencies as optional
 pytest = {version = "^8.3.3", optional = true}

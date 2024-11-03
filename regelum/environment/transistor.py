@@ -17,7 +17,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 
 if TYPE_CHECKING:
-    from regelum.environment.node import Node, State, Inputs
+    from regelum.environment.node.base import Node, State, Inputs
 
 
 def register_transition(*paths):
@@ -43,7 +43,12 @@ class Transistor:
         node: Node,
         time_final: Optional[float] = None,
     ) -> None:
-        """Instantiate a Transistor with the associated Node."""
+        """Initialize the Transistor.
+
+        Args:
+            node: Node to compute transitions for.
+            time_final: Optional end time for simulation.
+        """
         self.node = node
         self.step_size = node.step_size
         self.time_final = time_final
@@ -131,7 +136,14 @@ class ODETransistor(Transistor):
             step_size: float,
             state_dynamics_function: Callable,
         ) -> None:
-            """Instantiate an ODE integrator."""
+            """Initialize the IntegratorInterface.
+
+            Args:
+                state: State to integrate.
+                inputs: Input dependencies.
+                step_size: Integration step size.
+                state_dynamics_function: System dynamics function.
+            """
             self.time = 0.0
             self.state_info = state
             self.inputs_info = inputs
@@ -150,7 +162,14 @@ class ODETransistor(Transistor):
         time_start: float = 0.0,
         dynamic_variable_paths: Optional[List[str]] = None,
     ) -> None:
-        """Instantiate an ODETransistor."""
+        """Initialize the ODETransistor.
+
+        Args:
+            node: Node to compute transitions for.
+            time_final: Optional end time for simulation.
+            time_start: Initial time for simulation.
+            dynamic_variable_paths: Paths to dynamic state variables.
+        """
         super().__init__(node=node, time_final=time_final)
         self.time = self.time_start = time_start
         self.dynamic_variable_paths = dynamic_variable_paths
@@ -198,6 +217,15 @@ class CasADiTransistor(ODETransistor):
             state_dynamics_function: Callable,
             dynamic_variable_paths: Optional[List[str]] = None,
         ) -> None:
+            """Initialize the CasADiIntegrator.
+
+            Args:
+                state: State to integrate.
+                inputs: Input dependencies.
+                step_size: Integration step size.
+                state_dynamics_function: System dynamics function.
+                dynamic_variable_paths: Paths to dynamic state variables.
+            """
             super().__init__(state, inputs, step_size, state_dynamics_function)
             self.dynamic_variable_paths = dynamic_variable_paths
 
@@ -340,7 +368,6 @@ class ScipyTransistor(ODETransistor):
                     }
                     start_idx += size
 
-                # Set the current state before computing dynamics
                 self.state_info.data = x
                 dynamics_result = self.state_dynamics_function()
                 return np.array(list(dynamics_result.values())[0]).flatten()
@@ -430,6 +457,11 @@ class TransistorFactory:
     def __init__(
         self, transition_modifier: Callable[[Dict[str, Callable]], Dict[str, Callable]]
     ) -> None:
+        """Initialize the TransistorFactory.
+
+        Args:
+            transition_modifier: Function to modify transition mappings.
+        """
         self.transition_modifier = transition_modifier
 
     def create(self, transistor: Transistor) -> Transistor:
@@ -449,6 +481,7 @@ class SampleAndHoldFactory(TransistorFactory):
     """
 
     def __init__(self) -> None:
+        """Initialize the SampleAndHoldFactory."""
         super().__init__(self._create_sample_and_hold_transition)
 
     def _create_sample_and_hold_transition(

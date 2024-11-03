@@ -1,4 +1,4 @@
-from regelum.environment.node import Node, State, Inputs, Graph, Clock
+from regelum.environment.node.base import Node, State, Inputs, Graph, Clock
 from regelum.environment.transistor import Transistor, CasADiTransistor, ScipyTransistor
 from regelum.utils import rg
 import numpy as np
