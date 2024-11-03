@@ -292,6 +292,7 @@ class Node(ABC):
         inputs: Optional[List[str]] = None,
         is_continuous: bool = False,
         default_transistor_configuration: Optional[Dict[str, Any]] = None,
+        prefix: Optional[str] = None,
     ) -> None:
         """Initialize the Node.
 
@@ -307,6 +308,9 @@ class Node(ABC):
             if state is None:
                 raise ValueError("State must be fully specified.")
             self.state = state
+            if prefix is not None:
+                self.state.name = f"{prefix}_{self.state.name}"
+                self.state._build_path_cache()
 
         if not hasattr(self, "inputs"):
             if inputs is None:

@@ -117,43 +117,43 @@ def test_memory_chain(dynamic_node, memory_chain, expected_positions):
     graph = Graph([dynamic_node, *memory_chain])
 
     # Initial state check
-    for cell in memory_chain:
+    for i, cell in enumerate(memory_chain):
         assert np.allclose(
-            cell.state["memory/current/pos"].data, expected_positions["t0"]
+            cell.state[f"{i+1}_memory/current/pos"].data, expected_positions["t0"]
         )
 
     # Step 1
     graph.step()
     assert np.allclose(
-        memory_chain[0].state["memory/current/pos"].data, expected_positions["t1"]
+        memory_chain[0].state[f"{1}_memory/current/pos"].data, expected_positions["t1"]
     )
     assert np.allclose(
-        memory_chain[1].state["memory/current/pos"].data, expected_positions["t0"]
+        memory_chain[1].state[f"{2}_memory/current/pos"].data, expected_positions["t0"]
     )
     assert np.allclose(
-        memory_chain[2].state["memory/current/pos"].data, expected_positions["t0"]
+        memory_chain[2].state[f"{3}_memory/current/pos"].data, expected_positions["t0"]
     )
 
     # Step 2
     graph.step()
     assert np.allclose(
-        memory_chain[0].state["memory/current/pos"].data, expected_positions["t2"]
+        memory_chain[0].state[f"{1}_memory/current/pos"].data, expected_positions["t2"]
     )
     assert np.allclose(
-        memory_chain[1].state["memory/current/pos"].data, expected_positions["t1"]
+        memory_chain[1].state[f"{2}_memory/current/pos"].data, expected_positions["t1"]
     )
     assert np.allclose(
-        memory_chain[2].state["memory/current/pos"].data, expected_positions["t0"]
+        memory_chain[2].state[f"{3}_memory/current/pos"].data, expected_positions["t0"]
     )
 
     # Step 3
     graph.step()
     assert np.allclose(
-        memory_chain[0].state["memory/current/pos"].data, expected_positions["t3"]
+        memory_chain[0].state[f"{1}_memory/current/pos"].data, expected_positions["t3"]
     )
     assert np.allclose(
-        memory_chain[1].state["memory/current/pos"].data, expected_positions["t2"]
+        memory_chain[1].state[f"{2}_memory/current/pos"].data, expected_positions["t2"]
     )
     assert np.allclose(
-        memory_chain[2].state["memory/current/pos"].data, expected_positions["t1"]
+        memory_chain[2].state[f"{3}_memory/current/pos"].data, expected_positions["t1"]
     )
