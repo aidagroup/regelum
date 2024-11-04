@@ -27,6 +27,7 @@ from typing import (
     overload,
     Literal,
     cast,
+    Callable,
 )
 
 try:
@@ -60,18 +61,24 @@ class State:
         shape: Shape of the state data
         _value: State data or list of child states
         is_leaf: Auto-determined leaf status
+        _initial_value: Initial value of the state
+        _reset_modifier: Optional modifier function for state reset
     """
 
     name: str
     shape: Optional[Tuple[int, ...]] = None
     _value: Union[Any, List["State"], None] = None
     is_leaf: bool = field(init=False)
+    _initial_value: Union[Any, List["State"], None] = field(init=False)
+    _reset_modifier: Optional[Callable[[Any], Any]] = field(default=None, init=False)
 
     def __post_init__(self):
         self.is_leaf = self._determine_leaf_status()
         self._validate_hierarchical_state()
         self._path_cache = {}
         self._build_path_cache()
+        # Store initial value for reset
+        self._initial_value = self._clone_value(self._value)
 
     def _determine_leaf_status(self) -> bool:
         return not (
@@ -212,6 +219,34 @@ class State:
         if is_leaf:
             return self._value
         return cast(List["State"], self._value)
+
+    def _clone_value(self, value: Any) -> Any:
+        if isinstance(value, np.ndarray):
+            return value.copy()
+        elif isinstance(value, list) and all(isinstance(x, State) for x in value):
+            return [State(s.name, s.shape, self._clone_value(s._value)) for s in value]
+        return value
+
+    def reset(self) -> None:
+        """Reset state to initial value, applying modifier if present."""
+        initial = self._clone_value(self._initial_value)
+        if self._reset_modifier and self.is_leaf:
+            self._value = self._reset_modifier(initial)
+        else:
+            self._value = initial
+
+        if not self.is_leaf:
+            for substate in self.get_value(is_leaf=False):
+                substate.reset()
+
+    def with_reset_modifier(self, modifier: Callable[[Any], Any]) -> "State":
+        """Add a modifier function to transform state value during reset.
+
+        Args:
+            modifier: Function that takes current initial value and returns modified value
+        """
+        self._reset_modifier = modifier
+        return self
 
 
 @dataclass
@@ -356,6 +391,10 @@ class Node(ABC):
     def compute_state_dynamics(self) -> Dict[str, Any]:
         """Compute the state dynamics given inputs."""
         pass
+
+    def reset(self) -> None:
+        """Reset node state to initial values."""
+        self.state.reset()
 
 
 class Graph:
@@ -509,6 +548,24 @@ class Graph:
                 node.transistor.step()
             else:
                 raise ValueError(f"Node {node.state.name} does not have a transistor.")
+
+    def reset(self, nodes_to_reset: Optional[List[str]] = None) -> None:
+        """Reset specified nodes or all nodes if none specified.
+
+        Args:
+            nodes_to_reset: List of node names to reset. If None, resets all nodes.
+        """
+        if nodes_to_reset is None:
+            for node in self.nodes:
+                node.reset()
+        else:
+            for node_name in nodes_to_reset:
+                for node in self.nodes:
+                    if node.state.name == node_name:
+                        node.reset()
+                        break
+                else:
+                    raise ValueError(f"Node {node_name} not found in graph")
 
 
 class Clock(Node):

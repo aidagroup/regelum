@@ -60,7 +60,11 @@ graph = Graph(
     [pd_controller, pendulum], states_to_log=["pendulum_state", "pendulum_pd_control"]
 )
 
-n_steps = 100000
+n_steps = 300
+reset_interval = 100
 
-for _ in range(n_steps):
+for step in range(n_steps):
     graph.step()
+
+    if (step + 1) % reset_interval == 0:
+        graph.reset(nodes_to_reset=["pendulum_state", "pendulum_pd_control"])
