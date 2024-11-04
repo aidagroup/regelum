@@ -465,7 +465,7 @@ class Graph:
         ]
 
     def _initialize_graph(self, nodes: List[Node]):
-        self.nodes = nodes + [Clock(nodes)]
+        self.nodes = nodes + [Clock(nodes), StepCounter(nodes)]  # Add StepCounter
         states = reduce(
             lambda x, y: x + y, [node.state.get_all_states() for node in self.nodes]
         )
@@ -604,6 +604,29 @@ class Clock(Node):
 
     def compute_state_dynamics(self) -> Dict[str, RgArray]:
         return {"Clock": self.state.data + self.fundamental_step_size}
+
+
+class StepCounter(Node):
+    """Counts steps in the simulation.
+
+    Args:
+        nodes: List of nodes to track
+        start_count: Initial counter value
+    """
+
+    state = State("step_counter", (1,))
+
+    def __init__(self, nodes: List[Node], start_count: int = 0) -> None:
+        self.state.data = np.array([start_count])
+        step_sizes = [node.step_size for node in nodes if not node.is_continuous]
+        min_step_size = min(step_sizes)
+        super().__init__(is_root=False, step_size=min_step_size)
+        from regelum.environment.transistor import Transistor
+
+        self.with_transistor(Transistor)
+
+    def compute_state_dynamics(self) -> Dict[str, RgArray]:
+        return {"step_counter": self.state.data + 1}
 
 
 class Logger(Node):
