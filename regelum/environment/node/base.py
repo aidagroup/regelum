@@ -70,7 +70,7 @@ class State:
     _value: Union[Any, List["State"], None] = None
     is_leaf: bool = field(init=False)
     _initial_value: Union[Any, List["State"], None] = field(init=False)
-    _reset_modifier: Optional[Callable[[Any], Any]] = field(default=None, init=False)
+    _reset_modifier: Optional[Callable[[Any], Any]] = field(default=None)
 
     def __post_init__(self):
         self.is_leaf = self._determine_leaf_status()
@@ -281,7 +281,9 @@ class Inputs:
 
         if len(found_states) != len(self.paths_to_states):
             missing = set(self.paths_to_states) - {state.name for state in found_states}
-            raise ValueError(f"Could not resolve all input paths. Missing: {missing}")
+            raise ValueError(
+                f"Could not resolve all input paths for {self.paths_to_states}. Missing: {missing}"
+            )
 
         assert all(
             state.is_leaf for state in found_states
@@ -294,7 +296,10 @@ class Inputs:
         if len(self.paths_to_states) > 0:
             if not self._resolved:
                 raise ValueError("Resolve inputs before collecting")
-            return {state.name: state.data for state in self.states}
+            return {
+                path: state.data
+                for path, state in zip(self.paths_to_states, self.states)
+            }
         else:
             return {}
 
@@ -549,23 +554,30 @@ class Graph:
             else:
                 raise ValueError(f"Node {node.state.name} does not have a transistor.")
 
-    def reset(self, nodes_to_reset: Optional[List[str]] = None) -> None:
-        """Reset specified nodes or all nodes if none specified.
+    def reset(self, states_to_reset: Optional[List[str]] = None) -> None:
+        """Reset specified states or all nodes if none specified.
 
         Args:
-            nodes_to_reset: List of node names to reset. If None, resets all nodes.
+            states_to_reset: List of state paths to reset. If None, resets all nodes.
         """
-        if nodes_to_reset is None:
+        if states_to_reset is None:
             for node in self.nodes:
                 node.reset()
         else:
-            for node_name in nodes_to_reset:
+            found_states = set()
+            for path in states_to_reset:
+                state_found = False
                 for node in self.nodes:
-                    if node.state.name == node_name:
-                        node.reset()
-                        break
-                else:
-                    raise ValueError(f"Node {node_name} not found in graph")
+                    if state := node.state.search_by_path(path):
+                        state.reset()
+                        found_states.add(path)
+                        state_found = True
+
+                if not state_found:
+                    raise ValueError(f"State path '{path}' not found in graph")
+
+            if missing := set(states_to_reset) - found_states:
+                raise ValueError(f"Could not find states: {missing}")
 
 
 class Clock(Node):
@@ -576,9 +588,9 @@ class Clock(Node):
         time_start: Initial time value
     """
 
-    state = State("Clock", (1,))
+    state = State("Clock", (1,), np.array([0]))
 
-    def __init__(self, nodes: List[Node], time_start: float = 0.0) -> None:
+    def __init__(self, nodes: List[Node]) -> None:
         """Initialize the Clock node.
 
         Args:
@@ -596,7 +608,6 @@ class Clock(Node):
             reduce(float_gcd, step_sizes) if len(set(step_sizes)) > 1 else step_sizes[0]
         )
 
-        self.state.data = np.array([time_start])
         super().__init__(is_root=False, step_size=self.fundamental_step_size)
         from regelum.environment.transistor import Transistor
 
@@ -614,7 +625,7 @@ class StepCounter(Node):
         start_count: Initial counter value
     """
 
-    state = State("step_counter", (1,))
+    state = State("step_counter", (1,), np.array([0]))
 
     def __init__(self, nodes: List[Node], start_count: int = 0) -> None:
         self.state.data = np.array([start_count])
@@ -649,11 +660,17 @@ class Logger(Node):
             cooldown: Minimum time between logs.
         """
         self.states_to_log = states_to_log
-        self.state = State("Logger", (1,))
-        self.state.data = np.array([0.0])
-        self.cooldown = cooldown
-        self.last_log_time = -float("inf")  # Ensure first log happens immediately
+        # Create hierarchical state structure
+        self.state = State(
+            "Logger",
+            None,
+            [
+                State("counter", (1,), np.array([0.0])),
+                State("last_log_time", (1,), np.array([-float("inf")])),
+            ],
+        )
 
+        self.cooldown = cooldown
         self.inputs = Inputs(["Clock"] + states_to_log)
         super().__init__(is_root=False, step_size=step_size, inputs=self.states_to_log)
         from regelum.environment.transistor import Transistor
@@ -676,12 +693,11 @@ class Logger(Node):
     def compute_state_dynamics(self) -> Dict[str, Any]:
         inputs = self.inputs.collect()
         current_time = float(inputs["Clock"][0])
+        last_log_time = float(self.state["Logger/last_log_time"].data[0])
 
-        if current_time - self.last_log_time >= self.cooldown:
+        if current_time - last_log_time >= self.cooldown:
             self.logs["time"].append(current_time)
-            self.last_log_time = current_time
-
-            # Build log message
+            # Log data and build message as before
             log_parts = [f"t={current_time:.3f}"]
             for path in self.states_to_log:
                 value = inputs[path]
@@ -695,8 +711,15 @@ class Logger(Node):
                 log_parts.append(f"{path}={formatted_value}")
 
             self.logger.info(" | ".join(log_parts))
+            return {
+                "Logger/counter": self.state["Logger/counter"].data + 1,
+                "Logger/last_log_time": np.array([current_time]),
+            }
 
-        return {"Logger": self.state.data}
+        return {
+            "Logger/counter": self.state["Logger/counter"].data,
+            "Logger/last_log_time": self.state["Logger/last_log_time"].data,
+        }
 
 
 class MPCNodeFactory(Node):

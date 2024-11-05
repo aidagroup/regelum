@@ -107,6 +107,7 @@ def test_ode_transistors(transistor_class):
     energy_initial = 0.5 * (initial_state[1] ** 2 + initial_state[0] ** 2)
     energy_final = 0.5 * (node.state.data[1] ** 2 + node.state.data[0] ** 2)
     assert abs(energy_final - energy_initial) < 1e-9
+    graph.reset()
 
 
 def test_hierarchical_node():
