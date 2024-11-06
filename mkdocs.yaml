@@ -1,7 +1,7 @@
 site_name: Regelum
 site_description: Modular framework for pipeline construction
 site_author: AIDA Group
-
+docs_dir: ./docs/src
 # Repository
 repo_name: aidagroup/regelum
 repo_url: https://github.com/aidagroup/regelum
@@ -9,11 +9,19 @@ repo_url: https://github.com/aidagroup/regelum
 # Configuration
 theme:
   name: material
+  custom_dir: ./docs/overrides
   features:
+    - navigation.footer
+    - content.code.annotate
     - navigation.tabs
-    - navigation.sections
+    - toc.follow
     - navigation.top
+    - search.suggest
     - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+    - content.code.copy
+    - content.footnote.tooltips
   palette:
     - scheme: default
       primary: indigo
@@ -31,7 +39,7 @@ theme:
 # Navigation
 nav:
   - Home: index.md
-  - Learn: learn.md
+  - Learn: learn/
 
 
 # Extensions
@@ -40,12 +48,26 @@ markdown_extensions:
   - codehilite
   - footnotes
   - toc:
-      permalink: true
+      toc_depth: 3
+      permalink: ⚓︎
+      title: On this page
   - pymdownx.highlight
   - pymdownx.superfences
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - _internal/javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 # Extra settings
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/username
+
+plugins:
+  - literate-nav
+  - autorefs
+  - macros
+  - section-index
