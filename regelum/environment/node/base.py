@@ -29,6 +29,7 @@ from typing import (
     cast,
     Callable,
 )
+from copy import deepcopy
 
 try:
     from typing import TypeGuard  # Python 3.10+
@@ -97,7 +98,9 @@ class State:
 
     def with_altered_name(self, new_name: str):
         self.name = new_name
-        return self
+        new_instance = deepcopy(self)
+        new_instance._build_path_cache()
+        return new_instance
 
     @property
     def value(self):
@@ -186,6 +189,9 @@ class State:
     def data(self, new_value):
         """Setter for state value data."""
         self._value = new_value
+        self.is_leaf = self._determine_leaf_status()
+        self._validate_hierarchical_state()
+        self._build_path_cache()
 
     def get_shapes(self) -> Dict[str, Tuple[int, ...]]:
         """Get the shapes of all leaf states."""
@@ -238,6 +244,7 @@ class State:
         if not self.is_leaf:
             for substate in self.get_value(is_leaf=False):
                 substate.reset()
+            self._build_path_cache()
 
     def with_reset_modifier(self, modifier: Callable[[Any], Any]) -> "State":
         """Add a modifier function to transform state value during reset.
@@ -397,9 +404,23 @@ class Node(ABC):
         """Compute the state dynamics given inputs."""
         pass
 
-    def reset(self) -> None:
-        """Reset node state to initial values."""
-        self.state.reset()
+    def reset(self, states_to_reset: Optional[List[str]] = None) -> None:
+        """Reset node state to initial values.
+
+        Args:
+            states_to_reset: List of state paths to reset. If None, resets all states.
+        """
+        if states_to_reset is None:
+            self.state.reset()
+            return
+
+        found_states = set()
+        for path in states_to_reset:
+            if state := self.state.search_by_path(path):
+                state.reset()
+                found_states.add(path)
+
+        return found_states
 
 
 class Graph:
@@ -470,10 +491,30 @@ class Graph:
         ]
 
     def _initialize_graph(self, nodes: List[Node]):
-        self.nodes = nodes + [Clock(nodes), StepCounter(nodes)]  # Add StepCounter
+        self.nodes = nodes + [Clock(nodes), StepCounter(nodes)]
         states = reduce(
             lambda x, y: x + y, [node.state.get_all_states() for node in self.nodes]
         )
+
+        # Find nodes that need reset modification
+        reset_map = {}
+        for node in self.nodes:
+            for input_path in node.state.paths:
+                if input_path.startswith("reset_"):
+                    from regelum.environment.transistor import ResetFactory
+
+                    target_node_name = input_path[6:]  # Remove 'reset_' prefix
+                    reset_map[target_node_name] = True
+
+        # Apply reset modifiers where needed
+        for node in self.nodes:
+            if node.state.name in reset_map:
+                if node.transistor is None:
+                    node.default_transistor_configuration["transistor"] = (
+                        node.default_transistor_configuration[
+                            "transistor"
+                        ].with_modifier(ResetFactory())
+                    )
 
         for node in self.nodes:
             node.inputs.resolve(states)
@@ -563,21 +604,15 @@ class Graph:
         if states_to_reset is None:
             for node in self.nodes:
                 node.reset()
-        else:
-            found_states = set()
-            for path in states_to_reset:
-                state_found = False
-                for node in self.nodes:
-                    if state := node.state.search_by_path(path):
-                        state.reset()
-                        found_states.add(path)
-                        state_found = True
+            return
 
-                if not state_found:
-                    raise ValueError(f"State path '{path}' not found in graph")
+        found_states = set()
+        for node in self.nodes:
+            if reset_states := node.reset(states_to_reset):
+                found_states.update(reset_states)
 
-            if missing := set(states_to_reset) - found_states:
-                raise ValueError(f"Could not find states: {missing}")
+        if missing := set(states_to_reset) - found_states:
+            raise ValueError(f"Could not find states: {missing}")
 
 
 class Clock(Node):
@@ -609,9 +644,6 @@ class Clock(Node):
         )
 
         super().__init__(is_root=False, step_size=self.fundamental_step_size)
-        from regelum.environment.transistor import Transistor
-
-        self.with_transistor(Transistor)
 
     def compute_state_dynamics(self) -> Dict[str, RgArray]:
         return {"Clock": self.state.data + self.fundamental_step_size}

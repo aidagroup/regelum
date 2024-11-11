@@ -668,7 +668,7 @@ graph = Graph(
     logger_cooldown=10,
 )
 
-# Training Loop
+
 for _ in range(1000000):
     graph.step()
     if is_done.state["is_done/flag"].data[0]:

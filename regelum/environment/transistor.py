@@ -509,3 +509,34 @@ class SampleAndHoldFactory(TransistorFactory):
             return sample_and_hold_transition(self)
 
         return {"default": bound_transition}
+
+
+class ResetFactory(TransistorFactory):
+    """Factory for creating reset behavior in transistors.
+
+    Creates transistors that reset state to initial values when terminate signal is received.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the ResetFactory."""
+        super().__init__(self._create_reset_transition)
+
+    def _create_reset_transition(
+        self, transition_map: Dict[str, Callable]
+    ) -> Dict[str, Callable]:
+        original_transition = transition_map["default"]
+
+        def reset_transition(transistor_self) -> Dict[str, Any]:
+            inputs = transistor_self.node.inputs.collect()
+            reset_key = f"reset_{transistor_self.node.state.name}"
+
+            if reset_key in inputs and inputs[reset_key]:
+                transistor_self.node.reset()
+                return {}
+
+            return original_transition()
+
+        def bound_transition():
+            return reset_transition(self)
+
+        return {"default": bound_transition}
