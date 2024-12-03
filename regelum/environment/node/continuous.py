@@ -10,7 +10,7 @@ class Pendulum(Node):
         np.array([np.pi, 0]),
         # _reset_modifier=lambda x: x + np.random.uniform(-0.5, 0.5, size=2),
     )
-    inputs = Inputs(["action", "reset_pendulum_state"])
+    inputs = Inputs(["actor/action", "reset_pendulum_state"])
     length = 1
     mass = 1
     gravity_acceleration = 9.81

@@ -15,6 +15,7 @@ from abc import abstractmethod, ABC
 from casadi import integrator, MX, vertcat, vec, DM
 import numpy as np
 from scipy.integrate import solve_ivp
+from copy import deepcopy
 
 if TYPE_CHECKING:
     from regelum.environment.node.base import Node, State, Inputs

@@ -287,7 +287,9 @@ class Inputs:
                 found_states.append(found)
 
         if len(found_states) != len(self.paths_to_states):
-            missing = set(self.paths_to_states) - {state.name for state in found_states}
+            missing = set([path.split("/")[-1] for path in self.paths_to_states]) - {
+                state.name for state in found_states
+            }
             raise ValueError(
                 f"Could not resolve all input paths for {self.paths_to_states}. Missing: {missing}"
             )
@@ -362,7 +364,7 @@ class Node(ABC):
         if not hasattr(self, "inputs"):
             if inputs is None:
                 inputs = []
-            self.inputs = Inputs(inputs)
+            self.inputs = Inputs(inputs) if isinstance(inputs, list) else inputs
         else:
             if isinstance(self.inputs, list):
                 self.inputs = Inputs(self.inputs)
