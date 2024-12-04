@@ -271,7 +271,7 @@ class SoftQNetwork(nn.Module):
         return x
 
 
-class Trainer(Node):
+class AdaptationBlock(Node):
 
     def __init__(
         self,
@@ -287,7 +287,7 @@ class Trainer(Node):
         target_network_frequency: int = 2,
         tau: float = 0.005,
     ):
-        state = State("trainer_summary", _value={})
+        state = State("adaptation_block_summary", _value={})
         inputs = Inputs(["actor/net", "step_counter", "replay_buffer"])
         super().__init__(state=state, inputs=inputs)
 
@@ -502,7 +502,7 @@ is_truncated = IsTruncated(steps_to_truncate=200)
 reset = Reset(input_node=pendulum)
 reward_computer = RewardComputer()
 buffer = Buffer(device=device)
-trainer = Trainer(
+adaptation_block = AdaptationBlock(
     gamma=gamma,
     tau=tau,
     batch_size=batch_size,
@@ -526,7 +526,7 @@ graph = Graph(
         reset,
         reward_computer,
         buffer,
-        trainer,
+        adaptation_block,
         plot_observations,
     ],
     states_to_log=[
