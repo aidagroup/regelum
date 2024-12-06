@@ -10,6 +10,8 @@ repo_url: https://github.com/aidagroup/regelum
 theme:
   name: material
   custom_dir: ./docs/overrides
+  favicon: gfx/favicon_copy.svg
+  logo: gfx/logo.svg
   features:
     - navigation.footer
     - content.code.annotate
@@ -39,7 +41,9 @@ theme:
 # Navigation
 nav:
   - Home: index.md
+  # - Test: test.ipynb
   - Learn: learn/
+  # - Demo: demonstration.ipynb
 
 
 # Extensions
@@ -60,14 +64,25 @@ extra_javascript:
   - _internal/javascripts/mathjax.js
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
+extra_css:
+  - stylesheets/jupyter-code-wrapper.css
+
 # Extra settings
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/username
+      link: https://github.com/aidagroup/regelum
 
 plugins:
   - literate-nav
   - autorefs
   - macros
   - section-index
+  - mkdocs-jupyter:
+      include_source: True
+      include_requirejs: true
+      custom_mathjax_url: https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+      highlight_extra_classes: "custom-css-classes"
+      remove_tag_config:
+        remove_cell_tags: 
+          - "requirements"

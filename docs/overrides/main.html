@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
+
 {% block content %}
+
     <!-- latex preamble --> <div class='arithmatex', style="display:none"> 
     \(
     <!-- latex preamble should be inserted here below between raw ... endraw jinja tags -->
@@ -110,6 +112,21 @@
     {% endraw %} 
     \)
     </div>
-  {{ super() }}
 
+    {% if page.nb_url %}
+    <div class="admonition tip">
+        <p class="admonition-title">Interactive Tutorial Available</p>
+        <p>This page is automatically generated from a Jupyter notebook and is available in two formats. 
+            You can either interactively run and explore the code online in colab or <a href="{{ page.nb_url }}">download the notebook</a> and run it locally on your machine.</p>
+        <p>
+            <a href="https://colab.research.google.com/github/{{ config.repo_url|replace('https://github.com/', '') }}/blob/main/{{ page.nb_url }}" target="_blank">
+                <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+            </a>
+        </p>
+    </div>
+    
+    {% endif %}
+    
+    
+    {{ super() }}
 {% endblock %}

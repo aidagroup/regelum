@@ -1,2 +1,3 @@
 - [Getting Started](getting_started.md)
 - [How it works](how_it_works.md)
+- [Pendulum PD](pendulum_pd.ipynb)

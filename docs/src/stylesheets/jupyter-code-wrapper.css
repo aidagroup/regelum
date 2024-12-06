@@ -1,0 +1,30 @@
+/* .custom-css-classes {
+    background: #f8f8f8;
+    border-radius: 4px;
+}
+
+.custom-css-classes pre {
+    line-height: 125%;
+    margin: 0;
+    padding: 12px;
+    background: transparent !important;
+}
+
+.custom-css-classes code {
+    background: transparent !important;
+    padding: 0 !important;
+} */
+
+/* Hide Jupyter input prompts */
+.md-container .jp-InputPrompt {
+    display: none !important;
+}
+
+.md-container .jp-InputArea-prompt {
+    display: none !important;
+}
+
+/* Hide both input and output prompts */
+.jp-InputPrompt, .jp-OutputPrompt {
+    display: none !important;
+}
