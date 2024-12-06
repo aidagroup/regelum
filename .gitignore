@@ -163,3 +163,4 @@ cython_debug/
 poetry.lock
 .vscode/
 mlruns/
+*plots/
