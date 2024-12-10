@@ -465,17 +465,22 @@ class Graph:
                     ready.append(dep)
             ready.sort(key=scc_key)
 
-        # 6. Expand each SCC. Sort nodes within each SCC block by state name.
+        # 6. Expand each SCC. Sort nodes within each SCC block by state name, prioritizing root nodes.
         final_order = []
         for scc_idx in scc_order:
             scc_block = sccs[scc_idx]
             if len(scc_block) > 1 or any(n in graph[n] for n in scc_block):
                 # Cycle or self-loop
-                scc_block.sort(key=lambda x: x.state.name)
+                # Sort by is_root first (True before False), then by state name
+                scc_block.sort(
+                    key=lambda x: (not getattr(x, "is_root", False), x.state.name)
+                )
             else:
                 # Single node, no cycle
-                # Just stable sort by name anyway
-                scc_block.sort(key=lambda x: x.state.name)
+                # Same sorting strategy for consistency
+                scc_block.sort(
+                    key=lambda x: (not getattr(x, "is_root", False), x.state.name)
+                )
 
             final_order.extend(scc_block)
 
@@ -541,41 +546,64 @@ class Graph:
     def _resolve_subgraph_nodes(self, start_node, end_node, freezed):
         """Figure out which nodes are needed to get from start_node to end_node.
 
-        If some inputs are not in this chain, freeze them.
-
-        This might involve:
-          - Running a traversal from end_node backwards to start_node
-          - Collecting all intermediate nodes
-          - Anything not reachable from start_node that end_node needs is considered external and frozen.
+        Only includes nodes that are part of the minimal path between start and end,
+        considering freezed inputs.
         """
-        # A simplistic approach:
+        freezed = set(freezed or [])
         needed = set()
-        queue = [end_node]
+        queue = [(end_node, set())]  # (node, visited_paths)
         external_inputs = {}
+        path_to_producer = {}
 
+        # First pass: build path_to_producer map
+        for node in self.nodes:
+            for state in node.state.get_all_states():
+                if state.is_leaf:
+                    for path in state.paths:
+                        path_to_producer[path] = node
+
+        # Second pass: traverse backwards, tracking visited paths
         while queue:
-            current = queue.pop()
+            current, visited_paths = queue.pop(0)
             if current not in needed:
                 needed.add(current)
+
+                # Process inputs
                 for input_state in current.inputs.states:
-                    producer_node = self._find_producer_of_state(input_state)
+                    input_path = input_state.paths[0]
+
+                    # Skip if we've seen this path or it's freezed
+                    if input_path in visited_paths or input_path in freezed:
+                        continue
+
+                    producer_node = path_to_producer.get(input_path)
                     if producer_node is None or producer_node not in self.nodes:
-                        # Not part of the main graph or outside this subgraph
-                        # Freeze this input
-                        external_inputs[input_state.paths[0]] = input_state.data
+                        # External input - freeze it
+                        external_inputs[input_path] = input_state.data
                     else:
-                        queue.append(producer_node)
+                        # Add path to visited and continue traversal
+                        new_visited = visited_paths | {input_path}
+                        queue.append((producer_node, new_visited))
 
-        # Filter out nodes not between start_node and end_node if needed
-        # Check if start_node is in needed
-        if start_node not in needed:
-            raise ValueError("Start node not part of subgraph chain")
+        # Remove nodes not in the path from start to end
+        reachable = set()
+        queue = [(start_node, {start_node})]
+        while queue:
+            current, visited = queue.pop(0)
+            for node in needed:
+                if node not in visited:
+                    # Check if current connects to node through needed nodes
+                    for input_state in node.inputs.states:
+                        producer = path_to_producer.get(input_state.paths[0])
+                        if producer == current:
+                            reachable.update(visited)
+                            queue.append((node, visited | {node}))
+                            break
 
-        # If freezed was provided, we can trust that these external nodes are allowed
-        # otherwise, we error out if we found external dependencies not in freezed
+        # Final set is intersection of needed and reachable nodes
+        minimal_set = (reachable & needed) | {start_node, end_node}
 
-        # Additional logic to handle freezed properly...
-        return list(needed), external_inputs
+        return list(minimal_set), external_inputs
 
     def _find_producer_of_state(self, input_state):
         # find which node produces input_state

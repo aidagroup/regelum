@@ -543,6 +543,6 @@ graph = Graph(
     # logger_cooldown=0.0,
 )
 
-visualize_graph(graph, output_file="rl_pipeline", view=False)
-for _ in range(total_timesteps):
-    graph.step()
+# visualize_graph(graph, output_file="rl_pipeline", view=False)
+# for _ in range(total_timesteps):
+#     graph.step()
