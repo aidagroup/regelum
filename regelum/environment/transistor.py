@@ -572,11 +572,9 @@ class ResetModifier(TransistorModifier):
                 self.reset_signal_path = reset_path or f"reset_{self.node.state.name}"
 
             def step(self):
-                # Check reset signal
-                reset_state = self.node.state.search_by_path(self.reset_signal_path)
-                if reset_state and reset_state.data:
+                if self.node.inputs[self.reset_signal_path].data:
                     self.node.reset()
-                    reset_state.value = False
+                    return {}
 
                 # Proceed with normal step
                 return super().step()

@@ -1,7 +1,6 @@
 import pytest
 import numpy as np
 from regelum.environment.node.base import Node, State, Inputs, Graph
-from regelum.environment.transistor import ResetFactory, SampleAndHoldFactory
 from regelum.utils import rg
 
 
@@ -49,16 +48,16 @@ class Pendulum(Node):
 
 class TerminateSignal(Node):
     state = State("reset_pendulum_state", (1,), np.array([False]))
+    inputs = ["step_counter"]
 
     def __init__(self, reset_interval: int, step_size: float = 0.01):
         super().__init__(step_size=step_size)
         self.reset_interval = reset_interval
-        self.step_counter = 0
 
     def compute_state_dynamics(self):
-        self.step_counter += 1
-        should_terminate = self.step_counter % self.reset_interval == 0
-        return {"reset_pendulum_state": np.array([should_terminate])}
+        step_counter = self.inputs["step_counter"].data
+        should_terminate = step_counter % self.reset_interval == 0
+        return {"reset_pendulum_state": should_terminate}
 
 
 @pytest.fixture
@@ -85,6 +84,7 @@ def test_reset_behavior(pendulum_system):
 
     # Run until first reset
     for _ in range(terminate_signal.reset_interval):
+        print(pendulum.state.data)
         graph.step()
 
     # Check if pendulum state was reset to initial condition
