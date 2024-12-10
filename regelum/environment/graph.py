@@ -300,7 +300,7 @@ class Graph:
     def _initialize_graph(self, nodes: List[Node], fundamental_step_size: float):
         self.nodes = nodes + [Clock(fundamental_step_size), StepCounter(nodes)]
         self.link_inputs(self.nodes)
-        self.ordered_nodes = self.resolve(self.nodes)
+        self.ordered_nodes, self.sccs_final = self.resolve(self.nodes)
         self._log_node_order()
         self.apply_transistors(self.ordered_nodes)
 
@@ -355,27 +355,58 @@ class Graph:
         print(f"Resolved node order: {self.ordered_nodes_str}")
 
     @staticmethod
+    def verify_dependencies(nodes: List[Node]) -> bool:
+        """Verify that all producer-consumer dependencies are satisfied in the given order.
+
+        Returns:
+            bool: True if all dependencies are satisfied
+            str: Description of the first violation found, or None if all ok
+        """
+        # Build index map for quick position lookups
+        node_positions = {node: idx for idx, node in enumerate(nodes)}
+
+        # Build producer map
+        path_to_producer = {}
+        for node in nodes:
+            for state in node.state.get_all_states():
+                if state.is_leaf:
+                    for path in state.paths:
+                        path_to_producer[path] = node
+
+        # Check each node's inputs
+        for node in nodes:
+            node_pos = node_positions[node]
+            for input_state in node.inputs.states:
+                if input_state.is_leaf:
+                    input_path = input_state.paths[0]
+                    producer = path_to_producer.get(input_path)
+                    if producer and producer != node:  # Skip self-dependencies
+                        producer_pos = node_positions[producer]
+                        if producer_pos > node_pos and not node.is_root:
+                            return False, (
+                                f"Dependency violation: {node.state.name} (pos {node_pos}) "
+                                f"requires state '{input_path}' from {producer.state.name} "
+                                f"(pos {producer_pos})"
+                            )
+
+        return True, None
+
+    @staticmethod
     def resolve(nodes: List[Node]) -> List[Node]:
-        # 1. Collect all full paths from each node and ensure uniqueness
+        # 1. Build path to node mapping
         full_path_to_node = {}
         for node in nodes:
             for path in node.state.paths:
                 if path in full_path_to_node:
-                    # Handle the case where different nodes produce the same full path
-                    # This is not allowed and should not be allowed
-                    other_node = full_path_to_node[path]
                     raise ValueError(
                         f"Duplicate full state path detected: '{path}' is produced by both "
-                        f"'{other_node.state.name}' and '{node.state.name}'. "
+                        f"'{full_path_to_node[path].state.name}' and '{node.state.name}'. "
                         "All full state paths must be unique."
                     )
                 full_path_to_node[path] = node
 
-        # 2. Build the adjacency list based on full paths
-        graph = {node: [] for node in nodes}
-
-        # For each node, resolve its inputs using full paths
-        # If any input does not map to an existing path, raise an error
+        # 2. Build dependency graph
+        graph = {node: set() for node in nodes}
         for node in nodes:
             if not node.inputs.paths_to_states:
                 continue
@@ -387,104 +418,153 @@ class Graph:
                     )
                 producer_node = full_path_to_node[input_path]
                 if producer_node != node:
-                    graph[producer_node].append(node)
+                    graph[node].add(producer_node)
 
-        # 3. Detect strongly connected components (SCCs) to handle cycles as blocks
-        index = 0
-        stack = []
-        on_stack = set()
-        indices = {}
-        low_link = {}
-        sccs = []
-
-        def strongconnect(v):
-            nonlocal index
-            indices[v] = index
-            low_link[v] = index
-            index += 1
+        # 3. Kosaraju's algorithm for SCCs
+        def dfs_first(v, visited, stack):
+            visited.add(v)
+            for u in graph[v]:
+                if u not in visited:
+                    dfs_first(u, visited, stack)
             stack.append(v)
-            on_stack.add(v)
 
-            for w in graph[v]:
-                if w not in indices:
-                    strongconnect(w)
-                    low_link[v] = min(low_link[v], low_link[w])
-                elif w in on_stack:
-                    low_link[v] = min(low_link[v], indices[w])
+        def dfs_second(v, visited, scc):
+            visited.add(v)
+            scc.append(v)
+            for u in nodes:
+                if u not in visited and v in graph[u]:
+                    dfs_second(u, visited, scc)
 
-            # If v is the root of an SCC
-            if low_link[v] == indices[v]:
-                scc = []
-                while True:
-                    w = stack.pop()
-                    on_stack.remove(w)
-                    scc.append(w)
-                    if w == v:
-                        break
-                sccs.append(scc)
+        # First DFS - start with root nodes
+        visited = set()
+        stack = []
+        # Process root nodes first
+        root_nodes = [node for node in nodes if node.is_root]
+        for node in root_nodes:
+            if node not in visited:
+                dfs_first(node, visited, stack)
+        # Then process remaining nodes
+        for node in nodes:
+            if node not in visited:
+                dfs_first(node, visited, stack)
 
-        for n in nodes:
-            if n not in indices:
-                strongconnect(n)
+        # Second DFS to find SCCs
+        visited.clear()
+        sccs = []
+        while stack:
+            v = stack.pop()
+            if v not in visited:
+                current_scc = []
+                dfs_second(v, visited, current_scc)
+                sccs.append(current_scc)
 
-        # 4. Build SCC graph (condensation)
+        # 4. Build condensation graph
+        scc_graph = {i: set() for i in range(len(sccs))}
         node_to_scc = {}
+        scc_has_root = [False] * len(sccs)
         for i, scc in enumerate(sccs):
             for node in scc:
                 node_to_scc[node] = i
+                if node.is_root:
+                    scc_has_root[i] = True
 
-        scc_graph = {i: set() for i in range(len(sccs))}
         for u in nodes:
             u_scc = node_to_scc[u]
             for v in graph[u]:
                 v_scc = node_to_scc[v]
                 if u_scc != v_scc:
-                    scc_graph[u_scc].add(v_scc)
+                    scc_graph[v_scc].add(u_scc)
 
-        # 5. Topological sort on scc_graph
-        in_degree = {i: 0 for i in range(len(sccs))}
-        for u in scc_graph:
-            for v in scc_graph[u]:
-                in_degree[v] += 1
+        # 5. Topological sort of SCCs
+        def topological_sort_sccs():
+            in_degree = {i: 0 for i in range(len(sccs))}
+            for u in scc_graph:
+                for v in scc_graph[u]:
+                    in_degree[v] += 1
 
-        # Sort SCCs by lexicographically smallest state name for stable order
-        def scc_key(scc_index):
-            names = [node.state.name for node in sccs[scc_index]]
-            return min(names)
+            # Prioritize SCCs with root nodes
+            queue = []
+            root_sccs = []
+            non_root_sccs = []
 
-        ready = [i for i in in_degree if in_degree[i] == 0]
-        ready.sort(key=scc_key)
+            for i in range(len(sccs)):
+                if in_degree[i] == 0:
+                    if scc_has_root[i]:
+                        root_sccs.append(i)
+                    else:
+                        non_root_sccs.append(i)
 
-        scc_order = []
-        while ready:
-            current = ready.pop(0)
-            scc_order.append(current)
-            for dep in scc_graph[current]:
-                in_degree[dep] -= 1
-                if in_degree[dep] == 0:
-                    ready.append(dep)
-            ready.sort(key=scc_key)
+            # Put root SCCs first, then others
+            queue.extend(root_sccs)
+            queue.extend(non_root_sccs)
 
-        # 6. Expand each SCC. Sort nodes within each SCC block by state name, prioritizing root nodes.
+            result = []
+            while queue:
+                u = queue.pop(0)
+                result.append(u)
+                for v in scc_graph[u]:
+                    in_degree[v] -= 1
+                    if in_degree[v] == 0:
+                        if scc_has_root[v]:
+                            queue.insert(0, v)  # Prioritize SCCs with roots
+                        else:
+                            queue.append(v)
+            return result
+
+        # 6. Order nodes within each SCC
+        def order_within_scc(scc_nodes: List[Node]) -> List[Node]:
+            if len(scc_nodes) <= 1:
+                return scc_nodes
+
+            # Put root nodes first
+            root_nodes = [node for node in scc_nodes if node.is_root]
+            non_root_nodes = [node for node in scc_nodes if not node.is_root]
+
+            if root_nodes:
+                ordered = root_nodes
+                remaining = set(non_root_nodes)
+            else:
+                ordered = []
+                remaining = set(scc_nodes)
+
+            # Build local dependency graph within SCC
+            local_graph = {node: set() for node in scc_nodes}
+            for node in scc_nodes:
+                for input_path in node.inputs.paths_to_states:
+                    producer = full_path_to_node[input_path]
+                    if producer in scc_nodes and producer != node:
+                        local_graph[node].add(producer)
+
+            while remaining:
+                # Find node with fewest unsatisfied dependencies
+                min_deps = float("inf")
+                next_node = None
+
+                for node in remaining:
+                    unsatisfied = sum(
+                        1 for dep in local_graph[node] if dep in remaining
+                    )
+                    if unsatisfied < min_deps:
+                        min_deps = unsatisfied
+                        next_node = node
+                    elif unsatisfied == min_deps and next_node:
+                        # Break ties by lexicographical order of state names
+                        if node.state.name < next_node.state.name:
+                            next_node = node
+
+                ordered.append(next_node)
+                remaining.remove(next_node)
+
+            return ordered
+
+        # 7. Combine everything
+        scc_order = topological_sort_sccs()
         final_order = []
         for scc_idx in scc_order:
-            scc_block = sccs[scc_idx]
-            if len(scc_block) > 1 or any(n in graph[n] for n in scc_block):
-                # Cycle or self-loop
-                # Sort by is_root first (True before False), then by state name
-                scc_block.sort(
-                    key=lambda x: (not getattr(x, "is_root", False), x.state.name)
-                )
-            else:
-                # Single node, no cycle
-                # Same sorting strategy for consistency
-                scc_block.sort(
-                    key=lambda x: (not getattr(x, "is_root", False), x.state.name)
-                )
+            ordered_scc = order_within_scc(sccs[scc_idx])
+            final_order.extend(ordered_scc)
 
-            final_order.extend(scc_block)
-
-        return final_order
+        return final_order, sccs
 
     def step(self):
         """Execute a single time step for all nodes in the graph in resolved order."""
@@ -513,7 +593,7 @@ class Graph:
         if missing := set(states_to_reset) - found_states:
             raise ValueError(f"Could not find states: {missing}")
 
-    def extract_subgraph(self, path_expression: str, freezed=None):
+    def extract_subgraph(self, path_expression: str, frozen=None):
         """Extract a subgraph based on a path expression like "pendulum_state -> controller_state".
 
         This involves:
@@ -521,7 +601,7 @@ class Graph:
           - Finding all nodes required to produce that end state from the start state.
           - If some inputs come from nodes not included, mark them as frozen.
 
-        Returns a LazySubgraph that represents this subgraph.
+        Returns a Subgraph that represents this subgraph.
         """
         # Parse path_expression (e.g., "pendulum_state -> controller_state")
         start_name, end_name = [x.strip() for x in path_expression.split("->")]
@@ -532,10 +612,10 @@ class Graph:
 
         # Determine the set of nodes needed to produce end_node's inputs from start_node
         needed_nodes, frozen_inputs = self._resolve_subgraph_nodes(
-            start_node, end_node, freezed
+            start_node, end_node, frozen
         )
 
-        return LazySubgraph(needed_nodes, frozen_inputs=frozen_inputs)
+        return Subgraph(needed_nodes, frozen_inputs=frozen_inputs)
 
     def _find_node_by_state_name(self, state_name: str):
         for node in self.nodes:
@@ -543,13 +623,13 @@ class Graph:
                 return node
         raise ValueError(f"No node found for state name '{state_name}'")
 
-    def _resolve_subgraph_nodes(self, start_node, end_node, freezed):
+    def _resolve_subgraph_nodes(self, start_node, end_node, frozen):
         """Figure out which nodes are needed to get from start_node to end_node.
 
         Only includes nodes that are part of the minimal path between start and end,
-        considering freezed inputs.
+        considering frozen inputs.
         """
-        freezed = set(freezed or [])
+        frozen = set(frozen or [])
         needed = set()
         queue = [(end_node, set())]  # (node, visited_paths)
         external_inputs = {}
@@ -572,8 +652,8 @@ class Graph:
                 for input_state in current.inputs.states:
                     input_path = input_state.paths[0]
 
-                    # Skip if we've seen this path or it's freezed
-                    if input_path in visited_paths or input_path in freezed:
+                    # Skip if we've seen this path or it's frozen
+                    if input_path in visited_paths or input_path in frozen:
                         continue
 
                     producer_node = path_to_producer.get(input_path)
@@ -612,7 +692,7 @@ class Graph:
                 return node
         return None
 
-    def insert(self, subgraphs: List[LazySubgraph]):
+    def insert(self, subgraphs: List[Subgraph]):
         """Insert subgraphs back into the main graph.
 
         This means:
@@ -627,17 +707,17 @@ class Graph:
             # Handle frozen inputs if we now have a place for them, or keep them as constants
 
         self.link_inputs(self.ordered_nodes)
-        self.ordered_nodes = self.resolve(self.ordered_nodes)
+        self.ordered_nodes, self.sccs_final = self.resolve(self.ordered_nodes)
         self._log_node_order()
         self.apply_transistors(self.ordered_nodes)
         self.link_inputs(self.ordered_nodes)
 
 
-class LazySubgraph:
-    """Represents a lazy subgraph with nodes and optional frozen inputs."""
+class Subgraph:
+    """Represents a subgraph with nodes and optional frozen inputs."""
 
     def __init__(self, nodes, frozen_inputs=None):
-        """Initialize the LazySubgraph.
+        """Initialize the Subgraph.
 
         Args:
             nodes: List of nodes constituting the subgraph.
@@ -658,7 +738,7 @@ class LazySubgraph:
                 new_node = self._deepcopy_node_with_suffix(node, suffix)
                 new_nodes.append(new_node)
             # Frozen inputs remain the same
-            new_sg = LazySubgraph(new_nodes, frozen_inputs=deepcopy(self.frozen_inputs))
+            new_sg = Subgraph(new_nodes, frozen_inputs=deepcopy(self.frozen_inputs))
             subgraphs.append(new_sg)
         return subgraphs
 

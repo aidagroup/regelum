@@ -535,18 +535,9 @@ graph = Graph(
         observer,
     ]
 )
-subgraph = graph.extract_subgraph(
-    "pendulum_state -> actor", freezed=[adaptation_block, reset, is_truncated]
-)
+subgraph = graph.extract_subgraph("pendulum_state -> actor")
 
 subgraphs = subgraph.multiply(n_copies=2)
-
-# data_buffers = []
-# for sg in subgraphs:
-#     selected = sg.select_nodes_contain(["pendulum_state", "actor/action"])
-#     ith_databuffer = Buffer(selected)
-#     sg.attach(ith_databuffer)
-#     data_buffers.append(ith_databuffer)
 
 graph.insert(subgraphs)
 

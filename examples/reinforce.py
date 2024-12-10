@@ -670,36 +670,36 @@ graph = Graph(
 )
 
 
-for _ in range(1000000):
-    graph.step()
-    if is_done.state["is_done/flag"].data[0]:
-        # Now reset for the next episode
-        pendulum.reset()
-        is_done.reset()  # Resets 'is_done/flag' and 'episode_steps'
-        data_buffer.reset()
-        graph.reset(["Clock", "Logger/last_log_time", "Logger/counter"])
-        mlflow_logger.reset()
+# for _ in range(1000000):
+#     graph.step()
+#     if is_done.state["is_done/flag"].data[0]:
+#         # Now reset for the next episode
+#         pendulum.reset()
+#         is_done.reset()  # Resets 'is_done/flag' and 'episode_steps'
+#         data_buffer.reset()
+#         graph.reset(["Clock", "Logger/last_log_time", "Logger/counter"])
+#         mlflow_logger.reset()
 
 
-print(
-    f"Training completed after {updater.state['reinforce_updater/episode_count'].data[0]} episodes"
-)
+# print(
+#     f"Training completed after {updater.state['reinforce_updater/episode_count'].data[0]} episodes"
+# )
 
-# Plotting Results
-plt.figure(figsize=(12, 5))
-plt.subplot(1, 2, 1)
-plt.plot(updater.returns)
-plt.xlabel("Episode")
-plt.ylabel("Episode Return")
-plt.title("REINFORCE Learning Curve")
-plt.grid(True)
+# # Plotting Results
+# plt.figure(figsize=(12, 5))
+# plt.subplot(1, 2, 1)
+# plt.plot(updater.returns)
+# plt.xlabel("Episode")
+# plt.ylabel("Episode Return")
+# plt.title("REINFORCE Learning Curve")
+# plt.grid(True)
 
-plt.subplot(1, 2, 2)
-plt.plot(updater.value_losses)
-plt.xlabel("Episode")
-plt.ylabel("Value Loss")
-plt.title("Value Network Learning Curve")
-plt.grid(True)
+# plt.subplot(1, 2, 2)
+# plt.plot(updater.value_losses)
+# plt.xlabel("Episode")
+# plt.ylabel("Value Loss")
+# plt.title("Value Network Learning Curve")
+# plt.grid(True)
 
-plt.tight_layout()
-plt.show()
+# plt.tight_layout()
+# plt.show()
