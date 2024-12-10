@@ -164,3 +164,13 @@ poetry.lock
 .vscode/
 mlruns/
 *plots/
+*.dot
+*.pdf
+*.svg
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.ico

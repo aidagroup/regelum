@@ -53,6 +53,159 @@ from regelum.environment.transistor import (
     ScipyTransistor,
     SampleAndHoldModifier,
 )
+from typing import Optional, List
+from graphviz import Digraph
+
+
+def visualize_graph(
+    graph: "Graph", output_file: Optional[str] = "graph_diagram", view: bool = True
+):
+    """Visualize the given Graph instance as a block diagram using graphviz.
+
+    Each Node is represented as a box with:
+      - "ClassName:root_state_name" as title (bold)
+      - Node type (Continuous or Discrete)
+      - Initial state values (if leaf and defined)
+      - A table showing the transistor and its modifiers (if any).
+        Modifiers are detected by a class attribute `is_modifier = True`.
+        The main transistor class is one of ODETransistor, ScipyTransistor, CasADiTransistor,
+        or Transistor if none of these specialized classes appear.
+
+    Edges represent dependencies between nodes based on their input states and are labeled:
+      - The labels are bold, slightly larger, with a white background.
+    """
+    dot = Digraph(comment="Regelum Graph Visualization", format="pdf")
+    dot.attr(rankdir="LR", concentrate="true", nodesep="0.5", ranksep="0.7")
+
+    nodes = graph.nodes
+    node_ids = {node: f"node_{i}" for i, node in enumerate(nodes)}
+
+    def prettify_value(val):
+        if isinstance(val, np.ndarray):
+            return f"{val}"
+        elif hasattr(val, "__class__"):
+            return val.__class__.__name__
+        else:
+            return str(val)
+
+    def get_transistor_info(transistor):
+        if not transistor:
+            return None, [], False
+
+        mro = type(transistor).mro()
+        modifiers = []
+        main_transistor_cls = None
+        has_reset = False
+
+        # First pass - collect all modifiers and check for reset
+        for cls in mro:
+            if cls is object:
+                continue
+            if getattr(cls, "is_modifier", False):
+                if cls.__name__ == "ResetTransistor":
+                    has_reset = True
+                else:
+                    modifiers.append(cls.__name__)
+
+        # Second pass - find main transistor class
+        for cls in mro:
+            if cls is object or cls.__name__ == "Transistor":
+                continue
+            if not getattr(cls, "is_modifier", False):  # Only consider non-modifiers
+                main_transistor_cls = cls.__name__
+                break
+
+        if main_transistor_cls is None:
+            main_transistor_cls = "Transistor"
+
+        modifiers.reverse()
+        return main_transistor_cls, modifiers if modifiers else None, has_reset
+
+    # Render each node
+    for node in nodes:
+        node_id = node_ids[node]
+        state_name = node.state.name
+        node_class_name = node.__class__.__name__
+        node_type_info = (
+            "Transition: Continuous" if node.is_continuous else "Transition: Discrete"
+        )
+
+        init_val_str = ""
+        if node.state.is_leaf and node.state.data is not None:
+            val_str = prettify_value(node.state.data)
+            init_val_str = f"Init state: {val_str}"
+
+        main_transistor_cls, modifiers, has_reset = get_transistor_info(node.transistor)
+
+        # Start main table
+        label = f"""<<table border='0' cellborder='0' cellspacing='0'>"""
+
+        label += f"""<tr><td><b>{node_class_name}:{state_name}</b></td></tr>
+            <tr><td>{node_type_info}</td></tr>"""
+
+        if init_val_str:
+            label += f"<tr><td>{init_val_str}</td></tr>"
+
+        if main_transistor_cls:
+            label += "<tr><td><table border='1' cellborder='1' cellspacing='0'>"
+            if modifiers:
+                for modifier in modifiers:
+                    label += f"<tr><td bgcolor='#d9d9d9'>{modifier}</td></tr>"
+            label += f"<tr><td bgcolor='#e6e6e6'>{main_transistor_cls}</td></tr>"
+            label += "</table></td></tr>"
+
+        # Add arrow-like reset indicator at the bottom if needed
+        if has_reset:
+            label += """<tr><td align="center">
+                <table border='0' cellborder='0' cellpadding='2'>
+                    <tr>
+                        <td bgcolor="#ffcccc" border='1' sides="lt" style="rounded"><font point-size="12"><b>➜ Reset</b></font></td>
+                    </tr>
+                </table>
+            </td></tr>"""
+
+        label += "</table>>"
+
+        dot.node(
+            node_id,
+            label=label,
+            shape="box",
+            style="filled",
+            fillcolor="#f0f0f0",
+            margin="0.3",
+        )
+
+    # Map full_path -> owner node
+    state_to_owner = {}
+    for n in nodes:
+        for s in n.state.get_all_states():
+            if s.is_leaf:
+                full_path = s.paths[0]
+                state_to_owner[full_path] = n
+
+    # Add edges
+    for node in nodes:
+        for input_state in node.inputs.states:
+            if input_state.is_leaf:
+                input_path = input_state.paths[0]
+                producer = state_to_owner.get(input_path)
+                if producer and producer != node:
+                    edge_label = f"""<<table border='0' cellborder='0'>
+                        <tr><td bgcolor='white'><font point-size='12'><b>{input_state.name}</b></font></td></tr>
+                        </table>>"""
+
+                    dot.edge(
+                        node_ids[producer],
+                        node_ids[node],
+                        label=edge_label,
+                        fontsize="10",
+                        labeldistance="0.2",
+                        labelangle="0",
+                        labelfloat="false",
+                    )
+
+    dot.render(output_file, view=view)
+
 
 T = TypeVar("T")
 
