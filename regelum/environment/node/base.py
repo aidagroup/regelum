@@ -49,7 +49,10 @@ from regelum.typing import (
     RgArray,
 )
 from math import gcd
-from regelum.environment.transistor import ScipyTransistor, SampleAndHoldFactory
+from regelum.environment.transistor import (
+    ScipyTransistor,
+    SampleAndHoldModifier,
+)
 
 T = TypeVar("T")
 
@@ -448,9 +451,26 @@ class Graph:
             states_to_log: State paths to record.
             logger_cooldown: Minimum time between logs.
         """
-        self._validate_and_set_step_sizes(nodes)
-        self._setup_logger(nodes, states_to_log, logger_cooldown)
-        self._initialize_graph(nodes)
+        fundamental_step_size = self._validate_and_set_step_sizes(nodes)
+        self._setup_logger(nodes, states_to_log, logger_cooldown, fundamental_step_size)
+        self._initialize_graph(nodes, fundamental_step_size)
+
+    def define_fundamental_step_size(self, nodes: List[Node]):
+        step_sizes = [
+            node.step_size
+            for node in nodes
+            if not node.is_continuous and node.step_size is not None
+        ]
+
+        def float_gcd(a: float, b: float) -> float:
+            precision = 1e-9
+            a, b = round(a / precision), round(b / precision)
+            return gcd(int(a), int(b)) * precision
+
+        fundamental_step_size = (
+            reduce(float_gcd, step_sizes) if len(set(step_sizes)) > 1 else step_sizes[0]
+        )
+        return fundamental_step_size
 
     def _validate_and_set_step_sizes(self, nodes: List[Node]):
         defined_step_sizes = [
@@ -459,24 +479,27 @@ class Graph:
         if not defined_step_sizes:
             raise ValueError("At least one node must have a defined step_size")
 
-        min_step_size = min(defined_step_sizes)
+        fundamental_step_size = self.define_fundamental_step_size(nodes)
         for node in nodes:
             if node.step_size is None:
-                node.step_size = min_step_size
+                node.step_size = fundamental_step_size
+
+        return fundamental_step_size
 
     def _setup_logger(
         self,
         nodes: List[Node],
         states_to_log: Optional[List[str]],
         logger_cooldown: float,
+        fundamental_step_size: float,
     ):
         if not states_to_log:
             self.logger = None
             return
 
-        step_sizes = self._get_logger_step_sizes(nodes, states_to_log)
-        min_step_size = min(step_sizes) if step_sizes else nodes[0].step_size
-        self.logger = Logger(states_to_log, min_step_size, cooldown=logger_cooldown)
+        self.logger = Logger(
+            states_to_log, fundamental_step_size, cooldown=logger_cooldown
+        )
         nodes.append(self.logger)
 
     def _get_logger_step_sizes(
@@ -493,8 +516,8 @@ class Graph:
             )
         ]
 
-    def _initialize_graph(self, nodes: List[Node]):
-        self.nodes = nodes + [Clock(nodes), StepCounter(nodes)]
+    def _initialize_graph(self, nodes: List[Node], fundamental_step_size: float):
+        self.nodes = nodes + [Clock(fundamental_step_size), StepCounter(nodes)]
         states = reduce(
             lambda x, y: x + y, [node.state.get_all_states() for node in self.nodes]
         )
@@ -504,33 +527,38 @@ class Graph:
         for node in self.nodes:
             for input_path in node.state.paths:
                 if input_path.startswith("reset_"):
-                    from regelum.environment.transistor import ResetFactory
 
                     target_node_name = input_path[6:]  # Remove 'reset_' prefix
                     reset_map[target_node_name] = True
+
+        from regelum.environment.transistor import ResetModifier
+
+        reset_modifier = ResetModifier()
 
         # Apply reset modifiers where needed
         for node in self.nodes:
             if node.state.name in reset_map:
                 if node.transistor is None:
                     node.default_transistor_configuration["transistor"] = (
-                        node.default_transistor_configuration[
-                            "transistor"
-                        ].with_modifier(ResetFactory())
+                        reset_modifier.apply_class(
+                            node.default_transistor_configuration["transistor"]
+                        )
                     )
-
         for node in self.nodes:
             node.inputs.resolve(states)
 
         self.ordered_nodes = self.resolve(self.nodes)
         self._log_node_order()
-        zoh = SampleAndHoldFactory()
+
         for node in self.ordered_nodes:
             if node.transistor is None:
                 if not node.is_continuous:
-                    node.default_transistor_configuration["transistor"].with_modifier(
-                        zoh
+                    node.default_transistor_configuration["transistor"] = (
+                        SampleAndHoldModifier(node.step_size).apply_class(
+                            node.default_transistor_configuration["transistor"]
+                        )
                     )
+
                 node.with_transistor(
                     node.default_transistor_configuration["transistor"],
                     **node.default_transistor_configuration["transistor_kwargs"],
@@ -707,23 +735,13 @@ class Clock(Node):
 
     state = State("Clock", (1,), np.array([0]))
 
-    def __init__(self, nodes: List[Node]) -> None:
+    def __init__(self, fundamental_step_size: float) -> None:
         """Initialize the Clock node.
 
         Args:
-            nodes: List of nodes to synchronize.
-            time_start: Initial time value.
+            fundamental_step_size: Fundamental step size.
         """
-        step_sizes = [node.step_size for node in nodes if not node.is_continuous]
-
-        def float_gcd(a: float, b: float) -> float:
-            precision = 1e-9
-            a, b = round(a / precision), round(b / precision)
-            return gcd(int(a), int(b)) * precision
-
-        self.fundamental_step_size = (
-            reduce(float_gcd, step_sizes) if len(set(step_sizes)) > 1 else step_sizes[0]
-        )
+        self.fundamental_step_size = fundamental_step_size
 
         super().__init__(is_root=False, step_size=self.fundamental_step_size)
 

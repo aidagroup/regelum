@@ -419,7 +419,7 @@ class AdaptationBlock(Node):
 
 
 class PlotObservations(Node):
-    def __init__(self, plot_dir: str = "plots"):
+    def __init__(self, plot_dir: str = "plots", activate: bool = False):
         state = State("plot_counter", (1,), np.array([0]))
         inputs = ["observation", "is_truncated", "step_counter"]
         super().__init__(state=state, inputs=inputs)
@@ -427,8 +427,12 @@ class PlotObservations(Node):
         self.plot_dir = plot_dir
         os.makedirs(plot_dir, exist_ok=True)
         self.observations = []
+        self.activate = activate
 
     def compute_state_dynamics(self) -> Dict[str, Any]:
+        if not self.activate:
+            return {}
+
         obs = self.inputs["observation"].data
         is_truncated = self.inputs["is_truncated"].data
         step = self.inputs["step_counter"].data[0]
@@ -498,7 +502,7 @@ autotune: bool = True
 pendulum = Pendulum(is_root=True, is_continuous=True)
 observer = Observer()
 actor = Actor(step_size=0.05, device=device, learning_starts=learning_starts)
-is_truncated = IsTruncated(steps_to_truncate=200)
+is_truncated = IsTruncated(steps_to_truncate=200, step_size=0.03)
 reset = Reset(input_node=pendulum)
 reward_computer = RewardComputer()
 buffer = Buffer(device=device)
@@ -515,7 +519,7 @@ adaptation_block = AdaptationBlock(
     autotune=autotune,
     device=device,
 )
-plot_observations = PlotObservations()
+plot_observations = PlotObservations(activate=False)
 
 graph = Graph(
     nodes=[
@@ -535,7 +539,7 @@ graph = Graph(
         "is_truncated",
         "step_counter",
     ],
-    logger_cooldown=0.5,
+    # logger_cooldown=0.0,
 )
 
 for _ in range(total_timesteps):
