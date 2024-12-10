@@ -21,7 +21,7 @@ class ODENode(Node):
     inputs = ["Clock"]
 
     def __init__(self):
-        super().__init__(step_size=0.1)
+        super().__init__(step_size=0.1, is_root=True)
 
     def compute_state_dynamics(self):
         x = self.state.data
