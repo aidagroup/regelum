@@ -583,7 +583,6 @@ adaptation_block = AdaptationBlock(
     device=device,
 )
 plot_observations = PlotObservations()
-visualizer = PygameVisualizer()
 pygame_visualizer = PygameVisualizer()
 
 graph = Graph(
@@ -597,7 +596,6 @@ graph = Graph(
         buffer,
         adaptation_block,
         plot_observations,
-        visualizer,
         pygame_visualizer,
     ],
     states_to_log=[

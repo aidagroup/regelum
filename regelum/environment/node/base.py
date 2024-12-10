@@ -29,6 +29,7 @@ from typing import (
     cast,
     Callable,
 )
+from collections import defaultdict, deque
 from copy import deepcopy
 
 try:
@@ -543,51 +544,130 @@ class Graph:
 
     @staticmethod
     def resolve(nodes: List[Node]) -> List[Node]:
-        """Resolves node execution order based on input dependencies."""
-        # Create unique identifiers for nodes
-        node_map = {}
-        for idx, node in enumerate(nodes):
-            unique_id = f"{node.state.name}_{idx}"
-            node_map[unique_id] = {
-                "node": node,
-                "state": node.state,
-                "inputs": node.inputs.paths_to_states,
-                "is_root": node.is_root,
-            }
-
-        ordered_ids: List[str] = []
-        max_iterations = len(node_map)
-        iterations = 0
-
-        def is_input_available(input_path: str, resolved_states: List[State]) -> bool:
-            for resolved_state in resolved_states:
-                if resolved_state.search_by_path(input_path) is not None:
-                    return True
-            return False
-
-        # Resolve order
-        while len(ordered_ids) < len(node_map):
-            if iterations >= max_iterations:
-                unresolved = set(node_map.keys()) - set(ordered_ids)
-                raise ValueError(
-                    f"Circular dependency detected. Unresolved nodes: {unresolved}"
-                )
-
-            resolved_states = [node_map[n]["state"] for n in ordered_ids]
-
-            for unique_id, info in node_map.items():
-                if unique_id not in ordered_ids:
-                    inputs_available = all(
-                        is_input_available(input_path, resolved_states)
-                        for input_path in info["inputs"]
+        # 1. Collect all full paths from each node and ensure uniqueness
+        full_path_to_node = {}
+        for node in nodes:
+            for path in node.state.paths:
+                if path in full_path_to_node:
+                    # Handle the case where different nodes produce the same full path
+                    # This is not allowed and should not be allowed
+                    other_node = full_path_to_node[path]
+                    raise ValueError(
+                        f"Duplicate full state path detected: '{path}' is produced by both "
+                        f"'{other_node.state.name}' and '{node.state.name}'. "
+                        "All full state paths must be unique."
                     )
-                    if inputs_available or info["is_root"]:
-                        ordered_ids.append(unique_id)
+                full_path_to_node[path] = node
 
-            iterations += 1
+        # 2. Build the adjacency list based on full paths
+        graph = {node: [] for node in nodes}
 
-        # Map back to original nodes
-        return [node_map[unique_id]["node"] for unique_id in ordered_ids]
+        # For each node, resolve its inputs using full paths
+        # If any input does not map to an existing path, raise an error
+        for node in nodes:
+            if not node.inputs.paths_to_states:
+                continue
+            for input_path in node.inputs.paths_to_states:
+                if input_path not in full_path_to_node:
+                    raise ValueError(
+                        f"Input path '{input_path}' required by '{node.state.name}' "
+                        "does not map to any known node's full state path."
+                    )
+                producer_node = full_path_to_node[input_path]
+                if producer_node != node:
+                    graph[producer_node].append(node)
+
+        # 3. Detect strongly connected components (SCCs) to handle cycles as blocks
+        index = 0
+        stack = []
+        on_stack = set()
+        indices = {}
+        low_link = {}
+        sccs = []
+
+        def strongconnect(v):
+            nonlocal index
+            indices[v] = index
+            low_link[v] = index
+            index += 1
+            stack.append(v)
+            on_stack.add(v)
+
+            for w in graph[v]:
+                if w not in indices:
+                    strongconnect(w)
+                    low_link[v] = min(low_link[v], low_link[w])
+                elif w in on_stack:
+                    low_link[v] = min(low_link[v], indices[w])
+
+            # If v is the root of an SCC
+            if low_link[v] == indices[v]:
+                scc = []
+                while True:
+                    w = stack.pop()
+                    on_stack.remove(w)
+                    scc.append(w)
+                    if w == v:
+                        break
+                sccs.append(scc)
+
+        for n in nodes:
+            if n not in indices:
+                strongconnect(n)
+
+        # 4. Build SCC graph (condensation)
+        node_to_scc = {}
+        for i, scc in enumerate(sccs):
+            for node in scc:
+                node_to_scc[node] = i
+
+        scc_graph = {i: set() for i in range(len(sccs))}
+        for u in nodes:
+            u_scc = node_to_scc[u]
+            for v in graph[u]:
+                v_scc = node_to_scc[v]
+                if u_scc != v_scc:
+                    scc_graph[u_scc].add(v_scc)
+
+        # 5. Topological sort on scc_graph
+        in_degree = {i: 0 for i in range(len(sccs))}
+        for u in scc_graph:
+            for v in scc_graph[u]:
+                in_degree[v] += 1
+
+        # Sort SCCs by lexicographically smallest state name for stable order
+        def scc_key(scc_index):
+            names = [node.state.name for node in sccs[scc_index]]
+            return min(names)
+
+        ready = [i for i in in_degree if in_degree[i] == 0]
+        ready.sort(key=scc_key)
+
+        scc_order = []
+        while ready:
+            current = ready.pop(0)
+            scc_order.append(current)
+            for dep in scc_graph[current]:
+                in_degree[dep] -= 1
+                if in_degree[dep] == 0:
+                    ready.append(dep)
+            ready.sort(key=scc_key)
+
+        # 6. Expand each SCC. Sort nodes within each SCC block by state name.
+        final_order = []
+        for scc_idx in scc_order:
+            scc_block = sccs[scc_idx]
+            if len(scc_block) > 1 or any(n in graph[n] for n in scc_block):
+                # Cycle or self-loop
+                scc_block.sort(key=lambda x: x.state.name)
+            else:
+                # Single node, no cycle
+                # Just stable sort by name anyway
+                scc_block.sort(key=lambda x: x.state.name)
+
+            final_order.extend(scc_block)
+
+        return final_order
 
     def step(self):
         """Execute a single time step for all nodes in the graph in resolved order."""

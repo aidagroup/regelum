@@ -84,7 +84,7 @@ def test_reset_behavior(pendulum_system):
     initial_pendulum_state = pendulum.state.data.copy()
 
     # Run until first reset
-    for _ in range(terminate_signal.reset_interval + 1):
+    for _ in range(terminate_signal.reset_interval):
         graph.step()
 
     # Check if pendulum state was reset to initial condition

@@ -107,7 +107,9 @@ def test_graph_reset(nested_state):
         def compute_state_dynamics(self):
             return {}
 
-    node1 = TestNode1(state=nested_state.with_altered_name("node1"), step_size=0.1)
+    node1 = TestNode1(
+        state=nested_state.with_altered_name("node1"), step_size=0.1, is_root=True
+    )
     node2 = TestNode2(state=nested_state.with_altered_name("node2"), step_size=0.1)
 
     graph = Graph([node1, node2])
@@ -142,7 +144,7 @@ def test_graph_reset_invalid_path(nested_state):
         def compute_state_dynamics(self):
             return {}
 
-    node = TestNode(state=nested_state, step_size=0.1)
+    node = TestNode(state=nested_state, step_size=0.1, is_root=True)
     graph = Graph([node])
 
     # Test reset with invalid path
