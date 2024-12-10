@@ -10,7 +10,7 @@ This module provides base classes for implementing different types of state tran
 """
 
 from __future__ import annotations
-from typing import Callable, Optional, Dict, Any, List, TYPE_CHECKING
+from typing import Callable, Optional, Dict, Any, List, TYPE_CHECKING, Type
 from abc import abstractmethod, ABC
 from casadi import integrator, MX, vertcat, vec, DM
 import numpy as np
@@ -32,82 +32,112 @@ def register_transition(*paths):
 
 
 class Transistor:
-    """Base transistor for computing state transitions.
+    """Base class for computing state transitions in a Node.
 
-    Args:
-        node: Node to compute transitions for
-        time_final: Optional end time for simulation
+    The Transistor is responsible for advancing the state of a Node from one timestep
+    to the next. It retrieves the Node's inputs, calls the Node's defined dynamics function,
+    and applies the resulting updates in-place to the Node's states.
+
+    By default, the base Transistor expects the Node to implement a `compute_state_dynamics()`
+    method. This method should return a dictionary mapping full state paths to their new values.
+
+    If you need more complex behavior (e.g., ODE integration, sample-and-hold, reset behavior),
+    you can subclass Transistor or wrap it using a TransistorFactory-based approach.
+
+    Typical Usage:
+        - At each timestep:
+          1. The Graph calls `transistor.step()`
+          2. The transistor collects inputs from the Node's input states.
+          3. It calls `node.compute_state_dynamics()` to get the next state values.
+          4. It updates the Node's state fields in-place with the computed values.
+
+    Requirements for the Node:
+        - The Node must implement `compute_state_dynamics()` returning a dict of {full_path: new_value}.
+        - All required input states must be resolved and present at Node.inputs.
+
+    Exceptions:
+        - Raises `NotImplementedError` if `compute_state_dynamics()` is not defined in the Node.
+        - Raises `ValueError` if any required state path to update does not exist in the Node's state.
+
+    Example:
+        class MyNode(Node):
+            state = State("my_state", (1,), np.zeros(1))
+            inputs = Inputs(["some_input"])
+
+            def compute_state_dynamics(self):
+                x = self.state.data
+                u = self.inputs["some_input"].data
+                return {"my_state": x + u}
+
+        node = MyNode()
+        transistor = Transistor(node=node)
+        transistor.step()  # Node state updated in-place based on compute_state_dynamics
     """
 
-    def __init__(
-        self,
-        node: Node,
-        time_final: Optional[float] = None,
-    ) -> None:
+    def __init__(self, node: Node, time_final: Optional[float] = None) -> None:
         """Initialize the Transistor.
 
         Args:
-            node: Node to compute transitions for.
-            time_final: Optional end time for simulation.
+            node: The Node whose states this transistor will update.
+            time_final: Optional simulation end time for reference (not used in the base transistor).
         """
         self.node = node
         self.step_size = node.step_size
         self.time_final = time_final
         self.current_state = node.state
-        self.transition_map = {}
-        self._collect_transition_methods()
-        self._create_default_transition()
 
-    def _collect_transition_methods(self):
-        for attr_name in dir(self):
-            attr = getattr(self, attr_name)
-            if hasattr(attr, "transition_paths"):
-                for path in attr.transition_paths:
-                    self.transition_map[path] = attr
+        if not hasattr(node, "compute_state_dynamics") or not callable(
+            node.compute_state_dynamics
+        ):
+            raise NotImplementedError(
+                f"The node {node.state.name} does not implement `compute_state_dynamics()` method."
+            )
 
-    def _create_default_transition(self):
-        if not self.transition_map and hasattr(self.node, "compute_state_dynamics"):
-            self.transition_map["default"] = self.node.compute_state_dynamics
+    def is_inputs_ready(self):
+        return all(
+            state.value["value"] is not None for state in self.node.inputs.states
+        )
 
     def step(self):
-        inputs = self.collect_inputs()
-        if any(state.value["value"] is None for state in self.node.inputs.states):
+        """Advance the Node's state by one timestep.
+
+        This method:
+          1. Collects inputs from the Node's input states.
+          2. Calls node.compute_state_dynamics() to obtain the state updates.
+          3. Applies these updates directly to the Node's states.
+
+        If any input state is currently undefined, this step does nothing.
+        """
+        # Check all inputs are available
+        if not self.is_inputs_ready():
+            # If inputs are not ready, we do nothing. This can happen if some dependency isn't computed yet.
             return
-        state_updates = {}
 
-        if "default" in self.transition_map:
-            new_state_values = self.transition_map["default"]()
-            state_updates.update(new_state_values)
-        else:
-            for path, method in self.transition_map.items():
-                state_to_update = self.current_state.search_by_path(path)
-                if state_to_update is None:
-                    raise ValueError(f"State path '{path}' not found.")
-                new_value = method(state_to_update, inputs)
-                state_updates[path] = new_value
+        # Compute new state dynamics
+        new_state_values = self.node.compute_state_dynamics()
 
-        self.update_state(state_updates)
-
-    def update_state(self, state_updates):
-        for path, value in state_updates.items():
-            state_to_update = self.current_state.search_by_path(path)
-            if state_to_update:
-                state_to_update.value = value
-            else:
-                raise ValueError(f"State path '{path}' not found during update.")
+        # Update states in-place
+        self._apply_updates(new_state_values)
 
     def collect_inputs(self):
         return {state.name: state.value for state in self.node.inputs.states}
 
-    @classmethod
-    def with_modifier(cls, modifier):
-        class ModifiedTransistor(cls):
-            def __init__(self, node, **kwargs):
-                super().__init__(node, **kwargs)
-                modifier.node = self.node  # Bind the node to the modifier
-                self.transition_map = modifier.transition_modifier(self.transition_map)
+    def _apply_updates(self, updates: Dict[str, Any]):
+        """Apply computed updates to the Node's states in-place.
 
-        return ModifiedTransistor
+        Args:
+            updates: A dictionary {full_state_path: new_value}.
+
+        Raises:
+            ValueError: If a provided state path does not exist in the node's state.
+        """
+        for path, value in updates.items():
+            state_to_update = self.current_state.search_by_path(path)
+            if state_to_update is None:
+                raise ValueError(
+                    f"State path '{path}' not found in node '{self.node.state.name}' during state update."
+                )
+            state_to_update.value = value
 
 
 class ODETransistor(Transistor):
@@ -182,13 +212,13 @@ class ODETransistor(Transistor):
         """Set up the ODE integrator."""
         pass
 
-    def _create_default_transition(self):
-        """Create the default transition using the integrator."""
-        if not self.transition_map:
-            self.transition_map["default"] = self.ode_transition
+    def step(self):
+        if not self.is_inputs_ready():
+            return
+        self.ode_transition()
 
     @abstractmethod
-    def ode_transition(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    def ode_transition(self) -> Dict[str, Any]:
         """Compute the new state using the ODE integrator."""
         pass
 
@@ -448,96 +478,103 @@ class ScipyTransistor(ODETransistor):
         return result
 
 
-class TransistorFactory:
-    """Factory for creating modified transistors.
+class TransistorModifier(ABC):
+    """Base class for transistor modifiers that operate at the class level.
 
-    Args:
-        transition_modifier: Function to modify transition mappings
+    Each modifier takes a Transistor class and returns a new subclass that adds or modifies behavior.
+    By working at the class level, we ensure that `with_transistor()` can instantiate the final
+    transistor class at runtime with the desired modifications.
     """
 
-    def __init__(
-        self, transition_modifier: Callable[[Dict[str, Callable]], Dict[str, Callable]]
-    ) -> None:
-        """Initialize the TransistorFactory.
+    @abstractmethod
+    def apply_class(self, transistor_cls: Type["Transistor"]) -> Type["Transistor"]:
+        """Given a transistor class, return a new transistor class with the modifier applied.
 
         Args:
-            transition_modifier: Function to modify transition mappings.
+            transistor_cls: The original transistor class to wrap.
+
+        Returns:
+            A new transistor class that includes the modifications.
         """
-        self.transition_modifier = transition_modifier
-
-    def create(self, transistor: Transistor) -> Transistor:
-        new_transistor = type(transistor)(
-            node=transistor.node, time_final=transistor.time_final
-        )
-        new_transistor.transition_map = self.transition_modifier(
-            transistor.transition_map
-        )
-        return new_transistor
+        pass
 
 
-class SampleAndHoldFactory(TransistorFactory):
-    """Factory for creating sample-and-hold behavior in transistors.
+class SampleAndHoldModifier(TransistorModifier):
+    """Class-level modifier that applies a sample-and-hold (zero-order-hold) behavior to the transistor.
 
-    Creates transistors that update state at fixed intervals and hold values between updates.
+    The resulting class updates the node's state at fixed intervals and holds the last computed state in between.
     """
 
-    def __init__(self) -> None:
-        """Initialize the SampleAndHoldFactory."""
-        super().__init__(self._create_sample_and_hold_transition)
+    def __init__(self, hold_duration: float):
+        """Initialize the SampleAndHoldModifier.
 
-    def _create_sample_and_hold_transition(
-        self, transition_map: Dict[str, Callable]
-    ) -> Dict[str, Callable]:
-        original_transition = transition_map["default"]
-        last_update_time = 0.0
-        cached_state = None
+        Args:
+            hold_duration: The duration to hold the state between updates.
+        """
+        self.hold_duration = hold_duration
 
-        def sample_and_hold_transition(transistor_self) -> Dict[str, Any]:
-            nonlocal last_update_time, cached_state
-            inputs = transistor_self.node.inputs.collect()
-            current_time = float(inputs["Clock"])
+    def apply_class(self, transistor_cls: Type["Transistor"]) -> Type["Transistor"]:
+        hold_duration = self.hold_duration
 
-            if (
-                cached_state is None
-                or current_time >= last_update_time + transistor_self.node.step_size
-            ):
-                cached_state = original_transition()
-                last_update_time = current_time
+        class SampleAndHoldTransistor(transistor_cls):
+            """A transistor class modified with sample-and-hold behavior."""
 
-            return cached_state
+            def __init__(self, node, time_final: Optional[float] = None):
+                super().__init__(node=node, time_final=time_final)
+                self.last_update_time = None
 
-        def bound_transition():
-            return sample_and_hold_transition(self)
+            def step(self):
+                # Retrieve clock if available
+                clock_state = next(
+                    (s for s in self.node.inputs.states if s.name == "Clock"), None
+                )
+                if clock_state is None or clock_state.value["value"] is None:
+                    # No clock, just run the step each time
+                    return super().step()
 
-        return {"default": bound_transition}
+                current_time = float(clock_state.value["value"])
+
+                if (
+                    self.last_update_time is None
+                    or current_time >= self.last_update_time + hold_duration
+                ):
+                    # Time to recompute the state
+                    super().step()
+                    self.last_update_time = current_time
+                else:
+                    # Hold previous state: do nothing
+                    pass
+
+        return SampleAndHoldTransistor
 
 
-class ResetFactory(TransistorFactory):
-    """Factory for creating reset behavior in transistors.
+class ResetModifier(TransistorModifier):
+    """Class-level modifier that adds reset logic.
 
-    Creates transistors that reset state to initial values when terminate signal is received.
+    Checks a reset signal each step, and if triggered, resets the node state before proceeding.
     """
 
-    def __init__(self) -> None:
-        """Initialize the ResetFactory."""
-        super().__init__(self._create_reset_transition)
+    def __init__(self, reset_path: Optional[str] = None):
+        self.reset_path = reset_path
 
-    def _create_reset_transition(
-        self, transition_map: Dict[str, Callable]
-    ) -> Dict[str, Callable]:
-        original_transition = transition_map["default"]
+    def apply_class(self, transistor_cls: Type["Transistor"]) -> Type["Transistor"]:
+        reset_path = self.reset_path
 
-        def reset_transition(transistor_self) -> Dict[str, Any]:
-            inputs = transistor_self.node.inputs.collect()
-            reset_key = f"reset_{transistor_self.node.state.name}"
+        class ResetTransistor(transistor_cls):
+            """A transistor class modified with reset behavior."""
 
-            if reset_key in inputs and inputs[reset_key]:
-                transistor_self.node.reset()
-                return {}
+            def __init__(self, node, time_final: Optional[float] = None):
+                super().__init__(node=node, time_final=time_final)
+                self.reset_signal_path = reset_path or f"reset_{self.node.state.name}"
 
-            return original_transition()
+            def step(self):
+                # Check reset signal
+                reset_state = self.node.state.search_by_path(self.reset_signal_path)
+                if reset_state and reset_state.data:
+                    self.node.reset()
+                    reset_state.value = False
 
-        def bound_transition():
-            return reset_transition(self)
+                # Proceed with normal step
+                return super().step()
 
-        return {"default": bound_transition}
+        return ResetTransistor
