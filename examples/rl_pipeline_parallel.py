@@ -1,5 +1,5 @@
 from regelum.environment.node.base import Node, State, Inputs
-from regelum.environment.graph import Graph
+from regelum.environment.graph import Graph, visualize_graph
 from regelum.environment.node.continuous import Pendulum
 from typing import Dict, Any
 import numpy as np
@@ -420,7 +420,7 @@ class AdaptationBlock(Node):
 
 
 class PlotObservations(Node):
-    def __init__(self, plot_dir: str = "plots"):
+    def __init__(self, plot_dir: str = "plots", activate: bool = False):
         state = State("plot_counter", (1,), np.array([0]))
         inputs = ["observation", "is_truncated", "step_counter"]
         super().__init__(state=state, inputs=inputs)
@@ -428,8 +428,12 @@ class PlotObservations(Node):
         self.plot_dir = plot_dir
         os.makedirs(plot_dir, exist_ok=True)
         self.observations = []
+        self.activate = activate
 
     def compute_state_dynamics(self) -> Dict[str, Any]:
+        if not self.activate:
+            return {}
+
         obs = self.inputs["observation"].data
         is_truncated = self.inputs["is_truncated"].data
         step = self.inputs["step_counter"].data[0]
@@ -473,73 +477,6 @@ class PlotObservations(Node):
         return {}
 
 
-class PygameVisualizer(Node):
-    def __init__(self, screen_size: int = 400):
-        import pygame
-
-        pygame.init()
-
-        state = State("visualizer", None, None)
-        inputs = ["pendulum_state", "actor/action"]
-        self.screen_size = screen_size
-        self.screen = pygame.display.set_mode((screen_size, screen_size))
-        self.clock = pygame.time.Clock()
-        self.center = (screen_size // 2, screen_size // 2)
-        self.pendulum_length = screen_size // 3
-        super().__init__(state=state, inputs=inputs)
-
-    def compute_state_dynamics(self) -> Dict[str, Any]:
-        import pygame
-
-        # Handle events
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                import sys
-
-                sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_q:  # Press 'q' to quit
-                    pygame.quit()
-                    import sys
-
-                    sys.exit()
-
-        angle, _ = self.inputs["pendulum_state"].data
-        action = self.inputs["actor/action"].data[0]
-
-        self.screen.fill((255, 255, 255))
-
-        end_pos = (
-            self.center[0] + self.pendulum_length * np.sin(angle),
-            self.center[1] - self.pendulum_length * np.cos(angle),
-        )
-
-        pygame.draw.circle(self.screen, (100, 100, 100), self.center, 10)
-        pygame.draw.line(self.screen, (0, 0, 0), self.center, end_pos, 4)
-        pygame.draw.circle(self.screen, (50, 50, 50), end_pos, 20)
-
-        force_length = 50 * action / Actor.max_torque
-        pygame.draw.arc(
-            self.screen,
-            (255, 0, 0),
-            (self.center[0] - 30, self.center[1] - 30, 60, 60),
-            -angle + np.pi / 2,
-            -angle + np.pi / 2 - force_length,
-            3,
-        )
-
-        pygame.display.flip()
-        self.clock.tick(60)
-
-        return {}
-
-    def __del__(self):
-        import pygame
-
-        pygame.quit()
-
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 total_timesteps: int = 1000000
 gamma: float = 0.99
@@ -566,7 +503,7 @@ autotune: bool = True
 pendulum = Pendulum(is_root=True, is_continuous=True)
 observer = Observer()
 actor = Actor(step_size=0.05, device=device, learning_starts=learning_starts)
-is_truncated = IsTruncated(steps_to_truncate=200)
+is_truncated = IsTruncated(steps_to_truncate=200, step_size=0.03)
 reset = Reset(input_node=pendulum)
 reward_computer = RewardComputer()
 buffer = Buffer(device=device)
@@ -583,30 +520,34 @@ adaptation_block = AdaptationBlock(
     autotune=autotune,
     device=device,
 )
-plot_observations = PlotObservations()
-pygame_visualizer = PygameVisualizer()
+plot_observations = PlotObservations(activate=False)
 
 graph = Graph(
-    nodes=[
+    [
         pendulum,
-        observer,
         actor,
-        is_truncated,
-        reset,
+        adaptation_block,
         reward_computer,
         buffer,
-        adaptation_block,
         plot_observations,
-        pygame_visualizer,
-    ],
-    states_to_log=[
-        "pendulum_state",
-        "observation",
-        "is_truncated",
-        "step_counter",
-    ],
-    logger_cooldown=0.5,
+        reset,
+        is_truncated,
+        observer,
+    ]
+)
+subgraph = graph.extract_subgraph(
+    "pendulum_state -> actor", freezed=[adaptation_block, reset, is_truncated]
 )
 
-for _ in range(total_timesteps):
-    graph.step()
+subgraphs = subgraph.multiply(n_copies=2)
+
+# data_buffers = []
+# for sg in subgraphs:
+#     selected = sg.select_nodes_contain(["pendulum_state", "actor/action"])
+#     ith_databuffer = Buffer(selected)
+#     sg.attach(ith_databuffer)
+#     data_buffers.append(ith_databuffer)
+
+graph.insert(subgraphs)
+
+visualize_graph(graph, output_file="rl_pipeline_parallel", view=False)

@@ -1,7 +1,8 @@
 import pytest
 import numpy as np
-from regelum.environment.node.base import Node, State, Graph
+from regelum.environment.node.base import Node, State
 from regelum.environment.node.memory.data_buffer import DataBuffer
+from regelum.environment.graph import Graph
 
 
 class DynamicNode(Node):

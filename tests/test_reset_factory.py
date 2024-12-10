@@ -1,7 +1,8 @@
 import pytest
 import numpy as np
-from regelum.environment.node.base import Node, State, Inputs, Graph
+from regelum.environment.node.base import Node, State, Inputs
 from regelum.utils import rg
+from regelum.environment.graph import Graph
 
 
 class PendulumPDController(Node):

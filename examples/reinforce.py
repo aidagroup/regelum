@@ -1,4 +1,5 @@
-from regelum.environment.node.base import Node, State, Graph, Inputs
+from regelum.environment.node.base import Node, State, Inputs
+from regelum.environment.graph import Graph
 from regelum.environment.node.memory.data_buffer import DataBuffer
 from regelum.environment.node.memory import create_memory_chain
 from typing import Dict, Any, List

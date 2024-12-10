@@ -1,4 +1,5 @@
-from regelum.environment.node.base import Node, State, Inputs, Graph, visualize_graph
+from regelum.environment.node.base import Node, State, Inputs
+from regelum.environment.graph import Graph, visualize_graph
 from regelum.environment.node.continuous import Pendulum
 from typing import Dict, Any
 import numpy as np

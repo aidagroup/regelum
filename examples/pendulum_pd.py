@@ -1,4 +1,5 @@
-from regelum.environment.node.base import Node, State, Inputs, Graph
+from regelum.environment.node.base import Node, State, Inputs
+from regelum.environment.graph import Graph
 import numpy as np
 from regelum.utils import rg
 import logging
