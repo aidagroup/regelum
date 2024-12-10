@@ -1,4 +1,4 @@
-from regelum.environment.node.base import Node, State, Inputs, Graph
+from regelum.environment.node.base import Node, State, Inputs, Graph, visualize_graph
 from regelum.environment.node.continuous import Pendulum
 from typing import Dict, Any
 import numpy as np
@@ -542,5 +542,6 @@ graph = Graph(
     # logger_cooldown=0.0,
 )
 
+visualize_graph(graph, output_file="rl_pipeline", view=False)
 for _ in range(total_timesteps):
     graph.step()

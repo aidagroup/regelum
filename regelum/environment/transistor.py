@@ -519,6 +519,8 @@ class SampleAndHoldModifier(TransistorModifier):
         class SampleAndHoldTransistor(transistor_cls):
             """A transistor class modified with sample-and-hold behavior."""
 
+            is_modifier = True
+
             def __init__(self, node, time_final: Optional[float] = None):
                 super().__init__(node=node, time_final=time_final)
                 self.last_update_time = None
@@ -562,6 +564,8 @@ class ResetModifier(TransistorModifier):
 
         class ResetTransistor(transistor_cls):
             """A transistor class modified with reset behavior."""
+
+            is_modifier = True
 
             def __init__(self, node, time_final: Optional[float] = None):
                 super().__init__(node=node, time_final=time_final)
