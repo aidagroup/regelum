@@ -269,25 +269,33 @@ class Inputs:
         paths_to_states: List of state paths required as inputs
         states: Resolved State objects
         _resolved: Resolution status flag
+        _path_aliases: Dict mapping original paths to their aliases
     """
 
     paths_to_states: List[str]
     states: List[State] = field(default_factory=list)
     _resolved: bool = False
+    _path_aliases: Dict[str, str] = field(default_factory=dict)
 
     def resolve(self, states: List[State]):
         """Resolve the input paths to actual State instances."""
         found_states: List[State] = []
 
         for path in self.paths_to_states:
-            found = next(
-                (
-                    state.search_by_path(path=path)
-                    for state in states
-                    if state.search_by_path(path=path)
-                ),
-                None,
-            )
+            # Try to find state using both original path and any aliases
+            found = None
+            paths_to_try = [path] + [
+                alias for alias, orig in self._path_aliases.items() if orig == path
+            ]
+
+            for try_path in paths_to_try:
+                for state in states:
+                    if found_state := state.search_by_path(path=try_path):
+                        found = found_state
+                        break
+                if found:
+                    break
+
             if found:
                 found_states.append(found)
 
@@ -318,14 +326,56 @@ class Inputs:
             return {}
 
     def __getitem__(self, key: str) -> State:
-        """Get a resolved input state by its name."""
+        """Get a resolved input state by its path or alias."""
         if not self._resolved:
             raise ValueError("Resolve inputs before accessing them")
+
+        # Try original path first
         try:
             index = self.paths_to_states.index(key)
             return self.states[index]
-        except ValueError as err:
-            raise KeyError(f"Input '{key}' not found in paths_to_states") from err
+        except ValueError:
+            # Try aliases
+            original_path = None
+            for alias, orig in self._path_aliases.items():
+                if key == alias:
+                    original_path = orig
+                    break
+                elif key == orig:
+                    original_path = orig
+                    break
+
+            if original_path:
+                try:
+                    index = self.paths_to_states.index(original_path)
+                    return self.states[index]
+                except ValueError:
+                    pass
+
+            raise KeyError(f"Input '{key}' not found in paths_to_states or aliases")
+
+    def add_path_alias(self, original_path: str, new_path: str):
+        """Add an alias for an input path.
+
+        Args:
+            original_path: The original path in paths_to_states
+            new_path: The new alias path that can also be used to access the state
+        """
+        if original_path not in self.paths_to_states:
+            raise ValueError(
+                f"Original path '{original_path}' not found in paths_to_states"
+            )
+        self._path_aliases[new_path] = original_path
+
+    def with_path_aliases(self, aliases: Dict[str, str]) -> "Inputs":
+        """Add multiple path aliases at once.
+
+        Args:
+            aliases: Dict mapping new alias paths to original paths
+        """
+        for new_path, original_path in aliases.items():
+            self.add_path_alias(original_path, new_path)
+        return self
 
 
 class Node(ABC):

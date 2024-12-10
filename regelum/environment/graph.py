@@ -710,7 +710,6 @@ class Graph:
         self.ordered_nodes, self.sccs_final = self.resolve(self.ordered_nodes)
         self._log_node_order()
         self.apply_transistors(self.ordered_nodes)
-        self.link_inputs(self.ordered_nodes)
 
 
 class Subgraph:
@@ -762,29 +761,39 @@ class Subgraph:
         new_node.state.name += suffix
         new_node.state._validate_hierarchical_state()
         new_node.state._build_path_cache()
-        # Update input paths if they refer to internal states
-        # If the input path refers to states that are within this subgraph, add suffix
+
+        # Update input paths and create aliases for backward compatibility
         new_paths = []
+        path_aliases = {}
         for p in new_node.inputs.paths_to_states:
             # Check if p belongs to any original node's state
             if self._path_in_subgraph(p):
                 p_split = p.split("/")
                 p_split[0] = p_split[0] + suffix
-                p = "/".join(p_split)
-            new_paths.append(p)
+                new_path = "/".join(p_split)
+                new_paths.append(new_path)
+                # Create an alias mapping from old path to new path
+                path_aliases[p] = new_path
+            else:
+                new_paths.append(p)
+
         new_node.inputs.paths_to_states = new_paths
+        # Add aliases for backward compatibility
+        new_node.inputs.with_path_aliases(path_aliases)
+
         return new_node
 
     def _deepcopy_node(self, node: Node):
         # Create a deep copy of node, ensuring states and inputs are also deep-copied
-        # Assuming node, node.state, node.inputs, etc. can be copied safely.
-        # If more complex logic is needed, implement it here.
         new_state = deepcopy(node.state)
         new_inputs = Inputs(node.inputs.paths_to_states)
         new_node = deepcopy(node)
-        # new_node.transistor = None
         new_node.state = new_state
         new_node.inputs = new_inputs
+        new_node.with_transistor(
+            new_node.default_transistor_configuration["transistor"],
+            **new_node.default_transistor_configuration["transistor_kwargs"],
+        )
         return new_node
 
     def _path_in_subgraph(self, path: str) -> bool:

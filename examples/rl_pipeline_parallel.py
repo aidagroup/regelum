@@ -541,4 +541,6 @@ subgraphs = subgraph.multiply(n_copies=2)
 
 graph.insert(subgraphs)
 
-visualize_graph(graph, output_file="rl_pipeline_parallel", view=False)
+# visualize_graph(graph, output_file="rl_pipeline_parallel", view=False)
+for i in range(1000):
+    graph.step()
