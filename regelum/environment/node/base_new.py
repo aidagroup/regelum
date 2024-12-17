@@ -1,33 +1,32 @@
 """Base classes for node-based computation."""
 
 from __future__ import annotations
+from abc import ABC, abstractmethod
+from copy import deepcopy
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import (
-    Optional,
     Any,
-    List,
-    TypedDict,
     Callable,
     Dict,
-    Tuple,
-    TYPE_CHECKING,
+    List,
+    Optional,
     Set,
+    Tuple,
+    TypedDict,
+    TYPE_CHECKING,
 )
-from abc import ABC, abstractmethod
-from regelum.utils.logger import logger
-import numpy as np
-from regelum import _SYMBOLIC_INFERENCE_ACTIVE
+
 import casadi as cs
+import numpy as np
 import torch
-import multiprocessing
-import multiprocessing.connection
+
+from regelum import _SYMBOLIC_INFERENCE_ACTIVE
 from regelum.utils import find_scc
-from copy import deepcopy
-from enum import StrEnum
+from regelum.utils.logger import logger
 
 if TYPE_CHECKING:
     from regelum.environment.node.parallel import ParallelGraph
-
 
 FullName = str
 
@@ -52,7 +51,7 @@ class Metadata(TypedDict, total=False):
 
 @dataclass(slots=True)
 class Variable:
-    """A variable is a key-value pair with optional metadata."""
+    """A variable with optional metadata."""
 
     name: str
     value: Optional[Any] = None
@@ -64,20 +63,18 @@ class Variable:
             self.metadata["initial_value"] = deepcopy(self.value)
 
     def __deepcopy__(self, memo: Dict) -> Variable:
-        """Custom deepcopy implementation."""
-        result = Variable(
+        return Variable(
             name=self.name,
             value=deepcopy(self.value, memo),
             metadata=deepcopy(self.metadata, memo),
             node_name=self.node_name,
         )
-        return result
 
     def reset(self, apply_reset_modifier: bool = True) -> None:
         if (
-            "reset_modifier" in self.metadata
-            and self.metadata["reset_modifier"] is not None
-            and apply_reset_modifier
+            apply_reset_modifier
+            and "reset_modifier" in self.metadata
+            and self.metadata["reset_modifier"]
         ):
             self.value = deepcopy(
                 self.metadata["reset_modifier"](self.metadata["initial_value"])
@@ -86,96 +83,93 @@ class Variable:
             self.value = deepcopy(self.metadata["initial_value"])
 
     def to_casadi_symbolic(self) -> Optional[cs.MX]:
-        """Return the symbolic representation of the variable."""
+        """Create or return symbolic representation."""
         if self.metadata["symbolic_value"] is None:
-            if self.metadata["shape"]:
-                shape = self.metadata["shape"]
-            elif hasattr(self.value, "shape"):
-                if isinstance(self.value, (np.ndarray, torch.Tensor)):
-                    shape = self.value.shape
-                elif isinstance(self.value, cs.DM):
-                    shape = self.value.shape
-                else:
-                    shape = (1,)
-            else:
-                # Scalar values
-                if isinstance(self.value, (int, float, bool)):
-                    shape = (1,)
-                else:
-                    return None  # Cannot create symbolic for unknown types
-
-            # Create symbolic variable with inferred shape
-            self.metadata["symbolic_value"] = cs.MX.sym(self.name, *shape)
-
+            shape = self._infer_shape()
+            if shape:
+                self.metadata["symbolic_value"] = cs.MX.sym(self.name, *shape)
         return self.metadata["symbolic_value"]
 
+    def _infer_shape(self) -> Optional[Tuple[int, ...]]:
+        """Infer shape from value or metadata."""
+        if self.metadata["shape"]:
+            return self.metadata["shape"]
+
+        if hasattr(self.value, "shape"):
+            if isinstance(self.value, (np.ndarray, torch.Tensor, cs.DM)):
+                return self.value.shape
+
+        if isinstance(self.value, (int, float, bool)):
+            return (1,)
+
+        return None
+
     def get_value(self) -> Any:
-        """Return the value of the variable."""
-        symbolic = getattr(_SYMBOLIC_INFERENCE_ACTIVE, "value", False)
-        val = self.to_casadi_symbolic() if symbolic else self.value
-        return val
+        """Return symbolic or actual value."""
+        return (
+            self.to_casadi_symbolic()
+            if getattr(_SYMBOLIC_INFERENCE_ACTIVE, "value", False)
+            else self.value
+        )
 
     @property
     def full_name(self) -> str:
-        """Return the full name of the variable."""
+        """Return fully qualified name."""
         return f"{self.node_name}.{self.name}"
 
     def set_new_value(self, value: Any) -> None:
-        """Set the value of the variable."""
+        """Set new value and update initial value."""
         self.value = value
         self.metadata["initial_value"] = deepcopy(value)
 
 
 @dataclass(slots=True, frozen=True)
 class Inputs:
-    """A collection of inputs."""
+    """Collection of input variable names."""
 
     inputs: List[str]  # List of full names (node_name.var_name)
 
     def resolve(
         self, variables: List[Variable]
     ) -> Tuple[ResolvedInputs, Set[FullName]]:
-        """Resolve the inputs to variables."""
-        var_dict = {f"{var.full_name}": var for var in variables}
-        resolved_vars = []
-        unresolved_names: Set[FullName] = set()
+        """Map input names to actual variables."""
+        var_dict = {var.full_name: var for var in variables}
+        resolved = []
+        unresolved = set()
 
         for name in self.inputs:
             if name in var_dict:
-                resolved_vars.append(var_dict[name])
+                resolved.append(var_dict[name])
             else:
-                unresolved_names.add(name)
+                unresolved.add(name)
 
-        return ResolvedInputs(inputs=resolved_vars), unresolved_names
+        return ResolvedInputs(inputs=resolved), unresolved
 
 
 @dataclass(slots=True, frozen=True)
 class ResolvedInputs:
-    """A collection of resolved inputs."""
+    """Collection of resolved input variables."""
 
     inputs: List[Variable]
 
     def find(self, full_name: str) -> Optional[Variable]:
-        """Find a variable by its full name (node_name.var_name)."""
-        # Split into node name and variable name
+        """Find variable by full name."""
         node_name, var_name = full_name.split(".")
 
-        # Try exact match first
         for var in self.inputs:
-            if f"{var.full_name}" == full_name:
+            if var.full_name == full_name:
                 return var
 
-        # Try substring match if exact match not found
-        for var in self.inputs:
-            if var.name in var_name or var_name in var.name:
-                if var.node_name in node_name or node_name in var.node_name:
-                    return var
+            if (var.name in var_name or var_name in var.name) and (
+                var.node_name in node_name or node_name in var.node_name
+            ):
+                return var
 
         return None
 
 
 class Node(ABC):
-    """A node is a basic unit of computation."""
+    """Base unit of computation."""
 
     _instances: Dict[str, List[Node]] = {}
 
@@ -183,6 +177,39 @@ class Node(ABC):
         instance = super().__new__(cls)
         cls._instances.setdefault(cls.__name__, []).append(instance)
         return instance
+
+    def __init__(
+        self,
+        inputs: Optional[Inputs | List[str]] = None,
+        *,
+        step_size: Optional[float] = None,
+        is_continuous: bool = False,
+        is_root: bool = False,
+        name: Optional[str] = None,
+    ):
+        """Initialize node with inputs and configuration."""
+        self.inputs = self._normalize_inputs(inputs)
+        self.step_size = step_size
+        self.is_continuous = is_continuous
+        self.is_root = is_root
+        self._variables: List[Variable] = []
+        self.resolved_inputs: Optional[ResolvedInputs] = None
+
+        if is_continuous and not hasattr(self, "state_transition_map"):
+            raise ValueError(
+                f"Continuous node {self.__class__.__name__} must implement state_transition_map"
+            )
+
+        self._internal_name = name or self.__class__.__name__.lower()
+        self._external_name = f"{self._internal_name}_{self.get_instance_count()}"
+
+    def _normalize_inputs(self, inputs: Optional[Inputs | List[str]]) -> Inputs:
+        """Convert inputs to Inputs instance."""
+        if not hasattr(self, "inputs"):
+            if inputs is None:
+                return Inputs([])
+            return Inputs(inputs) if isinstance(inputs, list) else inputs
+        return Inputs(self.inputs) if isinstance(self.inputs, list) else self.inputs
 
     @classmethod
     def get_instances(cls) -> List[Node]:
@@ -194,69 +221,25 @@ class Node(ABC):
         """Get count of instances for this class."""
         return len(cls._instances.get(cls.__name__, []))
 
-    def __str__(self) -> str:
-        return f"{self.__class__.__name__}({self.external_name}, inputs={self.inputs}, variables={self.variables})"
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.external_name}, inputs={self.inputs}, variables={self.variables})"
-
-    def __init__(
-        self,
-        inputs: Optional[Inputs] = None,
-        *,
-        step_size: Optional[float] = None,
-        is_continuous: bool = False,
-        is_root: bool = False,
-        name: Optional[str] = None,
-    ):
-        """Initialize the node."""
-        if not hasattr(self, "inputs"):
-            if inputs is None:
-                inputs = []
-            self.inputs = Inputs(inputs) if isinstance(inputs, list) else inputs
-        else:
-            if isinstance(self.inputs, list):
-                self.inputs = Inputs(self.inputs)
-            elif isinstance(self.inputs, Inputs):
-                pass
-            else:
-                raise ValueError("Inputs must be a list of strings")
-
-        self.step_size = step_size
-        self.is_continuous = is_continuous
-        if is_continuous and not hasattr(self, "state_transition_map"):
-            raise ValueError(
-                f"Continuous node {self.__class__.__name__} must implement state_transition_map method"
-            )
-
-        # Internal name is just the provided name or lowercased class name
-        self._internal_name = name or self.__class__.__name__.lower()
-
-        # External name includes instance count for unique identification
-        instance_count = self.get_instance_count()
-        self._external_name = f"{self._internal_name}_{instance_count}"
-
-        self.is_root = is_root
-        self._variables: List[Variable] = []
-        self.resolved_inputs: Optional[ResolvedInputs] = None
-
-    @property
-    def is_resolved(self) -> bool:
-        return self.resolved_inputs is not None
-
     @property
     def name(self) -> str:
-        """Return internal name for self-reference, external name for others."""
+        """Internal name for self-reference."""
         return self._internal_name
 
     @property
     def external_name(self) -> str:
-        """Return external name for unique identification."""
+        """External name for unique identification."""
         return self._external_name
 
     @property
     def variables(self) -> List[Variable]:
+        """List of node variables."""
         return self._variables
+
+    @property
+    def is_resolved(self) -> bool:
+        """Whether inputs are resolved to variables."""
+        return self.resolved_inputs is not None
 
     def define_variable(
         self,
@@ -265,22 +248,19 @@ class Node(ABC):
         metadata: Optional[Metadata] = None,
         shape: Optional[Tuple[int, ...]] = None,
     ) -> Variable:
-        """Create a variable."""
+        """Create and register a variable."""
         var = Variable(
-            name, value, metadata or Metadata(shape=shape), node_name=self.external_name
+            name, value, metadata or Metadata(shape=shape), self.external_name
         )
         self._variables.append(var)
         return var
 
     def find_variable(self, name: str) -> Optional[Variable]:
-        """Find a variable by name."""
-        for var in self._variables:
-            if var.name == name:
-                return var
-        return None
+        """Find variable by name."""
+        return next((var for var in self._variables if var.name == name), None)
 
     def get_variable(self, name: str) -> Variable:
-        """Get a variable by name or raise ValueError if not found."""
+        """Get variable by name or raise error."""
         if var := self.find_variable(name):
             return var
         raise ValueError(f"Variable '{name}' not found in node '{self.external_name}'")
@@ -290,70 +270,44 @@ class Node(ABC):
         variables_to_reset: Optional[List[str]] = None,
         apply_reset_modifier: bool = True,
     ) -> None:
-        """Reset node state to initial values."""
+        """Reset specified or all variables."""
         if variables_to_reset is None:
             for var in self._variables:
                 var.reset(apply_reset_modifier)
             return
 
-        names_to_reset = set(variables_to_reset)
+        not_found = set(variables_to_reset)
         for var in self._variables:
-            if var.name in names_to_reset:
+            if var.name in not_found:
                 var.reset(apply_reset_modifier)
-                names_to_reset.remove(var.name)
+                not_found.remove(var.name)
 
-        if names_to_reset:
+        if not_found:
             raise ValueError(
-                f"Variables {names_to_reset} not found in node '{self.external_name}'"
+                f"Variables {not_found} not found in node '{self.external_name}'"
             )
 
     def get_full_names(self) -> List[str]:
-        """Get full names of all variables."""
+        """Get fully qualified names of all variables."""
         return [f"{self.external_name}.{var.name}" for var in self._variables]
 
     def get_resolved_inputs(
         self, variables: List[Variable]
     ) -> Tuple[ResolvedInputs, Set[FullName]]:
-        """Return an object containing the resolved inputs.
-
-        Raises ValueError if couldn't correspond passed variables to names in inputs.
-        """
-        resolved_inputs, unresolved_names = self.inputs.resolve(variables)
-        return resolved_inputs, unresolved_names
+        """Resolve inputs to variables."""
+        return self.inputs.resolve(variables)
 
     def alter_input_names(self, mapping: Dict[str, str]) -> None:
-        """Alter inputs for the node."""
+        """Update input names using mapping."""
         self.inputs = Inputs([mapping.get(name, name) for name in self.inputs.inputs])
 
     def alter_variable_names(self, mapping: Dict[str, str]) -> None:
-        """Alter variable names for the node."""
+        """Update variable names using mapping."""
         for var in self._variables:
             var.name = mapping.get(var.name, var.name)
 
-    @abstractmethod
-    def step(self) -> None:
-        """Step the node."""
-        pass
-
-    def __or__(self, other: Node) -> Graph:
-        """Connect two nodes using the | operator."""
-        nodes = []
-        # Unwrap self if it's a Graph
-        if isinstance(self, Graph):
-            nodes.extend(self.nodes)
-        else:
-            nodes.append(self)
-
-        # Unwrap other if it's a Graph
-        if isinstance(other, Graph):
-            nodes.extend(other.nodes)
-        else:
-            nodes.append(other)
-
-        return Graph(nodes)
-
     def resolve(self, variables: List[Variable]) -> None:
-        """Resolve node inputs using provided variables."""
+        """Resolve node inputs."""
         self.resolved_inputs, self.unresolved_inputs = self.get_resolved_inputs(
             variables
         )
@@ -363,8 +317,8 @@ class Node(ABC):
             )
         return self.resolved_inputs
 
-    def alter_name(self, new_name: str) -> None:
-        """Alter node name and update all variable node_names."""
+    def alter_name(self, new_name: str) -> str:
+        """Update node name and propagate to variables."""
         old_name = self.external_name
         self._internal_name = new_name
         self._external_name = f"{new_name}_{self.get_instance_count()}"
@@ -372,70 +326,82 @@ class Node(ABC):
             var.node_name = self.external_name
         return old_name
 
+    def __or__(self, other: Node) -> Graph:
+        """Connect nodes using | operator."""
+        nodes = []
+        if isinstance(self, Graph):
+            nodes.extend(self.nodes)
+        else:
+            nodes.append(self)
+
+        if isinstance(other, Graph):
+            nodes.extend(other.nodes)
+        else:
+            nodes.append(other)
+
+        return Graph(nodes)
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}({self.external_name}, inputs={self.inputs}, variables={self.variables})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    @abstractmethod
+    def step(self) -> None:
+        """Perform computation step."""
+        pass
+
     def __deepcopy__(self, memo: Dict) -> Node:
         """Custom deepcopy implementation to handle instance counting."""
-        # Create a new instance without calling __init__
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
 
-        # Copy all attributes first
+        # Copy attributes
         for k, v in self.__dict__.items():
             if k == "nodes" and isinstance(self, Graph):
-                # Special handling for Graph nodes
-                nodes_copy = []
-                for node in v:
-                    node_copy = deepcopy(node, memo)
-                    nodes_copy.append(node_copy)
+                nodes_copy = [deepcopy(node, memo) for node in v]
                 setattr(result, k, nodes_copy)
             elif k == "_variables":
-                # Ensure variables are properly deepcopied
                 vars_copy = [deepcopy(var, memo) for var in v]
                 setattr(result, k, vars_copy)
-            elif k == "resolved_inputs" and v is not None:
+            elif k == "resolved_inputs":
                 # Skip resolved_inputs - they will be re-resolved after cloning
                 setattr(result, k, None)
             else:
                 setattr(result, k, deepcopy(v, memo))
 
-        # Update instance count and name only for non-Graph nodes
+        # Handle instance counting and naming
         if not isinstance(self, Graph):
             cls._instances.setdefault(cls.__name__, []).append(result)
-            instance_count = len(cls._instances[cls.__name__])
-            # Update external name with new instance count
-            result._external_name = f"{result._internal_name}_{instance_count}"
-
-            # Update node_name in variables
+            result._external_name = (
+                f"{result._internal_name}_{len(cls._instances[cls.__name__])}"
+            )
             for var in result._variables:
                 var.node_name = result._external_name
         else:
-            # For Graph nodes, update the external name without changing instance count
             result._external_name = (
                 f"{result._internal_name}_{self.get_instance_count()}"
             )
 
-        # Update inputs if they exist and if we're part of a graph being cloned
+        # Update input references if part of a graph
         if hasattr(result, "inputs") and isinstance(result.inputs, Inputs):
-            # Get the graph being cloned (if any)
             parent_graph = memo.get("parent_graph")
             if parent_graph:
-                # Get all variable full names in the graph and their providers
-                graph_vars = {}
-                for node in parent_graph.nodes:
-                    for var in node.variables:
-                        full_name = f"{node.external_name}.{var.name}"
-                        graph_vars[full_name] = node
+                graph_vars = {
+                    f"{node.external_name}.{var.name}": node
+                    for node in parent_graph.nodes
+                    for var in node.variables
+                }
 
                 new_inputs = []
                 for input_name in result.inputs.inputs:
-                    # Only update references to variables within the same graph
                     if input_name in graph_vars:
-                        provider_name, var_name = input_name.split(".")
                         provider_node = graph_vars[input_name]
-                        new_provider_name = provider_node.external_name
-                        new_inputs.append(f"{new_provider_name}.{var_name}")
+                        provider_name, var_name = input_name.split(".")
+                        new_inputs.append(f"{provider_node.external_name}.{var_name}")
                     else:
-                        # Keep external references unchanged
                         new_inputs.append(input_name)
                 result.inputs = Inputs(new_inputs)
 
@@ -448,58 +414,52 @@ class Graph(Node):
     def __init__(
         self, nodes: List[Node], debug: bool = False, n_step_repeats: int = 1
     ) -> None:
-        """Initialize the Graph node."""
         super().__init__(name="graph")
         self.nodes = nodes
         self.debug = debug
         self.n_step_repeats = n_step_repeats
-
         self._collect_node_data()
         self.resolve_status = ResolveStatus.UNDEFINED
 
     def _collect_node_data(self) -> None:
-        """Collect inputs, resolved inputs and variables from all nodes."""
-        # Only collect inputs that are not provided by any node in the graph
-        all_provided_vars = {
+        """Collect inputs and variables from all nodes."""
+        # Collect external inputs (not provided by any node in the graph)
+        provided_vars = {
             f"{node.external_name}.{var.name}"
             for node in self.nodes
             for var in node.variables
         }
+        external_inputs = []
 
-        all_inputs: List[str] = []
         for node in self.nodes:
             if isinstance(node.inputs, Inputs):
-                # Only include inputs that are not provided within the graph
-                external_inputs = [
-                    input_name
-                    for input_name in node.inputs.inputs
-                    if input_name not in all_provided_vars
-                ]
-                all_inputs.extend(external_inputs)
+                external_inputs.extend(
+                    name for name in node.inputs.inputs if name not in provided_vars
+                )
 
-        self.inputs = Inputs(list(set(all_inputs)))  # Remove duplicates
+        self.inputs = Inputs(list(set(external_inputs)))
 
-        # Collect all resolved inputs
+        # Collect resolved inputs if any node has them
         if any(node.resolved_inputs for node in self.nodes):
-            resolved_vars: List[Variable] = []
-            for node in self.nodes:
-                if node.resolved_inputs:
-                    resolved_vars.extend(node.resolved_inputs.inputs)
+            resolved_vars = [
+                var
+                for node in self.nodes
+                if node.resolved_inputs
+                for var in node.resolved_inputs.inputs
+            ]
             self.resolved_inputs = ResolvedInputs(resolved_vars)
 
         # Collect all variables
-        all_variables: List[Variable] = []
-        for node in self.nodes:
-            all_variables.extend(node.variables)
-        self._variables = all_variables
+        self._variables = [var for node in self.nodes for var in node.variables]
 
     def parallelize(self) -> ParallelGraph:
-        """Convert graph to parallel execution mode."""
+        """Convert to parallel execution mode."""
         from regelum.environment.node.parallel import ParallelGraph
 
         return ParallelGraph(self.nodes, self.debug)
 
     def step(self) -> None:
+        """Execute all nodes in sequence."""
         for _ in range(self.n_step_repeats):
             for node in self.nodes:
                 node.step()
@@ -520,74 +480,37 @@ class Graph(Node):
                     )
                 var_names[full_name] = node
 
-        # Collect all available variables
-        available_vars = variables.copy()
-        available_vars.extend(var for node in self.nodes for var in node.variables)
+        # Build dependency graph for execution order
+        dependencies: Dict[str, Set[str]] = {}
+        providers = {
+            f"{node.external_name}.{var.name}": node
+            for node in self.nodes
+            for var in node.variables
+        }
 
-        # Create dependency graph
-        dependency_graph: Dict[str, Set[str]] = {}
         for node in self.nodes:
             if isinstance(node.inputs, Inputs):
-                dependencies = set()
+                deps = set()
                 for input_name in node.inputs.inputs:
-                    for other_node in self.nodes:
-                        if any(
-                            full_var_name == input_name
-                            for full_var_name in other_node.get_full_names()
-                        ):
-                            dependencies.add(other_node.external_name)
-                            break
-                dependency_graph[node.external_name] = dependencies
+                    if provider := providers.get(input_name):
+                        deps.add(provider.external_name)
+                dependencies[node.external_name] = deps
 
-        # First, collect root and non-root nodes
-        root_nodes = [node for node in self.nodes if node.is_root]
-        non_root_nodes = [node for node in self.nodes if not node.is_root]
-
-        # Sort both groups by their dependencies
-        ordered_nodes: List[Node] = []
-        visited = set()
-
-        def visit(node: Node) -> None:
-            if node.external_name in visited:
-                return
-            visited.add(node.external_name)
-
-            # Visit dependencies first
-            for dep_name in dependency_graph.get(node.external_name, set()):
-                dep_node = next(n for n in self.nodes if n.external_name == dep_name)
-                if (
-                    dep_node.is_root
-                ):  # Skip root dependencies - they're already processed
-                    continue
-                visit(dep_node)
-
-            ordered_nodes.append(node)
-
-        # Process root nodes first
-        for node in root_nodes:
-            if node.external_name not in visited:
-                ordered_nodes.append(node)
-                visited.add(node.external_name)
-
-        # Then process non-root nodes with dependencies
-        for node in non_root_nodes:
-            visit(node)
-
+        # Sort nodes by dependencies
+        ordered_nodes = self._sort_nodes_by_dependencies(dependencies)
         self.nodes = ordered_nodes
 
-        logger.info(f"\nResolved node execution order:\n{self}")
-
-        # Track unresolved inputs
-        all_unresolved: Dict[str, Set[str]] = {}
+        if self.debug:
+            logger.info(f"\nResolved node execution order:\n{self}")
 
         # Resolve inputs for all nodes
+        unresolved = {}
         for node in self.nodes:
             try:
-                node.resolve(available_vars)
+                node.resolve(variables)
             except ValueError as e:
                 if "Couldn't resolve inputs" in str(e):
-                    node_name = node.external_name
-                    unresolved = set(
+                    unresolved[node.external_name] = set(
                         str(e)
                         .split("{")[1]
                         .split("}")[0]
@@ -595,21 +518,56 @@ class Graph(Node):
                         .replace("'", "")
                         .split(", ")
                     )
-                    all_unresolved[node_name] = unresolved
 
-        if all_unresolved:
+        if unresolved:
             self.resolve_status = ResolveStatus.PARTIAL
-            unresolved_msg = "\nUnresolved inputs found:"
-            for node_name, unresolved in all_unresolved.items():
-                unresolved_msg += f"\n{node_name}:"
-                for input_name in unresolved:
-                    unresolved_msg += f"\n  - {input_name}"
-            unresolved_msg += f"\nStatus: {self.resolve_status}"
-            logger.info(unresolved_msg)
+            if self.debug:
+                self._log_unresolved_inputs(unresolved)
         else:
             self.resolve_status = ResolveStatus.SUCCESS
 
         return self.resolve_status
+
+    def _sort_nodes_by_dependencies(
+        self, dependencies: Dict[str, Set[str]]
+    ) -> List[Node]:
+        """Sort nodes based on dependencies and root status."""
+        root_nodes = [node for node in self.nodes if node.is_root]
+        non_root_nodes = [node for node in self.nodes if not node.is_root]
+        ordered = []
+        visited = set()
+
+        def visit(node: Node) -> None:
+            if node.external_name in visited:
+                return
+            visited.add(node.external_name)
+
+            for dep_name in dependencies.get(node.external_name, set()):
+                dep_node = next(n for n in self.nodes if n.external_name == dep_name)
+                if not dep_node.is_root:
+                    visit(dep_node)
+
+            ordered.append(node)
+
+        # Process root nodes first
+        ordered.extend(root_nodes)
+        visited.update(node.external_name for node in root_nodes)
+
+        # Process remaining nodes
+        for node in non_root_nodes:
+            visit(node)
+
+        return ordered
+
+    def _log_unresolved_inputs(self, unresolved: Dict[str, Set[str]]) -> None:
+        """Log information about unresolved inputs."""
+        msg = "\nUnresolved inputs found:"
+        for node_name, inputs in unresolved.items():
+            msg += f"\n{node_name}:"
+            for input_name in inputs:
+                msg += f"\n  - {input_name}"
+        msg += f"\nStatus: {self.resolve_status}"
+        logger.info(msg)
 
     def insert_node(self, node: Node) -> ResolveStatus:
         """Insert a node into the graph and resolve it."""
