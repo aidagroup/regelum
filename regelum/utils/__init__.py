@@ -5,9 +5,8 @@ import numpy as np
 
 
 from enum import IntEnum
-from typing import Union
+from typing import Union, Optional, List, Set, Dict, Tuple
 from dataclasses import dataclass
-from typing import Optional
 import random
 
 try:
@@ -823,3 +822,51 @@ def set_seed(seed):
 
 def calculate_value(runnning_objectives, timestamps, discount_factor, sampling_time):
     return sum(runnning_objectives * discount_factor**timestamps) * sampling_time
+
+
+def find_scc(
+    node_name: str,
+    stack: List[str],
+    index: Dict[str, int],
+    lowlink: Dict[str, int],
+    on_stack: Set[str],
+    current_idx: int,
+    dependencies: Dict[str, Set[str]],
+) -> Tuple[int, List[List[str]]]:
+    """Find strongly connected components using Tarjan's algorithm."""
+    sccs: List[List[str]] = []
+    index[node_name] = current_idx
+    lowlink[node_name] = current_idx
+    current_idx += 1
+    stack.append(node_name)
+    on_stack.add(node_name)
+
+    for dep in dependencies.get(node_name, set()):
+        if dep not in index:
+            next_idx, new_sccs = find_scc(
+                dep,
+                stack,
+                index,
+                lowlink,
+                on_stack,
+                current_idx,
+                dependencies=dependencies,
+            )
+            current_idx = next_idx
+            sccs.extend(new_sccs)
+            lowlink[node_name] = min(lowlink[node_name], lowlink[dep])
+        elif dep in on_stack:
+            lowlink[node_name] = min(lowlink[node_name], index[dep])
+
+    if lowlink[node_name] == index[node_name]:
+        scc = []
+        while True:
+            dep = stack.pop()
+            on_stack.remove(dep)
+            scc.append(dep)
+            if dep == node_name:
+                break
+        if len(scc) > 1:  # Only collect non-trivial SCCs
+            sccs.append(scc)
+
+    return current_idx, sccs
