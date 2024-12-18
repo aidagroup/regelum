@@ -1,10 +1,10 @@
 """Parallel execution of node graphs using Dask."""
 
 from __future__ import annotations
-from typing import Dict, List, Any, Tuple, Set
+from typing import Dict, List, Any, Tuple, Set, Optional, cast
 import numpy as np
-from dask import delayed
-from dask.distributed import Client, LocalCluster
+from dask.delayed import delayed, Delayed
+from dask.distributed import Client, LocalCluster, Future
 import multiprocessing as mp
 from copy import deepcopy
 from regelum.utils.logger import logger
@@ -18,7 +18,9 @@ def _run_node(node: Node, inputs: Dict[str, Any]) -> Tuple[Any, ...]:
         for inp in node.inputs.inputs:
             if inp in inputs:
                 val = inputs[inp]
-                if var := node.resolved_inputs.find(inp):
+                if node.resolved_inputs is not None and (
+                    var := node.resolved_inputs.find(inp)
+                ):
                     var.value = (
                         val.copy() if isinstance(val, np.ndarray) else deepcopy(val)
                     )
@@ -38,20 +40,41 @@ def _run_node(node: Node, inputs: Dict[str, Any]) -> Tuple[Any, ...]:
 class ParallelGraph(Graph):
     """Graph that executes nodes in parallel using Dask."""
 
-    def __init__(self, nodes: List[Node], debug: bool = False) -> None:
+    def __init__(
+        self,
+        nodes: List[Node],
+        debug: bool = False,
+        dashboard_address: str = "0.0.0.0:8787",
+        threads_per_worker: int = 1,
+        processes: bool = True,
+        memory_limit: str = "2GB",
+        protocol: str = "tcp://",
+        scheduler_sync_interval: int = 2,
+        scheduler_port: int = 0,
+        silence_logs: int = 30,
+        n_workers: Optional[int] = None,
+    ) -> None:
         super().__init__(nodes, debug=debug)
         self.debug = debug
 
         # Initialize Dask cluster
-        n_workers = min(len(nodes), max(1, mp.cpu_count() // 2 + 1))
+        n_workers = (
+            min(len(nodes), max(1, mp.cpu_count() // 2 + 1))
+            if n_workers is None
+            else n_workers
+        )
         logger.info(f"\nInitializing Dask cluster with {n_workers} workers")
 
         self.cluster = LocalCluster(
             n_workers=n_workers,
-            processes=True,
-            threads_per_worker=1,
-            memory_limit="2GB",
-            dashboard_address=None,
+            processes=processes,
+            threads_per_worker=threads_per_worker,
+            memory_limit=memory_limit,
+            dashboard_address=dashboard_address,
+            silence_logs=silence_logs,
+            scheduler_port=scheduler_port,
+            protocol=protocol,
+            scheduler_sync_interval=scheduler_sync_interval,
         )
         self.client = Client(self.cluster)
 
@@ -61,7 +84,7 @@ class ParallelGraph(Graph):
 
     def _build_dependency_tree(self) -> Dict[Node, Set[Node]]:
         """Build node dependency tree for parallel execution."""
-        dependencies = {node: set() for node in self.nodes}
+        dependencies: Dict[Node, Set[Node]] = {node: set() for node in self.nodes}
 
         if self.debug:
             logger.info("\n=== Building dependency tree ===")
@@ -70,7 +93,6 @@ class ParallelGraph(Graph):
             if self.debug:
                 logger.info(f"\nAnalyzing dependencies for {node.external_name}")
 
-            # Skip nodes without inputs
             if not (node.inputs and node.inputs.inputs):
                 if self.debug:
                     logger.info(
@@ -78,14 +100,13 @@ class ParallelGraph(Graph):
                     )
                 continue
 
-            # Handle graph nodes specially
             node_inputs = node.inputs.inputs
-            if isinstance(node, Graph):
-                node_inputs = [
-                    inp
-                    for inp in node_inputs
-                    if not any(n.external_name in inp for n in node.nodes)
-                ]
+            # if isinstance(node, Graph):
+            #     node_inputs = [
+            #         inp
+            #         for inp in node_inputs
+            #         if not any(n.external_name in inp for n in node.nodes)
+            #     ]
 
             if not node_inputs:
                 if self.debug:
@@ -153,7 +174,7 @@ class ParallelGraph(Graph):
             }
 
             # Create delayed tasks
-            tasks = {}
+            tasks: Dict[Node, Delayed] = {}
             for node in self.nodes:
                 # Get required inputs
                 dep_inputs = {
@@ -168,11 +189,13 @@ class ParallelGraph(Graph):
                 tasks[node] = delayed(_run_node)(node, dep_inputs)
 
             # Execute tasks in parallel
-            futures = self.client.compute(list(tasks.values()))
-            results = self.client.gather(futures)
+            task_list = list(tasks.values())
+            futures = self.client.compute(task_list)
+            results = list(self.client.gather(futures))  # type: ignore[arg-type]
 
             # Update node variables
-            for node, result in zip(tasks.keys(), results):
+            nodes = list(tasks.keys())
+            for node, result in zip(nodes, results):
                 for var, val in zip(node.variables, result):
                     var.value = (
                         val.copy() if isinstance(val, np.ndarray) else deepcopy(val)

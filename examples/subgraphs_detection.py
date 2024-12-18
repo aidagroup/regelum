@@ -22,6 +22,7 @@ class ComputeNode(Node):
             is_continuous=False,
             is_root=not bool(inputs),
             name=name,
+            step_size=0.1,
         )
         self.output = self.define_variable(
             "output",
@@ -97,7 +98,9 @@ def create_complex_graph() -> tuple[Graph, list[Node]]:
     )
 
     node5 = ComputeNode(
-        inputs=[f"{node3.external_name}.output"], output_size=2, compute_time=0.3
+        inputs=[f"{node3.external_name}.output"],
+        output_size=2,
+        compute_time=0.3,
     )
 
     # Merge node

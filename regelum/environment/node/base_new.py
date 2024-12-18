@@ -5,6 +5,8 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import reduce
+from math import gcd
 from typing import (
     Any,
     Callable,
@@ -423,15 +425,77 @@ class Graph(Node):
     """A graph of connected nodes."""
 
     def __init__(
-        self, nodes: List[Node], debug: bool = False, n_step_repeats: int = 1
+        self,
+        nodes: List[Node],
+        debug: bool = False,
+        n_step_repeats: int = 1,
+        initialize_inner_time: bool = False,
+        states_to_log: Optional[List[str]] = None,
+        logger_cooldown: float = 0.0,
     ) -> None:
         """Initialize Graph node."""
         super().__init__(name="graph")
+        fundamental_step_size = self._validate_and_set_step_sizes(nodes)
+        self.step_size = fundamental_step_size
+        if initialize_inner_time:
+            from regelum.environment.node.library.logging import Clock
+
+            clock = Clock(fundamental_step_size)
+            step_counter = StepCounter([clock], start_count=0)
+            nodes.append(step_counter)
+            nodes.append(clock)
+        if states_to_log:
+            self._setup_logger(
+                nodes, states_to_log, logger_cooldown, fundamental_step_size
+            )
         self.nodes = nodes
         self.debug = debug
         self.n_step_repeats = n_step_repeats
         self._collect_node_data()
         self.resolve_status = ResolveStatus.UNDEFINED
+
+    def _setup_logger(
+        self,
+        nodes: List[Node],
+        states_to_log: Optional[List[str]],
+        logger_cooldown: float,
+        fundamental_step_size: float,
+    ):
+        if not states_to_log:
+            self.logger = None
+            return
+
+        self.logger = Logger(
+            states_to_log, fundamental_step_size, cooldown=logger_cooldown
+        )
+        nodes.append(self.logger)
+
+    def define_fundamental_step_size(self, nodes: List[Node]):
+        step_sizes = [node.step_size for node in nodes if node.step_size is not None]
+
+        def float_gcd(a: float, b: float) -> float:
+            precision = 1e-9
+            a, b = round(a / precision), round(b / precision)
+            return gcd(int(a), int(b)) * precision
+
+        fundamental_step_size = (
+            reduce(float_gcd, step_sizes) if len(set(step_sizes)) > 1 else step_sizes[0]
+        )
+        return fundamental_step_size
+
+    def _validate_and_set_step_sizes(self, nodes: List[Node]):
+        defined_step_sizes = [
+            node.step_size for node in nodes if node.step_size is not None
+        ]
+        if not defined_step_sizes:
+            raise ValueError("At least one node must have a defined step_size")
+
+        fundamental_step_size = self.define_fundamental_step_size(nodes)
+        for node in nodes:
+            if node.step_size is None:
+                node.step_size = fundamental_step_size
+
+        return fundamental_step_size
 
     def _collect_node_data(self) -> None:
         """Collect inputs and variables from all nodes."""
@@ -464,11 +528,32 @@ class Graph(Node):
         # Collect all variables
         self._variables = [var for node in self.nodes for var in node.variables]
 
-    def parallelize(self) -> ParallelGraph:
+    def parallelize(
+        self,
+        dashboard_address: str = "0.0.0.0:8787",
+        memory_limit: str = "2GB",
+        n_workers: Optional[int] = None,
+        protocol: str = "tcp://",
+        scheduler_sync_interval: int = 2,
+        scheduler_port: int = 0,
+        silence_logs: int = 30,
+        processes: Optional[bool] = None,
+    ) -> ParallelGraph:
         """Convert to parallel execution mode."""
         from regelum.environment.node.parallel import ParallelGraph
 
-        return ParallelGraph(self.nodes, self.debug)  # type: ignore[return-value]
+        return ParallelGraph(
+            self.nodes,
+            self.debug,
+            dashboard_address=dashboard_address,
+            memory_limit=memory_limit,
+            n_workers=n_workers,
+            protocol=protocol,
+            scheduler_sync_interval=scheduler_sync_interval,
+            scheduler_port=scheduler_port,
+            silence_logs=silence_logs,
+            processes=processes,
+        )  # type: ignore[return-value]
 
     def step(self) -> None:
         """Execute all nodes in sequence."""

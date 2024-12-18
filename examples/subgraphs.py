@@ -90,39 +90,23 @@ class PendulumPDController(Node):
 
     def step(self) -> None:
         """Compute control action using PD law."""
-        # Add computational load
-        # result = 0.0
-        # for _ in range(50000):  # Match pendulum load
-        #     result += np.sin(np.random.random()) * np.cos(np.random.random())
-
         pendulum_state = self.resolved_inputs.find("pendulum.state").value
         angle = pendulum_state[0]
         angular_velocity = pendulum_state[1]
         self.action.value[0] = -self.kp * angle - self.kd * angular_velocity
 
 
-def create_pendulum_graph(debug: bool = False) -> tuple[Graph, list[Node]]:
-    """Create a pendulum-controller graph."""
-    # Create nodes
-    pendulum = Pendulum(step_size=0.01)
-    controller = PendulumPDController(kp=0.01, kd=0.01, step_size=0.01)
-    logger = Logger(["pendulum_1.state"], step_size=0.01)
-    clock = Clock(fundamental_step_size=0.01)
-    step_counter = StepCounter([clock], start_count=0)
-    nodes = [clock, step_counter, controller, pendulum, logger]
-
-    return Graph(nodes, debug=debug), nodes
-
-
 def main():
     pendulum = Pendulum(step_size=0.05)
     controller = PendulumPDController(kp=10, kd=10, step_size=0.01)
-    logger = Logger(["pendulum_1.state"], step_size=0.01)
-    clock = Clock(fundamental_step_size=0.01)
-    step_counter = StepCounter([clock], start_count=0)
-    nodes = [clock, step_counter, pendulum, logger]
+    nodes = [pendulum]
 
-    graph = Graph(nodes, debug=True)
+    graph = Graph(
+        nodes,
+        debug=True,
+        initialize_inner_time=True,
+        states_to_log=["pendulum_1.state"],
+    )
 
     graph.insert_node(controller)
 
