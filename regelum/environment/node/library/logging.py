@@ -93,7 +93,7 @@ class Logger(Node):
         """Log current state if enough time has passed."""
         if self.resolved_inputs is None:
             return
-        time_var = self.resolved_inputs.find("clock_1.time")
+        time_var = self.resolved_inputs.find("clock.time")
         if time_var is None or time_var.value is None:
             return
         current_time = time_var.value

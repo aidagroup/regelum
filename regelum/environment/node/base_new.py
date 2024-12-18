@@ -69,7 +69,7 @@ class Variable:
     node_name: str = field(default="")
 
     def __post_init__(self) -> None:
-        if "initial_value" not in self.metadata:
+        if "initial_value" not in self.metadata or self.metadata["initial_value"] is None:
             self.metadata["initial_value"] = deepcopy(self.value)
 
     def __deepcopy__(self, memo: Dict) -> Variable:
@@ -373,10 +373,7 @@ class Node(ABC):
 
         # Copy attributes
         for k, v in self.__dict__.items():
-            if k == "nodes" and isinstance(self, Graph):
-                nodes_copy = [deepcopy(node, memo) for node in v]
-                setattr(result, k, nodes_copy)
-            elif k == "_variables":
+            if k == "_variables":
                 vars_copy = [deepcopy(var, memo) for var in v]
                 setattr(result, k, vars_copy)
             elif k == "resolved_inputs":
@@ -386,37 +383,14 @@ class Node(ABC):
                 setattr(result, k, deepcopy(v, memo))
 
         # Handle instance counting and naming
-        if not isinstance(self, Graph):
+        if id(result) not in [id(x) for x in cls._instances.get(cls.__name__, [])]:
             cls._instances.setdefault(cls.__name__, []).append(result)
-            result._external_name = (
-                f"{result._internal_name}_{len(cls._instances[cls.__name__])}"
-            )
+        result._external_name = (
+            f"{result._internal_name}_{len(cls._instances[cls.__name__])}"
+        )
+        if not isinstance(result, Graph):
             for var in result._variables:
                 var.node_name = result._external_name
-        else:
-            result._external_name = (
-                f"{result._internal_name}_{self.get_instance_count()}"
-            )
-
-        # Update input references if part of a graph
-        if hasattr(result, "inputs") and isinstance(result.inputs, Inputs):
-            parent_graph = memo.get("parent_graph")
-            if parent_graph:
-                graph_vars = {
-                    f"{node.external_name}.{var.name}": node
-                    for node in parent_graph.nodes
-                    for var in node.variables
-                }
-
-                new_inputs = []
-                for input_name in result.inputs.inputs:
-                    if input_name in graph_vars:
-                        provider_node = graph_vars[input_name]
-                        _, var_name = input_name.split(".")
-                        new_inputs.append(f"{provider_node.external_name}.{var_name}")
-                    else:
-                        new_inputs.append(input_name)
-                result.inputs = Inputs(new_inputs)
 
         return result
 
@@ -432,13 +406,14 @@ class Graph(Node):
         initialize_inner_time: bool = False,
         states_to_log: Optional[List[str]] = None,
         logger_cooldown: float = 0.0,
+        name: str = "graph",
     ) -> None:
         """Initialize Graph node."""
-        super().__init__(name="graph")
+        super().__init__(name=name)
         fundamental_step_size = self._validate_and_set_step_sizes(nodes)
         self.step_size = fundamental_step_size
         if initialize_inner_time:
-            from regelum.environment.node.library.logging import Clock
+            from regelum.environment.node.library.logging import Clock, StepCounter
 
             clock = Clock(fundamental_step_size)
             step_counter = StepCounter([clock], start_count=0)
@@ -464,6 +439,7 @@ class Graph(Node):
         if not states_to_log:
             self.logger = None
             return
+        from regelum.environment.node.library.logging import Logger
 
         self.logger = Logger(
             states_to_log, fundamental_step_size, cooldown=logger_cooldown
@@ -671,6 +647,7 @@ class Graph(Node):
         self.nodes.append(node)
         self._collect_node_data()
         if isinstance(node, Graph):
+            node._collect_node_data()
             node.resolve(node.variables + self.variables)
         return self.resolve(self.variables)
 
@@ -691,9 +668,6 @@ class Graph(Node):
 
         if new_name:
             cloned.alter_name(new_name)
-
-        if isinstance(cloned, Graph):
-            self._update_graph_node_names(cloned)
 
         self.insert_node(cloned)
         return cloned
@@ -1040,101 +1014,75 @@ class Graph(Node):
         for node in target_nodes:
             node.reset(apply_reset_modifier=(node in modifier_nodes))
 
+    def print_info(self, indent: int = 0) -> str:
+        """Print detailed information about all nodes in the graph."""
+        lines = []
+        prefix = "  " * indent
+        lines.append(f"{prefix}Graph: {self.external_name}")
 
-class Clock(Node):
-    """Time management node."""
+        for node in self.nodes:
+            if isinstance(node, Graph):
+                lines.append(node.print_info(indent + 1))
+            else:
+                lines.append(f"{prefix}  Node: {node.__class__.__name__}")
+                lines.append(f"{prefix}    External name: {node.external_name}")
+                if isinstance(node.inputs, Inputs):
+                    lines.append(f"{prefix}    Inputs: {node.inputs.inputs}")
+                if node.resolved_inputs:
+                    resolved = [var.full_name for var in node.resolved_inputs.inputs]
+                    lines.append(f"{prefix}    Resolved inputs: {resolved}")
 
-    def __init__(self, fundamental_step_size: float) -> None:
-        """Initialize Clock node."""
-        super().__init__(
-            step_size=fundamental_step_size,
-            is_continuous=False,
-            is_root=False,
-            name="clock",
-        )
-        self.fundamental_step_size = fundamental_step_size
-        self.time = self.define_variable("time", value=0.0)
+        msg = "\n".join(lines)
+        if indent == 0:
+            logger.info(msg)
+        return msg
 
-    def step(self) -> None:
-        """Increment time by fundamental step size."""
-        assert isinstance(self.time.value, float), "Time must be a float"
-        self.time.value += self.fundamental_step_size
+    def __deepcopy__(self, memo: Dict) -> Graph:
+        """Custom deepcopy implementation to handle graph context."""
+        # First, create a copy using parent's logic
+        result: Graph = super().__deepcopy__(memo)  # type: ignore[assignment]
 
+        # Clone nodes within the graph and store them in memo to avoid duplicates
+        result.nodes = []
+        node_mapping = {}  # Map old external names to new nodes
+        internal_nodes = set()  # Track nodes that belong to this graph
 
-class StepCounter(Node):
-    """Counts steps in the simulation."""
+        # First pass: clone all nodes and build mappings
+        for node in self.nodes:
+            if id(node) in memo:
+                cloned_node = memo[id(node)]
+            else:
+                cloned_node = deepcopy(node, memo)
+                memo[id(node)] = cloned_node
+            result.nodes.append(cloned_node)
+            node_mapping[node.external_name] = cloned_node
+            internal_nodes.add(
+                node.external_name.rsplit("_", 1)[0]
+            )  # Base name without number
 
-    def __init__(self, nodes: List[Node], start_count: int = 0) -> None:
-        """Initialize StepCounter node."""
-        step_sizes = [
-            node.step_size
-            for node in nodes
-            if not node.is_continuous and node.step_size is not None
-        ]
-        if not step_sizes:
-            raise ValueError("No non-continuous nodes with step size provided")
+        # Second pass: update inputs for each node in the graph
+        for node in result.nodes:
+            if isinstance(node.inputs, Inputs):
+                new_inputs = []
+                for input_name in node.inputs.inputs:
+                    provider_name, var_name = input_name.split(".")
+                    provider_base = provider_name.rsplit("_", 1)[0]
 
-        super().__init__(
-            step_size=min(step_sizes),
-            is_continuous=False,
-            is_root=False,
-            name="step_counter",
-        )
-        self.counter = self.define_variable("counter", value=start_count)
+                    # If provider was in our original graph, use the new mapped name
+                    if provider_name in node_mapping:
+                        new_inputs.append(
+                            f"{node_mapping[provider_name].external_name}.{var_name}"
+                        )
+                    # If provider base name matches one of our internal nodes, update the number
+                    elif provider_base in internal_nodes:
+                        new_provider_name = f"{provider_base}_{len(node_mapping)}"
+                        new_inputs.append(f"{new_provider_name}.{var_name}")
+                    # Otherwise keep the external reference as is
+                    else:
+                        new_inputs.append(input_name)
+                node.inputs = Inputs(new_inputs)
 
-    def step(self) -> None:
-        """Increment counter by 1."""
-        assert isinstance(self.counter.value, int), "Counter must be an integer"
-        self.counter.value += 1
+        # Re-collect node data for the graph
+        result._collect_node_data()
 
-
-class Logger(Node):
-    """State recording node."""
-
-    def __init__(
-        self, variables_to_log: List[str], step_size: float, cooldown: float = 0.0
-    ) -> None:
-        """Initialize Logger node."""
-        super().__init__(
-            inputs=["clock_1.time", "step_counter_1.counter"] + variables_to_log,
-            step_size=step_size,
-            is_continuous=False,
-            is_root=False,
-            name="logger",
-        )
-        self.variables_to_log = variables_to_log
-        self.cooldown = cooldown
-        self.last_log_time = self.define_variable("last_log_time", value=-float("inf"))
-        self.log_queue = None
-
-    def step(self) -> None:
-        """Log current state if enough time has passed."""
-        if self.resolved_inputs is None:
-            return
-        time_var = self.resolved_inputs.find("clock.time")
-        if time_var is None or time_var.value is None:
-            return
-        current_time = time_var.value
-        if current_time - self.last_log_time.value < self.cooldown:
-            return
-
-        log_parts = [f"t={current_time:.3f}"]
-        for path in self.inputs.inputs:
-            var = self.resolved_inputs.find(path)
-            if var is None or var.value is None:
-                continue
-            value = var.value
-            formatted_value = (
-                f"[{', '.join(f'{v:.3f}' for v in value)}]"
-                if isinstance(value, (np.ndarray, list))
-                else f"{value:.3f}"
-            )
-            log_parts.append(f"{path}={formatted_value}")
-
-        log_msg = f"{self.external_name} | " + " | ".join(log_parts)
-        if self.log_queue is not None:
-            self.log_queue.put(log_msg)
-        else:
-            logger.info(log_msg)
-
-        self.last_log_time.value = current_time
+        return result

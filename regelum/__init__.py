@@ -25,11 +25,9 @@ from regelum.environment.node.base_new import (
     Graph,
     Variable,
     Inputs,
-    Clock,
-    StepCounter,
-    Logger,
     ResolveStatus,
 )
+from regelum.environment.node.library.logging import Clock, StepCounter, Logger
 from regelum.environment.node.parallel import ParallelGraph
 
 # Symbolic inference context

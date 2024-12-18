@@ -79,11 +79,11 @@ def create_complex_graph() -> tuple[Graph, list[Node]]:
 
     # First level - three branches
     node1 = ComputeNode(
-        inputs=[f"{root.external_name}.output"], output_size=2, compute_time=0.5
+        inputs=[f"{root.external_name}.output"], output_size=2, compute_time=1.5
     )
 
     node2 = ComputeNode(
-        inputs=[f"{root.external_name}.output"], output_size=2, compute_time=0.5
+        inputs=[f"{root.external_name}.output"], output_size=2, compute_time=1.5
     )
 
     node3 = ComputeNode(
@@ -94,13 +94,13 @@ def create_complex_graph() -> tuple[Graph, list[Node]]:
 
     # Second level - branch split
     node4 = ComputeNode(
-        inputs=[f"{node3.external_name}.output"], output_size=2, compute_time=0.3
+        inputs=[f"{node3.external_name}.output"], output_size=2, compute_time=1.3
     )
 
     node5 = ComputeNode(
         inputs=[f"{node3.external_name}.output"],
         output_size=2,
-        compute_time=0.3,
+        compute_time=1.3,
     )
 
     # Merge node
@@ -262,5 +262,5 @@ if __name__ == "__main__":
 
     # Run benchmarks
     print("\nRunning benchmarks...")
-    sequential_times, parallel_times = benchmark_execution(n_iterations=5)
+    sequential_times, parallel_times = benchmark_execution(n_iterations=1)
     print_benchmark_results(sequential_times, parallel_times)

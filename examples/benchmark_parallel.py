@@ -1,12 +1,13 @@
 """Benchmark parallel execution of node graphs."""
 
-from regelum.environment.node.base_new import Node, Graph, Clock, Logger, StepCounter
+from regelum.environment.node.base_new import Node, Graph
 import numpy as np
 from numpy.typing import NDArray
 import time
 from statistics import mean, stdev
 from typing import List, Dict, Any
 import matplotlib.pyplot as plt
+from typing import cast
 
 
 class Pendulum(Node):
@@ -54,11 +55,6 @@ class Pendulum(Node):
 
     def step(self) -> None:
         """Update pendulum state using Euler integration."""
-        # Heavier computational load
-        # result = 0.0
-        # for _ in range(50000):  # Much more iterations
-        #     result += np.sin(np.random.random()) * np.cos(np.random.random())
-
         action = self.resolved_inputs.find("controller.action").value
         derivatives = self.state_transition_map(self.state.value, action)
         self.state.value += self.step_size * derivatives
@@ -96,11 +92,6 @@ class PendulumPDController(Node):
 
     def step(self) -> None:
         """Compute control action using PD law."""
-        # Add computational load
-        # result = 0.0
-        # for _ in range(50000):  # Match pendulum load
-        #     result += np.sin(np.random.random()) * np.cos(np.random.random())
-
         pendulum_state = self.resolved_inputs.find("pendulum.state").value
         angle = pendulum_state[0]
         angular_velocity = pendulum_state[1]
@@ -118,10 +109,6 @@ def create_pendulum_graph(
     Returns:
         Tuple of (graph, list of nodes)
     """
-    # Create base nodes
-    clock = Clock(0.01)
-    counter = StepCounter([clock], start_count=0)
-
     # Create pendulum-controller pairs
     pendulums = []
     controllers = []
@@ -141,19 +128,26 @@ def create_pendulum_graph(
             [f"{pendulum.external_name}.state", f"{controller.external_name}.action"]
         )
 
-    # Create logger
-    logger = Logger(variables_to_log=log_vars, step_size=0.01)
-
     # Build graph
-    nodes = [clock, counter, logger]
+    nodes = []
     nodes.extend(pendulums)
     nodes.extend(controllers)
 
-    return Graph(nodes, debug=debug), nodes
+    return (
+        cast(
+            Graph,
+            Graph(
+                nodes, debug=debug, initialize_inner_time=True, states_to_log=log_vars
+            ),
+        ),
+        nodes,
+    )
 
 
 def run_simulation(graph: Graph, n_steps: int = 10) -> Dict[str, List[Any]]:
     """Run simulation and collect trajectory data."""
+    from regelum.environment.node.library.logging import Logger
+
     trajectories: Dict[str, List[Any]] = {}
 
     # Initialize trajectories dict
@@ -269,6 +263,7 @@ def benchmark_execution(
 
         graph.reset()
 
+        graph.squash_into_subgraph("pendulum_1 -> controller_1")
         # Create parallel version and time it
         print("Running parallel simulation...")
         parallel_graph = graph.parallelize()
@@ -315,10 +310,10 @@ def print_benchmark_results(
     speedup = seq_mean / par_mean if par_mean > 0 else float("inf")
 
     # Print results
-    print(f"\nSequential Execution:")
+    print("\nSequential Execution:")
     print(f"  Mean time: {seq_mean:.6f} seconds")
     print(f"  Std dev:   {seq_std:.6f} seconds")
-    print(f"\nParallel Execution:")
+    print("\nParallel Execution:")
     print(f"  Mean time: {par_mean:.6f} seconds")
     print(f"  Std dev:   {par_std:.6f} seconds")
     print(f"\nSpeedup: {speedup:.2f}x")
@@ -334,8 +329,8 @@ def print_benchmark_results(
 
 
 if __name__ == "__main__":
-    NUM_PAIRS = 10
-    N_STEPS = 500  # Increased number of steps for better visualization
+    NUM_PAIRS = 1
+    N_STEPS = 50  # Increased number of steps for better visualization
 
     print("\nRunning benchmarks...")
     sequential_times, parallel_times = benchmark_execution(
