@@ -1,11 +1,6 @@
 from regelum.environment.node.base_new import Node, Graph, Clock, Logger, StepCounter
 import numpy as np
 from numpy.typing import NDArray
-import time
-from statistics import mean, stdev
-from typing import List, Dict, Any
-import matplotlib.pyplot as plt
-from regelum.utils.logger import logger
 
 
 class Pendulum(Node):

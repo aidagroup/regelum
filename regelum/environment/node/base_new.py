@@ -21,7 +21,6 @@ import casadi as cs
 import numpy as np
 import torch
 
-from regelum import _SYMBOLIC_INFERENCE_ACTIVE
 from regelum.utils import find_scc
 from regelum.utils.logger import logger
 
@@ -40,13 +39,22 @@ class ResolveStatus(StrEnum):
     UNDEFINED = "undefined"
 
 
-class Metadata(TypedDict, total=False):
+class Metadata(TypedDict):
     """Metadata for a variable."""
 
-    reset_modifier: Optional[Callable[..., Any]]
     initial_value: Any
     symbolic_value: Optional[cs.MX]
     shape: Optional[Tuple[int, ...]]
+    reset_modifier: Optional[Callable[..., Any]]
+
+
+def default_metadata() -> Metadata:
+    return {
+        "initial_value": None,
+        "symbolic_value": None,
+        "shape": None,
+        "reset_modifier": None,
+    }
 
 
 @dataclass(slots=True)
@@ -55,7 +63,7 @@ class Variable:
 
     name: str
     value: Optional[Any] = None
-    metadata: Metadata = field(default_factory=Metadata)
+    metadata: Metadata = field(default_factory=default_metadata)
     node_name: str = field(default="")
 
     def __post_init__(self) -> None:
@@ -87,7 +95,7 @@ class Variable:
         if self.metadata["symbolic_value"] is None:
             shape = self._infer_shape()
             if shape:
-                self.metadata["symbolic_value"] = cs.MX.sym(self.name, *shape)
+                self.metadata["symbolic_value"] = cs.MX.sym(str(self.name), *shape)  # type: ignore[arg-type]
         return self.metadata["symbolic_value"]
 
     def _infer_shape(self) -> Optional[Tuple[int, ...]]:
@@ -106,6 +114,8 @@ class Variable:
 
     def get_value(self) -> Any:
         """Return symbolic or actual value."""
+        from regelum import _SYMBOLIC_INFERENCE_ACTIVE
+
         return (
             self.to_casadi_symbolic()
             if getattr(_SYMBOLIC_INFERENCE_ACTIVE, "value", False)
@@ -249,9 +259,10 @@ class Node(ABC):
         shape: Optional[Tuple[int, ...]] = None,
     ) -> Variable:
         """Create and register a variable."""
-        var = Variable(
-            name, value, metadata or Metadata(shape=shape), self.external_name
-        )
+        meta = metadata or default_metadata()
+        if shape is not None:
+            meta["shape"] = shape
+        var = Variable(name, value, meta, self.external_name)
         self._variables.append(var)
         return var
 
@@ -306,7 +317,7 @@ class Node(ABC):
         for var in self._variables:
             var.name = mapping.get(var.name, var.name)
 
-    def resolve(self, variables: List[Variable]) -> None:
+    def resolve(self, variables: List[Variable]) -> ResolvedInputs:
         """Resolve node inputs."""
         self.resolved_inputs, self.unresolved_inputs = self.get_resolved_inputs(
             variables
@@ -326,7 +337,7 @@ class Node(ABC):
             var.node_name = self.external_name
         return old_name
 
-    def __or__(self, other: Node) -> Graph:
+    def __or__(self, other: Node) -> Node:
         """Connect nodes using | operator."""
         nodes = []
         if isinstance(self, Graph):
@@ -399,7 +410,7 @@ class Node(ABC):
                 for input_name in result.inputs.inputs:
                     if input_name in graph_vars:
                         provider_node = graph_vars[input_name]
-                        provider_name, var_name = input_name.split(".")
+                        _, var_name = input_name.split(".")
                         new_inputs.append(f"{provider_node.external_name}.{var_name}")
                     else:
                         new_inputs.append(input_name)
@@ -414,6 +425,7 @@ class Graph(Node):
     def __init__(
         self, nodes: List[Node], debug: bool = False, n_step_repeats: int = 1
     ) -> None:
+        """Initialize Graph node."""
         super().__init__(name="graph")
         self.nodes = nodes
         self.debug = debug
@@ -456,7 +468,7 @@ class Graph(Node):
         """Convert to parallel execution mode."""
         from regelum.environment.node.parallel import ParallelGraph
 
-        return ParallelGraph(self.nodes, self.debug)
+        return ParallelGraph(self.nodes, self.debug)  # type: ignore[return-value]
 
     def step(self) -> None:
         """Execute all nodes in sequence."""
@@ -464,7 +476,7 @@ class Graph(Node):
             for node in self.nodes:
                 node.step()
 
-    def resolve(self, variables: List[Variable]) -> None:
+    def resolve(self, variables: List[Variable]) -> ResolveStatus:
         """Resolve inputs for all nodes and determine execution order."""
         # Check for duplicate variable names
         var_names = {}
@@ -578,116 +590,103 @@ class Graph(Node):
         return self.resolve(self.variables)
 
     def clone_node(self, node_name: str, new_name: Optional[str] = None) -> Node:
-        """Clone a node and its variables, then insert it into the graph."""
-        original_node = next(
-            (node for node in self.nodes if node.external_name == node_name), None
+        """Clone a node and its variables."""
+        original = next(
+            (node for node in self.nodes if node.external_name == node_name),
+            None,
         )
-        if not original_node:
+        if not original:
             available = "\n- ".join(node.external_name for node in self.nodes)
             raise ValueError(
                 f"Node '{node_name}' not found in graph.\nAvailable nodes:\n- {available}"
             )
 
-        memo = {"parent_graph": self}
-        cloned_node = deepcopy(original_node, memo)
+        memo: Dict[int, Any] = {"parent_graph": self}  # type: ignore[assignment]
+        cloned = deepcopy(original, memo)
 
-        if new_name is not None:
-            cloned_node.alter_name(new_name)
+        if new_name:
+            cloned.alter_name(new_name)
 
-        if isinstance(cloned_node, Graph):
-            graph_num = int(cloned_node.external_name.split("_")[-1])
+        if isinstance(cloned, Graph):
+            self._update_graph_node_names(cloned)
 
-            # Create mapping for all nodes in the cloned graph
-            node_mapping = {}
-            cloned_node_names = set()
-            for node in cloned_node.nodes:
-                old_name = node.external_name
-                base_name = "_".join(old_name.split("_")[:-1])
-                new_name = f"{base_name}_{graph_num}"
-                node_mapping[old_name] = new_name
-                cloned_node_names.add(base_name)
-                node.alter_name(base_name)
+        self.insert_node(cloned)
+        return cloned
 
-            # Update input references for all nodes
-            def update_node_inputs(node: Node) -> None:
-                if isinstance(node.inputs, Inputs):
-                    new_inputs = []
-                    for input_name in node.inputs.inputs:
-                        provider_name, var_name = input_name.split(".")
-                        provider_base = "_".join(provider_name.split("_")[:-1])
+    def _update_graph_node_names(self, graph: Graph) -> None:
+        """Update names of nodes in a cloned graph."""
+        graph_num = int(graph.external_name.split("_")[-1])
+        node_mapping = {}
+        cloned_bases = set()
 
-                        if provider_name in node_mapping:
-                            new_provider_name = node_mapping[provider_name]
-                            new_inputs.append(f"{new_provider_name}.{var_name}")
-                        elif provider_base in cloned_node_names:
-                            new_inputs.append(f"{provider_base}_{graph_num}.{var_name}")
-                        else:
-                            new_inputs.append(input_name)
-                    node.inputs = Inputs(new_inputs)
-                    # Clear resolved inputs to force re-resolution
-                    node.resolved_inputs = None
+        # Create mapping for all nodes
+        for node in graph.nodes:
+            old_name = node.external_name
+            base_name = "_".join(old_name.split("_")[:-1])
+            new_name = f"{base_name}_{graph_num}"
+            node_mapping[old_name] = new_name
+            cloned_bases.add(base_name)
+            node.alter_name(base_name)
 
-            # Update inputs for all nodes in the cloned graph
-            for node in cloned_node.nodes:
-                update_node_inputs(node)
+        # Update input references
+        for node in graph.nodes:
+            if isinstance(node.inputs, Inputs):
+                new_inputs = []
+                for input_name in node.inputs.inputs:
+                    provider_name, var_name = input_name.split(".")
+                    provider_base = "_".join(provider_name.split("_")[:-1])
 
-            # Re-collect node data and resolve the cloned graph
+                    if provider_name in node_mapping:
+                        new_name = node_mapping[provider_name]
+                        new_inputs.append(f"{new_name}.{var_name}")
+                    elif provider_base in cloned_bases:
+                        new_inputs.append(f"{provider_base}_{graph_num}.{var_name}")
+                    else:
+                        new_inputs.append(input_name)
 
-            cloned_node.resolve(cloned_node.variables)
-            cloned_node._collect_node_data()
+                node.inputs = Inputs(new_inputs)
+                node.resolved_inputs = None
 
-            # Ensure each node in the cloned graph is resolved
-            for node in cloned_node.nodes:
-                if not node.is_resolved:
-                    node.resolve(cloned_node.variables)
+        # Re-resolve the graph
+        graph.resolve(graph.variables)
+        graph._collect_node_data()
 
-        # Insert into parent graph and resolve
-        self.insert_node(cloned_node)
-        self.resolve(self.variables)
-
-        return cloned_node
+        for node in graph.nodes:
+            if not node.is_resolved:
+                node.resolve(graph.variables)
 
     def extract_path_as_graph(self, path: str, n_step_repeats: int = 1) -> Graph:
-        """Extract a minimal subgraph containing specified nodes and necessary interim nodes.
-
-        Args:
-            path: String in format "node1 -> node2 -> node3" specifying desired path
-            n_step_repeats: Number of times to repeat the step operation for the subgraph
-        Returns:
-            Graph containing the minimal required subgraph
-
-        Raises:
-            ValueError: If path format is invalid or nodes can't be found
-        """
-        # Validate and parse path
+        """Extract a minimal subgraph containing specified nodes."""
         if not path or "->" not in path:
-            raise ValueError(
-                "Path must be in format: 'node1 -> node2 -> node3'. " f"Got: '{path}'"
-            )
+            raise ValueError("Path must be in format: 'node1 -> node2 -> node3'")
 
         node_names = [name.strip() for name in path.split("->")]
         if not all(node_names):
-            raise ValueError("Empty node names are not allowed. " f"Path: '{path}'")
+            raise ValueError("Empty node names are not allowed")
 
-        # Map of node name -> Node instance
+        # Verify nodes exist
         name_to_node = {node.external_name: node for node in self.nodes}
-
-        # Verify all nodes exist
-        missing_nodes = [name for name in node_names if name not in name_to_node]
-        if missing_nodes:
+        missing = [name for name in node_names if name not in name_to_node]
+        if missing:
             available = "\n- ".join(sorted(name_to_node.keys()))
             raise ValueError(
-                f"Could not find nodes: {missing_nodes}\n"
-                f"Available nodes:\n- {available}"
+                f"Could not find nodes: {missing}\nAvailable nodes:\n- {available}"
             )
 
-        # Build dependency graph (both input dependencies and usage dependencies)
-        dependencies: Dict[str, Set[str]] = {
-            node.external_name: set() for node in self.nodes  # Initialize all nodes
-        }
+        # Build dependency graph
+        dependencies = self._build_dependency_graph()
+        required_nodes = self._find_required_nodes(node_names, dependencies)
+        subgraph_nodes = [
+            node for node in self.nodes if node.external_name in required_nodes
+        ]
+
+        return Graph(subgraph_nodes, debug=self.debug, n_step_repeats=n_step_repeats)  # type: ignore[return-value]
+
+    def _build_dependency_graph(self) -> Dict[str, Set[str]]:
+        """Build bidirectional dependency graph."""
+        dependencies = {node.external_name: set() for node in self.nodes}
 
         for node in self.nodes:
-            # Add input dependencies
             if isinstance(node.inputs, Inputs):
                 for input_name in node.inputs.inputs:
                     for provider in self.nodes:
@@ -697,74 +696,53 @@ class Graph(Node):
                         ):
                             dependencies[node.external_name].add(provider.external_name)
                             dependencies[provider.external_name].add(node.external_name)
-                            break
 
-            # Add usage dependencies - who uses this node's variables
-            for var in node.variables:
-                var_name = f"{node.external_name}.{var.name}"
-                for consumer in self.nodes:
-                    if isinstance(consumer.inputs, Inputs):
-                        if var_name in consumer.inputs.inputs:
-                            dependencies[node.external_name].add(consumer.external_name)
-                            dependencies[consumer.external_name].add(node.external_name)
+        return dependencies
 
-        # Find all required nodes between each consecutive pair
-        required_nodes = set()
-        for i in range(len(node_names) - 1):
-            start, end = node_names[i], node_names[i + 1]
+    def _find_required_nodes(
+        self, path_nodes: List[str], dependencies: Dict[str, Set[str]]
+    ) -> Set[str]:
+        """Find all nodes required for the path."""
+        required = set()
 
-            # Check if direct path exists
+        for i in range(len(path_nodes) - 1):
+            start, end = path_nodes[i], path_nodes[i + 1]
             if end not in dependencies.get(start, set()):
-                # Try to find path through other nodes
-                path_found = False
-                visited = set()
-                to_visit = [(start, [start])]
-
-                while to_visit and not path_found:
-                    current, path_so_far = to_visit.pop(0)
-                    if current == end:
-                        required_nodes.update(path_so_far)
-                        path_found = True
-                        continue
-
-                    for next_node in dependencies.get(current, set()):
-                        if next_node not in visited:
-                            visited.add(next_node)
-                            to_visit.append((next_node, path_so_far + [next_node]))
-
-                if not path_found:
-                    raise ValueError(
-                        f"No path exists between '{start}' and '{end}'. "
-                        "Nodes are not connected in the dependency graph."
-                    )
+                path = self._find_path(start, end, dependencies)
+                if not path:
+                    raise ValueError(f"No path exists between '{start}' and '{end}'")
+                required.update(path)
             else:
-                required_nodes.update([start, end])
+                required.update([start, end])
 
-        # Create subgraph with required nodes
-        subgraph_nodes = [
-            node for node in self.nodes if node.external_name in required_nodes
-        ]
+        return required
 
-        return Graph(subgraph_nodes, debug=self.debug, n_step_repeats=n_step_repeats)
+    def _find_path(
+        self, start: str, end: str, dependencies: Dict[str, Set[str]]
+    ) -> Optional[List[str]]:
+        """Find path between two nodes using BFS."""
+        visited = set()
+        queue = [(start, [start])]
 
-    def squash_into_subgraph(self, path: str, n_step_repeats: int = 1) -> None:
-        """Squash a path into a single node, replacing original nodes with a subgraph.
+        while queue:
+            current, path = queue.pop(0)
+            if current == end:
+                return path
 
-        Args:
-            path: String in format "node1 -> node2 -> node3" specifying path to squash
-            n_step_repeats: Number of times to repeat the step operation for the squashed subgraph
-        """
-        # Extract subgraph
+            for next_node in dependencies.get(current, set()):
+                if next_node not in visited:
+                    visited.add(next_node)
+                    queue.append((next_node, path + [next_node]))
+
+        return None
+
+    def squash_into_subgraph(self, path: str, n_step_repeats: int = 1) -> Graph:
+        """Squash a path into a single subgraph node."""
         subgraph = self.extract_path_as_graph(path, n_step_repeats)
-
-        # Get names of nodes to replace
         replaced_nodes = {node.external_name for node in subgraph.nodes}
-
-        # Remove original nodes from the graph
         self.nodes = [
             node for node in self.nodes if node.external_name not in replaced_nodes
         ]
-
         self.insert_node(subgraph)
         return subgraph
 
@@ -779,35 +757,85 @@ class Graph(Node):
     def detect_subgraphs(self) -> List[List[Node]]:
         """Detect independent subgraphs in the node network."""
         subgraphs: List[List[Node]] = []
+        used_nodes = set()
+        name_to_node = {node.external_name: node for node in self.nodes}
+
+        # Build variable provider map
+        providers = {
+            f"{node.external_name}.{var.name}": node
+            for node in self.nodes
+            for var in node.variables
+        }
 
         # Build dependency graph
-        dependencies: Dict[str, Set[str]] = {}
-        provides: Dict[str, Node] = {}
+        dependencies = self._build_bidirectional_dependencies(providers)
 
-        # Map which nodes provide which variables
-        for node in self.nodes:
-            for var in node.variables:
-                var_name = f"{node.external_name}.{var.name}"
-                provides[var_name] = node
+        # Find strongly connected components (feedback loops)
+        sccs = self._find_strongly_connected_components(dependencies)
 
-        # Build dependency map
+        # Add SCCs (feedback loops) first
+        for scc in sccs:
+            group = [name_to_node[name] for name in scc]
+            subgraphs.append(group)
+            used_nodes.update(scc)
+
+        # Group remaining nodes
+        remaining = [n for n in self.nodes if n.external_name not in used_nodes]
+
+        # Add root nodes
+        root_nodes = [
+            n
+            for n in remaining
+            if not isinstance(n.inputs, Inputs) or not n.inputs.inputs
+        ]
+        if root_nodes:
+            subgraphs.append(root_nodes)
+            used_nodes.update(n.external_name for n in root_nodes)
+
+        # Group nodes by shared dependencies
+        remaining = [n for n in remaining if n.external_name not in used_nodes]
+        while remaining:
+            node = remaining[0]
+            group = [node]
+            node_deps = dependencies.get(node.external_name, set())
+
+            for other in remaining[1:]:
+                if dependencies.get(other.external_name, set()) == node_deps:
+                    group.append(other)
+
+            subgraphs.append(group)
+            used_nodes.update(n.external_name for n in group)
+            remaining = [n for n in remaining if n.external_name not in used_nodes]
+
+        if self.debug:
+            self._log_subgraph_analysis(subgraphs)
+
+        return subgraphs
+
+    def _build_bidirectional_dependencies(
+        self, providers: Dict[str, Node]
+    ) -> Dict[str, Set[str]]:
+        """Build bidirectional dependency graph."""
+        dependencies = {node.external_name: set() for node in self.nodes}
+
         for node in self.nodes:
             if isinstance(node.inputs, Inputs):
                 for input_name in node.inputs.inputs:
-                    if provider := provides.get(input_name):
-                        dependencies.setdefault(node.external_name, set()).add(
-                            provider.external_name
-                        )
-                        dependencies.setdefault(provider.external_name, set())
+                    if provider := providers.get(input_name):
+                        dependencies[node.external_name].add(provider.external_name)
+                        dependencies[provider.external_name].add(node.external_name)
 
-        # Find strongly connected components (feedback loops)
+        return dependencies
 
-        # Find all strongly connected components
-        index: Dict[str, int] = {}
-        lowlink: Dict[str, int] = {}
-        stack: List[str] = []
-        on_stack: Set[str] = set()
-        sccs: List[List[str]] = []
+    def _find_strongly_connected_components(
+        self, dependencies: Dict[str, Set[str]]
+    ) -> List[List[str]]:
+        """Find strongly connected components using Tarjan's algorithm."""
+        index = {}
+        lowlink = {}
+        stack = []
+        on_stack = set()
+        sccs = []
 
         for node in self.nodes:
             if node.external_name not in index:
@@ -822,64 +850,25 @@ class Graph(Node):
                 )
                 sccs.extend(new_sccs)
 
-        # Convert SCCs to node groups
-        name_to_node = {node.external_name: node for node in self.nodes}
-        used_nodes = set()
+        return sccs
 
-        # First add SCCs (feedback loops)
-        for scc in sccs:
-            group = [name_to_node[name] for name in scc]
-            subgraphs.append(group)
-            used_nodes.update(scc)
-
-        # Group remaining nodes by their dependencies
-        remaining_nodes = [n for n in self.nodes if n.external_name not in used_nodes]
-
-        # Find nodes with no inputs (root nodes)
-        root_nodes = [
-            n
-            for n in remaining_nodes
-            if not isinstance(n.inputs, Inputs) or not n.inputs.inputs
-        ]
-        if root_nodes:
-            subgraphs.append(root_nodes)
-            used_nodes.update(n.external_name for n in root_nodes)
-
-        # Group remaining nodes based on shared dependencies
-        remaining = [n for n in remaining_nodes if n.external_name not in used_nodes]
-        while remaining:
-            node = remaining[0]
-            group = [node]
-            node_deps = dependencies.get(node.external_name, set())
-
-            # Find nodes with similar dependencies
-            for other in remaining[1:]:
-                other_deps = dependencies.get(other.external_name, set())
-                if node_deps == other_deps:
-                    group.append(other)
-
-            subgraphs.append(group)
-            used_nodes.update(n.external_name for n in group)
-            remaining = [n for n in remaining if n.external_name not in used_nodes]
-
-        if self.debug:
-            logger.info("\nSubgraph Analysis:")
-            for i, group in enumerate(subgraphs):
-                logger.info(f"\nGroup {i}:")
-                logger.info("  Nodes:")
-                for node in group:
-                    logger.info(f"    {node.__class__.__name__}({node.external_name})")
-                logger.info("  Consumes:")
-                for node in group:
-                    if isinstance(node.inputs, Inputs):
-                        logger.info(f"    {node.external_name}: {node.inputs.inputs}")
-                logger.info("  Provides:")
-                for node in group:
-                    logger.info(
-                        f"    {node.external_name}: {[f'{node.external_name}.{v.name}' for v in node.variables]}"
-                    )
-
-        return subgraphs
+    def _log_subgraph_analysis(self, subgraphs: List[List[Node]]) -> None:
+        """Log detailed subgraph analysis."""
+        logger.info("\nSubgraph Analysis:")
+        for i, group in enumerate(subgraphs):
+            logger.info(f"\nGroup {i}:")
+            logger.info("  Nodes:")
+            for node in group:
+                logger.info(f"    {node.__class__.__name__}({node.external_name})")
+            logger.info("  Consumes:")
+            for node in group:
+                if isinstance(node.inputs, Inputs):
+                    logger.info(f"    {node.external_name}: {node.inputs.inputs}")
+            logger.info("  Provides:")
+            for node in group:
+                logger.info(
+                    f"    {node.external_name}: {[f'{node.external_name}.{v.name}' for v in node.variables]}"
+                )
 
     def print_subgraphs(self, subgraphs: List[List[Node]]) -> None:
         """Print detected subgraphs in a readable format."""
@@ -895,22 +884,18 @@ class Graph(Node):
         self, subgraphs: List[List[Node]]
     ) -> Dict[int, Set[int]]:
         """Analyze dependencies between groups."""
-        # Build variable provider map
-        var_to_group: Dict[str, int] = {}
-        group_contents: Dict[int, List[str]] = {}
+        var_to_group = {}
+        group_contents = {}
 
-        # First pass - map all variables to their groups
+        # Map variables to their groups
         for group_idx, nodes in enumerate(subgraphs):
             group_contents[group_idx] = [node.__class__.__name__ for node in nodes]
             for node in nodes:
-                # Map both original and renamed variables
                 for var in node.variables:
                     var_to_group[f"{node.external_name}.{var.name}"] = group_idx
 
-                # Map renamed inputs to their providers
-                if hasattr(node, "inputs") and isinstance(node.inputs, Inputs):
+                if isinstance(node.inputs, Inputs):
                     for input_name in node.inputs.inputs:
-                        # Find original variable name if this is a renamed input
                         original_name = next(
                             (
                                 old
@@ -924,19 +909,10 @@ class Graph(Node):
                         var_to_group[original_name] = group_idx
 
         # Build group dependency map
-        group_deps: Dict[int, Set[int]] = {i: set() for i in range(len(subgraphs))}
+        group_deps = {i: set() for i in range(len(subgraphs))}
 
-        # Debug print
-        logger.info("\nVariable providers and consumers:")
-        for group_idx, nodes in enumerate(subgraphs):
-            logger.info(
-                f"\nGroup {group_idx} ({', '.join(group_contents[group_idx])}):"
-            )
-            for node in nodes:
-                if isinstance(node.inputs, Inputs):
-                    logger.info(
-                        f"  {node.__class__.__name__} consumes: {node.inputs.inputs}"
-                    )
+        if self.debug:
+            self._log_group_dependencies(subgraphs, group_contents)
 
         for group_idx, nodes in enumerate(subgraphs):
             for node in nodes:
@@ -948,17 +924,27 @@ class Graph(Node):
 
         return group_deps
 
+    def _log_group_dependencies(
+        self, subgraphs: List[List[Node]], group_contents: Dict[int, List[str]]
+    ) -> None:
+        """Log group dependency information."""
+        logger.info("\nVariable providers and consumers:")
+        for group_idx, nodes in enumerate(subgraphs):
+            logger.info(
+                f"\nGroup {group_idx} ({', '.join(group_contents[group_idx])}):"
+            )
+            for node in nodes:
+                if isinstance(node.inputs, Inputs):
+                    logger.info(
+                        f"  {node.__class__.__name__} consumes: {node.inputs.inputs}"
+                    )
+
     def reset(
         self,
         nodes_to_reset: Optional[List[Node]] = None,
         apply_reset_modifier_to: Optional[List[Node]] = None,
     ) -> None:
-        """Reset nodes in the graph.
-
-        Args:
-            nodes_to_reset: Specific nodes to reset. If None, resets all nodes
-            apply_reset_modifier_to: Nodes that should use reset modifier. If None, applies to all reset nodes
-        """
+        """Reset nodes in the graph."""
         target_nodes = nodes_to_reset if nodes_to_reset is not None else self.nodes
         modifier_nodes = (
             apply_reset_modifier_to
@@ -974,11 +960,7 @@ class Clock(Node):
     """Time management node."""
 
     def __init__(self, fundamental_step_size: float) -> None:
-        """Initialize the Clock node.
-
-        Args:
-            fundamental_step_size: Fundamental step size for time increments.
-        """
+        """Initialize Clock node."""
         super().__init__(
             step_size=fundamental_step_size,
             is_continuous=False,
@@ -990,6 +972,7 @@ class Clock(Node):
 
     def step(self) -> None:
         """Increment time by fundamental step size."""
+        assert isinstance(self.time.value, float), "Time must be a float"
         self.time.value += self.fundamental_step_size
 
 
@@ -997,30 +980,26 @@ class StepCounter(Node):
     """Counts steps in the simulation."""
 
     def __init__(self, nodes: List[Node], start_count: int = 0) -> None:
-        """Initialize the StepCounter node.
-
-        Args:
-            nodes: List of nodes to track
-            start_count: Initial counter value
-        """
-        # Find minimum step size among non-continuous nodes
-        step_sizes = [node.step_size for node in nodes if not node.is_continuous]
+        """Initialize StepCounter node."""
+        step_sizes = [
+            node.step_size
+            for node in nodes
+            if not node.is_continuous and node.step_size is not None
+        ]
         if not step_sizes:
-            raise ValueError("No non-continuous nodes provided")
-        min_step_size = min(step_sizes)
+            raise ValueError("No non-continuous nodes with step size provided")
 
         super().__init__(
-            step_size=min_step_size,
+            step_size=min(step_sizes),
             is_continuous=False,
             is_root=False,
             name="step_counter",
         )
-
         self.counter = self.define_variable("counter", value=start_count)
-        self.nodes = nodes
 
     def step(self) -> None:
         """Increment counter by 1."""
+        assert isinstance(self.counter.value, int), "Counter must be an integer"
         self.counter.value += 1
 
 
@@ -1030,7 +1009,7 @@ class Logger(Node):
     def __init__(
         self, variables_to_log: List[str], step_size: float, cooldown: float = 0.0
     ) -> None:
-        """Initialize the Logger node."""
+        """Initialize Logger node."""
         super().__init__(
             inputs=["clock_1.time", "step_counter_1.counter"] + variables_to_log,
             step_size=step_size,
@@ -1038,32 +1017,39 @@ class Logger(Node):
             is_root=False,
             name="logger",
         )
-
         self.variables_to_log = variables_to_log
         self.cooldown = cooldown
         self.last_log_time = self.define_variable("last_log_time", value=-float("inf"))
-        self.log_queue: Optional[multiprocessing.Queue] = None
+        self.log_queue = None
 
     def step(self) -> None:
         """Log current state if enough time has passed."""
-        current_time = self.resolved_inputs.find("clock.time").value
+        if self.resolved_inputs is None:
+            return
+        time_var = self.resolved_inputs.find("clock.time")
+        if time_var is None or time_var.value is None:
+            return
+        current_time = time_var.value
+        if current_time - self.last_log_time.value < self.cooldown:
+            return
 
-        if current_time - self.last_log_time.value >= self.cooldown:
-            log_parts = [f"t={current_time:.3f}"]
+        log_parts = [f"t={current_time:.3f}"]
+        for path in self.inputs.inputs:
+            var = self.resolved_inputs.find(path)
+            if var is None or var.value is None:
+                continue
+            value = var.value
+            formatted_value = (
+                f"[{', '.join(f'{v:.3f}' for v in value)}]"
+                if isinstance(value, (np.ndarray, list))
+                else f"{value:.3f}"
+            )
+            log_parts.append(f"{path}={formatted_value}")
 
-            for path in self.inputs.inputs:
-                value = self.resolved_inputs.find(path).value
-                if isinstance(value, (np.ndarray, list)):
-                    formatted_value = f"[{', '.join(f'{v:.3f}' for v in value)}]"
-                else:
-                    formatted_value = f"{value:.3f}"
-                log_parts.append(f"{path}={formatted_value}")
+        log_msg = f"{self.external_name} | " + " | ".join(log_parts)
+        if self.log_queue is not None:
+            self.log_queue.put(log_msg)
+        else:
+            logger.info(log_msg)
 
-            log_msg = f"{self.external_name} | " + " | ".join(log_parts)
-
-            if self.log_queue is not None:
-                self.log_queue.put(log_msg)
-            else:
-                logger.info(log_msg)
-
-            self.last_log_time.value = current_time
+        self.last_log_time.value = current_time
