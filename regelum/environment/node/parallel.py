@@ -9,13 +9,15 @@ import multiprocessing as mp
 from copy import deepcopy
 from regelum.utils.logger import logger
 from .base_new import Node, Graph
+import os
+import dask
 
 NodeState = Dict[str, Any]
 
 
 def _extract_node_state(node: Node) -> NodeState:
     """Extract current state from a node as a dictionary."""
-    return {var.full_name: deepcopy(var.value) for var in node.variables}
+    return {var.full_name: var.value for var in node.variables}
 
 
 def _update_node_state(node: Node, state: NodeState) -> None:
@@ -23,7 +25,7 @@ def _update_node_state(node: Node, state: NodeState) -> None:
     for var in node.variables:
         full_name = f"{node.external_name}.{var.name}"
         if full_name in state:
-            var.value = deepcopy(state[full_name])
+            var.value = state[full_name]
 
 
 def _run_node_step(
@@ -34,14 +36,12 @@ def _run_node_step(
     _update_node_state(node, current_state)
 
     # Update inputs from dependency states
-    if node.inputs and node.inputs.inputs:
+    if node.inputs and node.inputs.inputs and node.resolved_inputs:
         for input_name in node.inputs.inputs:
             for dep_state in dep_states.values():
                 if input_name in dep_state:
-                    if node.resolved_inputs and (
-                        var := node.resolved_inputs.find(input_name)
-                    ):
-                        var.value = deepcopy(dep_state[input_name])
+                    if var := node.resolved_inputs.find(input_name):
+                        var.value = dep_state[input_name]
                     break
 
     # Execute node
@@ -62,13 +62,23 @@ class ParallelGraph(Graph):
         nodes: List[Node],
         debug: bool = False,
         n_workers: Optional[int] = None,
+        threads_per_worker: int = 1,
         **kwargs,
     ):
         super().__init__(nodes, debug=debug, name="parallel_graph")
         self.debug = debug
 
         n_workers = n_workers or min(len(nodes), max(1, mp.cpu_count() // 2 + 1))
-        self.cluster = LocalCluster(n_workers=n_workers, **kwargs)
+
+        # Enable diagnostics in debug mode
+        if debug:
+            kwargs["dashboard_address"] = ":8787"  # Enable dashboard
+
+        self.cluster = LocalCluster(
+            n_workers=n_workers,
+            threads_per_worker=threads_per_worker,
+            **kwargs,
+        )
         self.client = Client(self.cluster)
 
         # Cache for futures during each step
@@ -112,12 +122,38 @@ class ParallelGraph(Graph):
             if self.debug:
                 logger.info(f"Submitting {len(node_futures)} tasks to Dask...")
 
+                # Visualize task graph
+                dask.visualize(*node_futures.values(), filename="task_graph")
+                logger.info("Task graph saved to 'task_graph.svg'")
+
+                # Enable diagnostics dashboard
+                dashboard_link = self.client.dashboard_link
+                logger.info(f"Dask dashboard available at: {dashboard_link}")
+
             # Compute and collect results as they complete
-            futures = self.client.compute(list(node_futures.values()))
+            futures = self.client.compute(
+                list(node_futures.values()), scheduler="processes"
+            )
+
+            if self.debug:
+                logger.info("\nTask execution progress:")
+
             for future, result in as_completed(futures, with_results=True):
                 idx = futures.index(future)
+                print(future, "has ended")
                 node = self.nodes[idx]
                 _update_node_state(node, result)
+
+                if self.debug:
+                    key = future.key
+                    try:
+                        workers = self.client.who_has().get(future, set())
+                        worker = next(iter(workers)) if workers else "cancelled"
+                    except Exception:
+                        worker = "unknown"
+                    logger.info(
+                        f"  Completed {node.external_name} on {worker} (key: {key})"
+                    )
 
         except Exception as e:
             self.close()

@@ -69,7 +69,10 @@ class Variable:
     node_name: str = field(default="")
 
     def __post_init__(self) -> None:
-        if "initial_value" not in self.metadata or self.metadata["initial_value"] is None:
+        if (
+            "initial_value" not in self.metadata
+            or self.metadata["initial_value"] is None
+        ):
             self.metadata["initial_value"] = deepcopy(self.value)
 
     def __deepcopy__(self, memo: Dict) -> Variable:
@@ -514,6 +517,7 @@ class Graph(Node):
         scheduler_port: int = 0,
         silence_logs: int = 30,
         processes: Optional[bool] = None,
+        threads_per_worker: int = 1,
     ) -> ParallelGraph:
         """Convert to parallel execution mode."""
         from regelum.environment.node.parallel import ParallelGraph
@@ -529,6 +533,7 @@ class Graph(Node):
             scheduler_port=scheduler_port,
             silence_logs=silence_logs,
             processes=processes,
+            threads_per_worker=threads_per_worker,
         )  # type: ignore[return-value]
 
     def step(self) -> None:

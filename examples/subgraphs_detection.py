@@ -33,28 +33,26 @@ class ComputeNode(Node):
 
     def step(self) -> None:
         """Perform computation."""
-        # Simulate computation
-        result = 0.0
-        for _ in range(int(self.compute_time * 1e6)):
-            result += np.sin(np.random.random()) * np.cos(np.random.random())
+        # Simulate heavy computation with numpy operations
+        size = 1000
+        matrices = []
+        start_time = time.perf_counter()
 
-        # If has inputs, combine them
-        if isinstance(self.inputs, Inputs) and self.inputs.inputs:
-            # Get first input shape as reference
-            first_input = self.resolved_inputs.find(self.inputs.inputs[0]).value
-            # Reshape other inputs to match first input's shape
-            values = []
-            for input_name in self.inputs.inputs:
-                val = self.resolved_inputs.find(input_name).value
-                if val.shape != first_input.shape:
-                    # Take first elements if shapes don't match
-                    val = val[: first_input.shape[0]]
-                values.append(val)
-            value = sum(values)
+        for _ in range(int(self.compute_time)):
+            matrix = np.random.random((size, size))
+            result = np.linalg.svd(matrix)[0]
+            matrices.append(result)
+
+        if matrices:
+            result = np.mean([np.sum(m) for m in matrices])
         else:
-            value = np.random.random(self.output.value.shape)
+            result = 0.0
 
-        self.output.value = value + result
+        end_time = time.perf_counter()
+        # if self.debug:
+        print(f"Computation time {self.external_name}: {end_time - start_time}")
+
+        self.output.value = np.array([result])
 
 
 def create_complex_graph() -> tuple[Graph, list[Node]]:
@@ -74,25 +72,22 @@ def create_complex_graph() -> tuple[Graph, list[Node]]:
                     │
                   merge
     """
-    # Root node (heavy computation)
     root = ComputeNode(inputs=[], output_size=2, compute_time=0.1, name="root")
 
-    # First level - three branches
     node1 = ComputeNode(
-        inputs=[f"{root.external_name}.output"], output_size=2, compute_time=1.5
+        inputs=[f"{root.external_name}.output"], output_size=2, compute_time=1.7
     )
 
     node2 = ComputeNode(
-        inputs=[f"{root.external_name}.output"], output_size=2, compute_time=1.5
+        inputs=[f"{root.external_name}.output"], output_size=2, compute_time=1.7
     )
 
     node3 = ComputeNode(
         inputs=[f"{root.external_name}.output"],
         output_size=2,
-        compute_time=0.5,
+        compute_time=1.2,
     )
 
-    # Second level - branch split
     node4 = ComputeNode(
         inputs=[f"{node3.external_name}.output"], output_size=2, compute_time=1.3
     )
@@ -112,12 +107,12 @@ def create_complex_graph() -> tuple[Graph, list[Node]]:
             f"{node5.external_name}.output",
         ],
         output_size=2,
-        compute_time=0.2,
+        compute_time=0.1,
         name="merge",
     )
 
     nodes = [root, node1, node2, node3, node4, node5, merge]
-    return Graph(nodes, debug=True), nodes
+    return Graph(nodes, debug=False), nodes
 
 
 def print_subgraphs(graph: Graph, subgraphs: List[List[Node]]) -> None:
@@ -189,25 +184,24 @@ def benchmark_execution(n_iterations: int = 10) -> tuple[List[float], List[float
     parallel_times = []
 
     for _ in range(n_iterations):
-        # Create fresh graphs for each iteration
         sequential_graph, _ = create_complex_graph()
         sequential_graph.resolve(sequential_graph.variables)
 
-        parallel_graph, _ = create_complex_graph()
-        parallel_graph.resolve(parallel_graph.variables)
-        parallel_graph = parallel_graph.parallelize()
-
-        # Time sequential execution
         start_time = time.perf_counter()
+        sequential_graph.step()
         sequential_graph.step()
         sequential_times.append(time.perf_counter() - start_time)
 
-        # Time parallel execution
+        sequential_graph.reset()
+        parallel_graph = sequential_graph.parallelize(
+            n_workers=4, processes=True, threads_per_worker=4
+        )
+
         start_time = time.perf_counter()
+        parallel_graph.step()
         parallel_graph.step()
         parallel_times.append(time.perf_counter() - start_time)
 
-        # Clean up parallel resources
         parallel_graph.close()
 
     return sequential_times, parallel_times
@@ -253,12 +247,12 @@ def print_benchmark_results(
 
 if __name__ == "__main__":
     # Create and analyze graph
-    graph, nodes = create_complex_graph()
-    graph.resolve(graph.variables)
-    subgraphs = graph.detect_subgraphs()
+    # graph, nodes = create_complex_graph()
+    # graph.resolve(graph.variables)
+    # subgraphs = graph.detect_subgraphs()
 
-    # Print subgraph analysis
-    print_subgraphs(graph, subgraphs)
+    # # Print subgraph analysis
+    # print_subgraphs(graph, subgraphs)
 
     # Run benchmarks
     print("\nRunning benchmarks...")
