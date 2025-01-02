@@ -1,6 +1,7 @@
 """Base classes for node-based computation."""
 
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -8,6 +9,7 @@ from enum import StrEnum
 from functools import reduce
 from math import gcd
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -16,12 +18,12 @@ from typing import (
     Set,
     Tuple,
     TypedDict,
-    TYPE_CHECKING,
 )
 
 import casadi as cs
 import numpy as np
 import torch
+from functools import wraps
 
 from regelum.utils import find_scc
 from regelum.utils.logger import logger
@@ -182,6 +184,9 @@ class ResolvedInputs:
 
         return None
 
+    def __len__(self) -> int:
+        return len(self.inputs)
+
 
 class Node(ABC):
     """Base unit of computation."""
@@ -206,6 +211,7 @@ class Node(ABC):
         self.inputs = self._normalize_inputs(inputs)
         self.step_size = step_size
         self.is_continuous = is_continuous
+        self.last_update_time = None
         self.is_root = is_root
         self._variables: List[Variable] = []
         self.resolved_inputs: Optional[ResolvedInputs] = None
@@ -374,18 +380,15 @@ class Node(ABC):
         result = cls.__new__(cls)
         memo[id(self)] = result
 
-        # Copy attributes
         for k, v in self.__dict__.items():
             if k == "_variables":
                 vars_copy = [deepcopy(var, memo) for var in v]
                 setattr(result, k, vars_copy)
             elif k == "resolved_inputs":
-                # Skip resolved_inputs - they will be re-resolved after cloning
                 setattr(result, k, None)
             else:
                 setattr(result, k, deepcopy(v, memo))
 
-        # Handle instance counting and naming
         if id(result) not in [id(x) for x in cls._instances.get(cls.__name__, [])]:
             cls._instances.setdefault(cls.__name__, []).append(result)
         result._external_name = (
@@ -396,6 +399,24 @@ class Node(ABC):
                 var.node_name = result._external_name
 
         return result
+
+
+class Semaphore(Node):
+    def __init__(self, name: str = "semaphore", inputs: Optional[Inputs] = None):
+        super().__init__(inputs=inputs, name=name)
+        self.flag = self.define_variable("flag", value=False)
+
+    def step(self):
+        raise NotImplementedError("Semaphore step not implemented")
+
+
+class Reset(Node):
+    def __init__(self, name: str = "reset", inputs: Optional[Inputs] = None):
+        super().__init__(inputs=inputs, name=name)
+        self.flag = self.define_variable("flag", value=False)
+
+    def step(self):
+        raise NotImplementedError("ResetSemaphore step not implemented")
 
 
 class Graph(Node):
@@ -418,10 +439,19 @@ class Graph(Node):
         if initialize_inner_time:
             from regelum.environment.node.library.logging import Clock, StepCounter
 
-            clock = Clock(fundamental_step_size)
+            self.clock = clock = Clock(fundamental_step_size)
             step_counter = StepCounter([clock], start_count=0)
             nodes.append(step_counter)
             nodes.append(clock)
+            self._align_discrete_nodes_execution_with_step_size(
+                [
+                    discrete_node
+                    for discrete_node in nodes
+                    if not discrete_node.is_continuous
+                    and not isinstance(discrete_node, Clock)
+                ]
+            )
+        self._process_resets(nodes)
         if states_to_log:
             self._setup_logger(
                 nodes, states_to_log, logger_cooldown, fundamental_step_size
@@ -431,6 +461,33 @@ class Graph(Node):
         self.n_step_repeats = n_step_repeats
         self._collect_node_data()
         self.resolve_status = ResolveStatus.UNDEFINED
+
+    def _process_resets(self, nodes: List[Node]):
+        reset_semaphores = [node for node in nodes if isinstance(node, Reset)]
+        for reset_semaphore in reset_semaphores:
+            corresponding_node = next(
+                (
+                    node
+                    for node in nodes
+                    if node.external_name
+                    == "_".join(reset_semaphore.name.split("_")[1:])
+                ),
+                None,
+            )
+            if corresponding_node:
+                self.apply_reset_modifier(corresponding_node, reset_semaphore)
+
+    def apply_reset_modifier(self, node: Node, reset_semaphore: Node):
+        ResetModifier(node, reset_semaphore).bind_to_node(node)
+
+    def _align_discrete_nodes_execution_with_step_size(
+        self, discrete_nodes: List[Node]
+    ) -> None:
+        if not hasattr(self, "clock"):
+            raise ValueError("Clock not found in graph")
+
+        for node in discrete_nodes:
+            ZeroOrderHold(node, self.clock).bind_to_node(node)
 
     def _setup_logger(
         self,
@@ -494,7 +551,6 @@ class Graph(Node):
 
         self.inputs = Inputs(list(set(external_inputs)))
 
-        # Collect resolved inputs if any node has them
         if any(node.resolved_inputs for node in self.nodes):
             resolved_vars = [
                 var
@@ -504,7 +560,6 @@ class Graph(Node):
             ]
             self.resolved_inputs = ResolvedInputs(resolved_vars)
 
-        # Collect all variables
         self._variables = [var for node in self.nodes for var in node.variables]
 
     def parallelize(
@@ -516,7 +571,7 @@ class Graph(Node):
         scheduler_sync_interval: int = 2,
         scheduler_port: int = 0,
         silence_logs: int = 30,
-        processes: Optional[bool] = None,
+        processes: Optional[bool] = True,
         threads_per_worker: int = 1,
     ) -> ParallelGraph:
         """Convert to parallel execution mode."""
@@ -544,7 +599,6 @@ class Graph(Node):
 
     def resolve(self, variables: List[Variable]) -> ResolveStatus:
         """Resolve inputs for all nodes and determine execution order."""
-        # Check for duplicate variable names
         var_names = {}
         for node in self.nodes:
             for var in node.variables:
@@ -558,7 +612,6 @@ class Graph(Node):
                     )
                 var_names[full_name] = node
 
-        # Build dependency graph for execution order
         dependencies: Dict[str, Set[str]] = {}
         providers = {
             f"{node.external_name}.{var.name}": node
@@ -574,14 +627,12 @@ class Graph(Node):
                         deps.add(provider.external_name)
                 dependencies[node.external_name] = deps
 
-        # Sort nodes by dependencies
         ordered_nodes = self._sort_nodes_by_dependencies(dependencies)
         self.nodes = ordered_nodes
 
         if self.debug:
             logger.info(f"\nResolved node execution order:\n{self}")
 
-        # Resolve inputs for all nodes
         unresolved = {}
         for node in self.nodes:
             try:
@@ -627,11 +678,9 @@ class Graph(Node):
 
             ordered.append(node)
 
-        # Process root nodes first
         ordered.extend(root_nodes)
         visited.update(node.external_name for node in root_nodes)
 
-        # Process remaining nodes
         for node in non_root_nodes:
             visit(node)
 
@@ -683,7 +732,6 @@ class Graph(Node):
         node_mapping = {}
         cloned_bases = set()
 
-        # Create mapping for all nodes
         for node in graph.nodes:
             old_name = node.external_name
             base_name = "_".join(old_name.split("_")[:-1])
@@ -692,7 +740,6 @@ class Graph(Node):
             cloned_bases.add(base_name)
             node.alter_name(base_name)
 
-        # Update input references
         for node in graph.nodes:
             if isinstance(node.inputs, Inputs):
                 new_inputs = []
@@ -711,7 +758,6 @@ class Graph(Node):
                 node.inputs = Inputs(new_inputs)
                 node.resolved_inputs = None
 
-        # Re-resolve the graph
         graph.resolve(graph.variables)
         graph._collect_node_data()
 
@@ -951,7 +997,6 @@ class Graph(Node):
         var_to_group = {}
         group_contents = {}
 
-        # Map variables to their groups
         for group_idx, nodes in enumerate(subgraphs):
             group_contents[group_idx] = [node.__class__.__name__ for node in nodes]
             for node in nodes:
@@ -972,7 +1017,6 @@ class Graph(Node):
                         )
                         var_to_group[original_name] = group_idx
 
-        # Build group dependency map
         group_deps = {i: set() for i in range(len(subgraphs))}
 
         if self.debug:
@@ -1006,10 +1050,12 @@ class Graph(Node):
     def reset(
         self,
         nodes_to_reset: Optional[List[Node]] = None,
+        apply_reset_modifier: bool = False,
         apply_reset_modifier_to: Optional[List[Node]] = None,
     ) -> None:
         """Reset nodes in the graph."""
         target_nodes = nodes_to_reset if nodes_to_reset is not None else self.nodes
+        apply_reset_modifier = apply_reset_modifier or apply_reset_modifier_to
         modifier_nodes = (
             apply_reset_modifier_to
             if apply_reset_modifier_to is not None
@@ -1091,3 +1137,62 @@ class Graph(Node):
         result._collect_node_data()
 
         return result
+
+
+class StepModifier(ABC):
+    """Abstract base class for step function modifiers."""
+
+    @abstractmethod
+    def __call__(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def reset(self):
+        pass
+
+    def bind_to_node(self, node: Node) -> None:
+        """Bind this modifier to a node's step and reset methods."""
+        node.step = self.__call__.__get__(self, self.__class__)
+
+        def make_reset(orig_reset, modifier):
+            def reset_with_modifier(self, *args, **kwargs):
+                orig_reset(*args, **kwargs)
+                modifier.reset()
+
+            return reset_with_modifier
+
+        node.reset = make_reset(node.reset, self).__get__(node, node.__class__)
+
+
+class ZeroOrderHold(StepModifier):
+    def __init__(self, node: Node, clock_ref):
+        self.node = node
+        self.step_function = node.step
+        self.clock = clock_ref
+        self.last_update_time = None
+
+    def __call__(self, *args, **kwargs):
+        if (
+            self.last_update_time is None
+            or self.last_update_time + self.node.step_size <= self.clock.time.value
+        ):
+            self.step_function(*args, **kwargs)
+            self.last_update_time = self.clock.time.value
+
+    def reset(self):
+        self.last_update_time = None
+
+
+class ResetModifier(StepModifier):
+    def __init__(self, node: Node, reset_semaphore: Node):
+        self.node = node
+        self.step_function = node.step
+        self.reset_semaphore = reset_semaphore
+
+    def __call__(self, *args, **kwargs):
+        if self.reset_semaphore.reset_flag.value:
+            self.node.reset()
+        self.step_function(*args, **kwargs)
+
+    def reset(self):
+        pass

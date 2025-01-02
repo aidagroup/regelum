@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 from typing import Dict, List, Any, Set, Optional
-import numpy as np
 from dask.delayed import delayed
 from dask.distributed import Client, LocalCluster, as_completed
 import multiprocessing as mp
-from copy import deepcopy
 from regelum.utils.logger import logger
 from .base_new import Node, Graph
-import os
 import dask
 
 NodeState = Dict[str, Any]
@@ -28,15 +25,10 @@ def _update_node_state(node: Node, state: NodeState) -> None:
             var.value = state[full_name]
 
 
-def _run_node_step(
-    node: Node, current_state: NodeState, dep_states: Dict[str, NodeState]
-) -> NodeState:
+def _run_node_step(node: Node, dep_states: Dict[str, NodeState]) -> NodeState:
     """Execute node step with explicit state management."""
-    # Update node's state from current_state
-    _update_node_state(node, current_state)
-
     # Update inputs from dependency states
-    if node.inputs and node.inputs.inputs and node.resolved_inputs:
+    if node.resolved_inputs and len(node.resolved_inputs) > 0:
         for input_name in node.inputs.inputs:
             for dep_state in dep_states.values():
                 if input_name in dep_state:
@@ -44,15 +36,12 @@ def _run_node_step(
                         var.value = dep_state[input_name]
                     break
 
-    # Execute node
     if isinstance(node, Graph):
         for _ in range(node.n_step_repeats):
             for internal_node in node.nodes:
                 internal_node.step()
     else:
         node.step()
-
-    # Return new state
     return _extract_node_state(node)
 
 
@@ -67,24 +56,16 @@ class ParallelGraph(Graph):
     ):
         super().__init__(nodes, debug=debug, name="parallel_graph")
         self.debug = debug
-
         n_workers = n_workers or min(len(nodes), max(1, mp.cpu_count() // 2 + 1))
-
-        # Enable diagnostics in debug mode
         if debug:
-            kwargs["dashboard_address"] = ":8787"  # Enable dashboard
-
+            kwargs["dashboard_address"] = ":8787"
         self.cluster = LocalCluster(
             n_workers=n_workers,
             threads_per_worker=threads_per_worker,
             **kwargs,
         )
         self.client = Client(self.cluster)
-
-        # Cache for futures during each step
         self._futures_cache: Dict[Node, Any] = {}
-
-        # Build dependency tree
         self.dependency_tree = self._build_dependency_graph()
 
     def _get_node_future(self, node: Node) -> Any:
@@ -92,21 +73,15 @@ class ParallelGraph(Graph):
         if node in self._futures_cache:
             return self._futures_cache[node]
 
-        # Get current state
-        current_state = _extract_node_state(node)
-
         # Get dependency futures
         dep_futures = {}
         for dep_node in self.dependency_tree[node]:
             dep_futures[dep_node.external_name] = self._get_node_future(dep_node)
 
-        # Create node's future
         if dep_futures:
-            node_future = delayed(_run_node_step, pure=False)(
-                node, current_state, dep_futures
-            )
+            node_future = delayed(_run_node_step, pure=False)(node, dep_futures)
         else:
-            node_future = delayed(_run_node_step, pure=False)(node, current_state, {})
+            node_future = delayed(_run_node_step, pure=False)(node, {})
 
         self._futures_cache[node] = node_future
         return node_future
