@@ -45,8 +45,7 @@ class RunningObjective(Objective):
     def __call__(
         self, observation: RgArray, action: RgArray, is_save_batch_format: bool = False
     ) -> RgArray:
-        """
-        Calculate the running objective for a given observation and action, potentially formatting the output.
+        """Calculate the running objective for a given observation and action, potentially formatting the output.
 
         This method computes the objective value based on the current state of the environment as represented
         by the observation and the action taken by an agent. It can also preprocess the output to be in batch
@@ -69,7 +68,6 @@ class RunningObjective(Objective):
                 performance or the reward of the agent given the observation and the action taken.
                 This value is usually used in reinforcement learning to guide the agent's learning process.
         """
-
         running_objective = self.model(observation, action)
         if not is_save_batch_format:
             return running_objective[0][0]

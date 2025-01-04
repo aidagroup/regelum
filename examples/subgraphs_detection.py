@@ -227,10 +227,10 @@ def print_benchmark_results(
     speedup = seq_mean / par_mean if par_mean > 0 else float("inf")
 
     # Print results
-    print(f"\nSequential Execution:")
+    print("\nSequential Execution:")
     print(f"  Mean time: {seq_mean:.6f} seconds")
     print(f"  Std dev:   {seq_std:.6f} seconds")
-    print(f"\nParallel Execution:")
+    print("\nParallel Execution:")
     print(f"  Mean time: {par_mean:.6f} seconds")
     print(f"  Std dev:   {par_std:.6f} seconds")
     print(f"\nSpeedup: {speedup:.2f}x")

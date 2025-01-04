@@ -1,3 +1,5 @@
+"""Logging utilities for tracking and recording computation results."""
+
 from loguru import logger
 import sys
 

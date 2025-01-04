@@ -3,7 +3,6 @@
 from regelum.environment.node.base_new import Node, Graph, Inputs
 import numpy as np
 import time
-import logging
 
 
 class ComputeNode(Node):

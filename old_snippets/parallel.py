@@ -152,7 +152,6 @@ class ParallelGraph(Graph):
 
         # Build provider map with proper handling of nested variables
         providers = {}
-        graph_nodes = [n for n in self.nodes if isinstance(n, Graph)]
 
         for graph_idx, node in enumerate(self.nodes, 1):
             # Map node's own variables

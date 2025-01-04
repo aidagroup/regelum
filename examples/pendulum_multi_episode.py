@@ -1,12 +1,11 @@
-from regelum.environment.node.base_new import Node, Graph
+from regelum.environment.node.nodes.base import Node
+from regelum.environment.node.nodes.graph import Graph
 import numpy as np
 from numpy.typing import NDArray
-import time
 import matplotlib
 
 matplotlib.use("Agg")  # Use non-interactive backend
 import matplotlib.pyplot as plt
-from typing import List, Dict, Any, Optional
 
 
 class Pendulum(Node):
@@ -177,8 +176,15 @@ def main():
     )
 
     # Create subgraph with step counter
-    subgraph = graph.squash_into_subgraph(
-        "step_counter_1 -> clock_1 -> pendulum_1 -> controller_1 -> buffer_1",
+    subgraph = graph.extract_as_subgraph(
+        [
+            "step_counter_1",
+            "clock_1",
+            "pendulum_1",
+            "controller_1",
+            "buffer_1",
+            "logger_1",
+        ],
         n_step_repeats=300,
     )
 
@@ -188,7 +194,7 @@ def main():
             var.reset(apply_reset_modifier=True)
 
     # Clone the graph multiple times
-    for _ in range(2):  # We already have one instance
+    for _ in range(4):  # We already have one instance
         cloned = graph.clone_node("graph_2")
         # Reset the cloned subgraph
         for node in cloned.nodes:
@@ -196,7 +202,7 @@ def main():
                 var.reset(apply_reset_modifier=True)
 
     # Add plot dumper
-    plot_dumper = PlotDumper(n_trajectories=3, step_size=0.01)
+    plot_dumper = PlotDumper(n_trajectories=5, step_size=0.01)
     graph.insert_node(plot_dumper)
     # graph.step()
     # Create parallel graph and run

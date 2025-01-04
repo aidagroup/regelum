@@ -1,5 +1,5 @@
 from regelum.environment.node.base import Node, State, Inputs
-from regelum.environment.graph import Graph, visualize_graph
+from regelum.environment.graph import Graph
 from regelum.environment.node.continuous import Pendulum
 from typing import Dict, Any
 import numpy as np
@@ -216,7 +216,6 @@ class Actor(Node):
 
 class Buffer(Node):
     def __init__(self, buffer_size: int = int(1e6), device: str = "cpu", **kwargs):
-
         self.buffer = ReplayBuffer(
             buffer_size=buffer_size,
             observation_space=Observer.observation_space,
@@ -273,7 +272,6 @@ class SoftQNetwork(nn.Module):
 
 
 class AdaptationBlock(Node):
-
     def __init__(
         self,
         learning_starts: int = 5000,

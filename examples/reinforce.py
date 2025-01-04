@@ -7,8 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.distributions import Normal
-from typing import List, Optional, Tuple
-import numpy as np
+from typing import Optional, Tuple
 from torch.optim import Adam
 import matplotlib.pyplot as plt
 from regelum.utils import rg

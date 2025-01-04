@@ -12,41 +12,27 @@ Key Features:
 """
 
 from contextlib import contextmanager
-import threading
-from typing import Dict, Any
+from typing import Dict, Any, Iterator
+
+from regelum.environment.node.core.globals import _SYMBOLIC_INFERENCE_ACTIVE
+from regelum.environment.node.core.variable import Variable
+from regelum.environment.node.core.inputs import Inputs
 
 __version__ = "1.0.0"
 __author__ = "Regelum Team"
 __license__ = "MIT"
 
 # Core components
-from regelum.environment.node.base_new import (
-    Node,
-    Graph,
-    Variable,
-    Inputs,
-    ResolveStatus,
-)
-from regelum.environment.node.library.logging import Clock, StepCounter, Logger
-from regelum.environment.node.parallel import ParallelGraph
-
-# Symbolic inference context
-_SYMBOLIC_INFERENCE_ACTIVE = threading.local()
-_SYMBOLIC_INFERENCE_ACTIVE.value = False
+from regelum.environment.node.nodes.base import Node
+from regelum.environment.node.core.types import ResolveStatus
+from regelum.environment.node.nodes.graph import Graph
+from regelum.environment.node.nodes.logging import Clock, StepCounter, Logger
+from regelum.environment.node.nodes.parallel import ParallelGraph
 
 
 @contextmanager
-def symbolic_inference():
-    """Enable symbolic inference within a context.
-
-    This context manager temporarily enables symbolic computation mode,
-    allowing nodes to work with symbolic variables instead of concrete values.
-
-    Example:
-        >>> with symbolic_inference():
-        ...     # Code here will use symbolic computation
-        ...     graph.step()
-    """
+def symbolic_mode() -> Iterator[None]:
+    """Context manager for symbolic mode."""
     _SYMBOLIC_INFERENCE_ACTIVE.value = True
     try:
         yield
@@ -54,9 +40,8 @@ def symbolic_inference():
         _SYMBOLIC_INFERENCE_ACTIVE.value = False
 
 
-# Version information
 def get_version() -> str:
-    """Return the current version of Regelum."""
+    """Get the version of Regelum."""
     return __version__
 
 
@@ -90,7 +75,7 @@ __all__ = [
     # Enums and status
     "ResolveStatus",
     # Context managers
-    "symbolic_inference",
+    "symbolic_mode",
     # Version and metadata
     "get_version",
     "metadata",

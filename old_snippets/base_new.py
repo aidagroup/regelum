@@ -23,7 +23,6 @@ from typing import (
 import casadi as cs
 import numpy as np
 import torch
-from functools import wraps
 
 from regelum.utils import find_scc
 from regelum.utils.logger import logger
@@ -478,7 +477,7 @@ class Graph(Node):
                 self.apply_reset_modifier(corresponding_node, reset_semaphore)
 
     def apply_reset_modifier(self, node: Node, reset_semaphore: Node):
-        ResetModifier(node, reset_semaphore).bind_to_node(node)
+        ResetOnStep(node, reset_semaphore).bind_to_node(node)
 
     def _align_discrete_nodes_execution_with_step_size(
         self, discrete_nodes: List[Node]
@@ -1117,7 +1116,9 @@ class Graph(Node):
                 new_inputs = []
                 for input_name in node.inputs.inputs:
                     provider_name, var_name = input_name.split(".")
-                    provider_base = provider_name.rsplit("_", 1)[0]
+                    provider_base = provider_name.rsplit("_", 1)[
+                        0
+                    ]  # A base name without respective number
 
                     # If provider was in our original graph, use the new mapped name
                     if provider_name in node_mapping:
@@ -1152,16 +1153,20 @@ class StepModifier(ABC):
 
     def bind_to_node(self, node: Node) -> None:
         """Bind this modifier to a node's step and reset methods."""
+        # Store original methods
+        original_step = node.step
+        original_reset = node.reset
+
+        # Create new step method
         node.step = self.__call__.__get__(self, self.__class__)
 
-        def make_reset(orig_reset, modifier):
-            def reset_with_modifier(self, *args, **kwargs):
-                orig_reset(*args, **kwargs)
-                modifier.reset()
+        # Create new reset method that doesn't cause recursion
+        def modified_reset(*args, **kwargs):
+            original_reset(*args, **kwargs)  # Call original directly
+            self.reset()  # Call modifier's reset
 
-            return reset_with_modifier
-
-        node.reset = make_reset(node.reset, self).__get__(node, node.__class__)
+        node.reset = modified_reset
+        node._original_reset = original_reset  # Store for reference
 
 
 class ZeroOrderHold(StepModifier):
@@ -1169,21 +1174,27 @@ class ZeroOrderHold(StepModifier):
         self.node = node
         self.step_function = node.step
         self.clock = clock_ref
-        self.last_update_time = None
+        self.last_update_step = None
+
+        # Calculate how many fundamental steps make up this node's step size
+        self.step_multiplier = round(node.step_size / clock_ref.step_size)
 
     def __call__(self, *args, **kwargs):
+        # Convert current time to step count
+        current_step = round(self.clock.time.value / self.clock.step_size)
+
         if (
-            self.last_update_time is None
-            or self.last_update_time + self.node.step_size <= self.clock.time.value
+            self.last_update_step is None
+            or current_step >= self.last_update_step + self.step_multiplier
         ):
             self.step_function(*args, **kwargs)
-            self.last_update_time = self.clock.time.value
+            self.last_update_step = current_step
 
     def reset(self):
-        self.last_update_time = None
+        self.last_update_step = None
 
 
-class ResetModifier(StepModifier):
+class ResetOnStep(StepModifier):
     def __init__(self, node: Node, reset_semaphore: Node):
         self.node = node
         self.step_function = node.step

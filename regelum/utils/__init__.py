@@ -1,34 +1,53 @@
 """Contains auxiliary tools."""
 
-import inspect
 import numpy as np
-
-
-from enum import IntEnum
-from typing import Union, Optional, List, Set, Dict, Tuple
-from dataclasses import dataclass
 import random
-
-try:
-    import casadi
-
-    CASADI_TYPES = tuple(
-        x[1] for x in inspect.getmembers(casadi.casadi, inspect.isclass)
-    )
-except (ModuleNotFoundError, AttributeError):
-    CASADI_TYPES = tuple()
+from enum import IntEnum
+from typing import (
+    Union,
+    List,
+    Set,
+    Dict,
+    Tuple,
+    Any,
+    TypeVar,
+    Callable,
+    Optional,
+    Sequence,
+    cast,
+    Type,
+    TypeGuard,
+)
 import types
+import torch
+from torch import Tensor, device as TorchDevice
+import casadi
+from casadi import MX, SX, DM
 
-try:
-    import torch
+T = TypeVar("T")
+Shape = Union[Tuple[int, ...], int]
+CasadiType = Union[MX, SX, DM]
+NumericArray = Union[np.ndarray, Tensor, DM, MX]
+Device = Union[TorchDevice, str, None]
 
-    TORCH_TYPES = tuple(
-        x[1]
-        for x in inspect.getmembers(torch, inspect.isclass)
-        if ("torch" in str(x[1]))
-    )
-except ModuleNotFoundError:
-    TORCH_TYPES = tuple()
+
+def is_sequence(obj: Any) -> TypeGuard[Sequence[Any]]:
+    """Type guard for sequences."""
+    return isinstance(obj, (list, tuple))
+
+
+def safe_unpack(argin: Union[T, Sequence[T]]) -> Sequence[T]:
+    """Safely unpack an argument into a sequence."""
+    if is_sequence(argin):
+        return argin
+    return (argin,)
+
+
+def get_device(obj: Any) -> Device:
+    """Get device from object if available."""
+    if hasattr(obj, "device"):
+        return obj.device
+    return torch.device("cpu")
 
 
 class RCType(IntEnum):
@@ -49,141 +68,117 @@ CASADI = RCType.CASADI
 NUMPY = RCType.NUMPY
 
 
-def torch_safe_log(x, eps=1e-10):
+def torch_safe_log(x: Tensor, eps: float = 1e-10) -> Tensor:
+    """Safe log computation for torch tensors."""
     return torch.log(x + eps)
 
 
-def is_CasADi_typecheck(*args) -> Union[RCType, bool]:
-    return CASADI if any([isinstance(arg, CASADI_TYPES) for arg in args]) else False
+def is_CasADi_typecheck(*args: Any) -> RCType:
+    """Check if any argument is a CasADi type."""
+    return CASADI if any([isinstance(arg, (MX, SX, DM)) for arg in args]) else NUMPY
 
 
-def is_Torch_typecheck(*args) -> Union[RCType, bool]:
-    return TORCH if any([isinstance(arg, TORCH_TYPES) for arg in args]) else False
+def is_Torch_typecheck(*args: Any) -> RCType:
+    """Check if any argument is a Torch type."""
+    return TORCH if any([isinstance(arg, Tensor) for arg in args]) else NUMPY
 
 
-# TODO: ADD DOCSTRING
-def type_inference(*args, **kwargs) -> Union[RCType, bool]:
+def type_inference(*args: Any, **kwargs: Any) -> RCType:
+    """Infer the type based on input arguments."""
     is_CasADi = is_CasADi_typecheck(*args, *kwargs.values())
     is_Torch = is_Torch_typecheck(*args, *kwargs.values())
     if is_CasADi + is_Torch > 4:
         raise TypeError(
             "There is no support for simultaneous usage of both NumPy and CasADi"
         )
-    else:
-        result_type = max(is_CasADi, is_Torch, NUMPY)
-        return result_type
+    return max(is_CasADi, is_Torch, NUMPY)
 
 
-# TODO: ADD DOCSTRING
-def safe_unpack(argin):
-    if isinstance(argin, (list, tuple)):
-        return argin
-    else:
-        return (argin,)
+class MetaClassDecorator(type):
+    """Metaclass for decorating class methods."""
+
+    def __new__(
+        cls: Type[Any],
+        classname: str,
+        supers: Tuple[type, ...],
+        classdict: Dict[str, Any],
+    ) -> Any:
+        for name, elem in classdict.items():
+            if (
+                isinstance(elem, types.FunctionType)
+                and (name != "__init__")
+                and not isinstance(elem, staticmethod)
+            ):
+                classdict[name] = metaclassTypeInferenceDecorator(elem)
+        return type.__new__(cls, classname, supers, classdict)
 
 
-# TODO: ADD DOCSTRING
-def decorateAll(decorator):
-    class MetaClassDecorator(type):
-        def __new__(cls, classname, supers, classdict):
-            for name, elem in classdict.items():
-                if (
-                    isinstance(elem, types.FunctionType)
-                    and (name != "__init__")
-                    and not isinstance(elem, staticmethod)
-                ):
-                    classdict[name] = decorator(classdict[name])
-            return type.__new__(cls, classname, supers, classdict)
-
+def decorateAll(decorator: Callable[..., Any]) -> Type[MetaClassDecorator]:
+    """Create a metaclass that decorates all methods."""
     return MetaClassDecorator
 
 
-# TODO: ADD DOCSTRING
-@decorateAll
-def metaclassTypeInferenceDecorator(function):
-    def wrapper(*args, **kwargs):
+def metaclassTypeInferenceDecorator(function: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorator for type inference in class methods."""
+
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         rc_type = kwargs.get("rc_type")
         if rc_type is not None:
             del kwargs["rc_type"]
             return function(*args, **kwargs, rc_type=rc_type)
-        else:
-            return function(*args, **kwargs, rc_type=type_inference(*args, **kwargs))
+        return function(*args, **kwargs, rc_type=type_inference(*args, **kwargs))
 
     return wrapper
 
 
-class Clock:
-    def __init__(self, period: float, eps=1e-7):
-        self.period = period
-        self.eps = eps
-        self.reset()
+class RCTypeHandler(metaclass=MetaClassDecorator):
+    """Handler for runtime type inference and operations across different numeric libraries.
 
-    def check_time(self, time: float):
-        self.delta_time = time - self.current_time
-        self.current_time = time
+    Provides a unified interface for operations that can be performed using NumPy,
+    PyTorch, or CasADi, with automatic type inference based on input types.
+    """
 
-        if (
-            self.is_first_time_called
-            or self.current_time > self.last_sampled_time + self.period - self.eps
-        ):
-            self.last_sampled_time = time
-            result = True
-        else:
-            result = False
-
-        self.is_first_time_called = False
-        return result
-
-    def reset(self):
-        self.last_sampled_time = self.current_time = 0.0
-        self.is_first_time_called = True
-        self.delta_time = 0.0
-
-
-@dataclass
-class AwaitedParameter:
-    """A nested class to tag parameters that are expected to be computed at initial simulation step."""
-
-    name: str
-    awaited_from: Optional[str]
-    _string_to_show: str = ""
-
-    def __post_init__(self):
-        self._string_to_show = f"Parameter {self.name}'s value is awaited from the source {self.awaited_from}"
-
-    def __repr__(self):
-        return self._string_to_show
-
-    def __str__(self):
-        return self._string_to_show
-
-    def __getattribute__(self, name):
-        if name in [
-            "__repr__",
-            "__str__",
-            "name",
-            "awaited_from",
-            "_string_to_show",
-            "__post_init__",
-            "__instancecheck__",
-            "__reduce_ex__",
-            "__reduce__",
-            "__getstate__",
-            "__setstate__",
-            "__dict__",
-            "__class__",
-            "__deepcopy__",
-        ]:
-            return object.__getattribute__(self, name)
-        else:
-            raise Exception(str(self) + f" Attempted to get {name}")
-
-
-# TODO: ADD DOCSTRING
-class RCTypeHandler(metaclass=metaclassTypeInferenceDecorator):
     TORCH = RCType.TORCH
     CASADI = RCType.CASADI
     NUMPY = RCType.NUMPY
+
+    def CasADi_primitive(
+        self, type_str: str = "MX", rc_type: RCType = NUMPY
+    ) -> CasadiType:
+        """Create a CasADi primitive."""
+        if type_str == "MX":
+            return MX.sym("x", (1, 1))
+        elif type_str == "SX":
+            return SX.sym("x", (1, 1))
+        elif type_str == "DM":
+            return DM([0])
+        raise ValueError(f"Unknown CasADi type: {type_str}")
+
+    def array(
+        self,
+        array: Any,
+        prototype: Optional[Any] = None,
+        rc_type: RCType = NUMPY,
+        _force_numeric: bool = False,
+    ) -> NumericArray:
+        """Create an array of the appropriate type."""
+        if is_sequence(prototype):
+            rc_type = type_inference(*prototype)
+
+        if rc_type == NUMPY:
+            return np.array(array)
+        elif rc_type == TORCH:
+            device = (
+                get_device(prototype) if prototype is not None else get_device(array)
+            )
+            return torch.FloatTensor(array).to(device=device)
+        elif rc_type == CASADI:
+            if _force_numeric:
+                return DM(array)
+            casadi_constructor = type(prototype) if prototype is not None else DM
+            return casadi_constructor(array)
+
+        raise ValueError(f"Unknown rc_type: {rc_type}")
 
     def LeakyReLU(self, x, negative_slope=0.01, rc_type: RCType = NUMPY):
         if rc_type == NUMPY:
@@ -194,14 +189,6 @@ class RCTypeHandler(metaclass=metaclassTypeInferenceDecorator):
             return self.max(
                 [self.zeros(self.shape(x), prototype=x), x]
             ) + negative_slope * self.min([self.zeros(self.shape(x), prototype=x), x])
-
-    def CasADi_primitive(self, type: str = "MX", rc_type: RCType = NUMPY):
-        if type == "MX":
-            return casadi.MX.sym("x", 1)
-        elif type == "SX":
-            return casadi.SX.sym("x", 1)
-        elif type == "DM":
-            return casadi.DM([0])
 
     def cos(self, x, rc_type: RCType = NUMPY):
         if rc_type == NUMPY:
@@ -333,56 +320,25 @@ class RCTypeHandler(metaclass=metaclassTypeInferenceDecorator):
         return result_array
 
     def reshape(
-        self, array, dim_params: Union[list, tuple, int], rc_type: RCType = NUMPY
-    ):
+        self,
+        array: NumericArray,
+        shape: Union[Sequence[int], int],
+        rc_type: RCType = NUMPY,
+    ) -> NumericArray:
+        """Reshape array to the given shape."""
         if rc_type == CASADI:
-            if isinstance(dim_params, (list, tuple)):
-                if len(dim_params) > 1:
-                    return self.reshape_CasADi_as_np(array, dim_params)
-                else:
-                    return casadi.reshape(array, dim_params[0], 1)
-            elif isinstance(dim_params, int):
-                return casadi.reshape(array, dim_params, 1)
-            else:
-                raise TypeError(
-                    "Wrong type of dimension parameter was passed.\
-                         Possible cases are: int, [int], [int, int, ...]"
-                )
-
+            if isinstance(shape, (list, tuple)):
+                if len(shape) > 1:
+                    return self.reshape_CasADi_as_np(array, shape)
+                return casadi.reshape(array, shape[0], 1)
+            return casadi.reshape(array, shape, 1)
         elif rc_type == NUMPY:
-            return np.reshape(array, dim_params)
-
+            return np.reshape(array, shape)
         elif rc_type == TORCH:
-            return torch.reshape(array, dim_params)
-
-    def array(
-        self, array, prototype=None, rc_type: RCType = NUMPY, _force_numeric=False
-    ):
-        if isinstance(prototype, (list, tuple)):
-            rc_type = type_inference(*prototype)
-
-        if rc_type == NUMPY:
-            self._array = np.array(array)
-        elif rc_type == TORCH:
-            if hasattr(prototype, "device"):
-                device = prototype.device
-            elif hasattr(array, "device"):
-                device = array.device
-            else:
-                device = torch.device("cpu")
-
-            self._array = torch.FloatTensor(array).to(device=device)
-        elif rc_type == CASADI:
-            if _force_numeric:
-                self._array = casadi.DM(array)
-            else:
-                casadi_constructor = (
-                    type(prototype) if prototype is not None else casadi.DM
-                )
-
-                self._array = casadi_constructor(array)
-
-        return self._array
+            if isinstance(shape, int):
+                shape = (shape,)
+            return torch.reshape(array, shape)
+        raise ValueError(f"Unknown rc_type: {rc_type}")
 
     def ones(
         self,
@@ -544,16 +500,16 @@ class RCTypeHandler(metaclass=metaclassTypeInferenceDecorator):
         elif rc_type == CASADI:
             return casadi.mmax(*safe_unpack(array))
 
-    def sum_2(self, array, rc_type: RCType = NUMPY):
-        if isinstance(array, (list, tuple)):
-            rc_type = type_inference(*array)
-
+    def sum_2(self, array: NumericArray, rc_type: RCType = NUMPY) -> NumericArray:
+        """Compute sum of squares."""
         if rc_type == NUMPY:
-            return np.sum(array**2)
+            return np.sum(array * array)
         elif rc_type == TORCH:
-            return torch.sum(array**2)
+            array = torch.as_tensor(array)
+            return torch.sum(array * array)
         elif rc_type == CASADI:
-            return casadi.sum1(array**2)
+            return casadi.sum1(array * array)
+        raise ValueError(f"Unknown rc_type: {rc_type}")
 
     def sum(self, array, rc_type: RCType = NUMPY, axis=None):
         if isinstance(array, (list, tuple)):
@@ -692,30 +648,6 @@ class RCTypeHandler(metaclass=metaclassTypeInferenceDecorator):
         elif rc_type == CASADI:
             return casadi.kron(A, B)
 
-    def array_symb(
-        self, tup=None, literal="x", rc_type: RCType = NUMPY, prototype=None
-    ):
-        if prototype is not None:
-            shape = self.shape(prototype)
-        else:
-            shape = tup
-
-        if isinstance(shape, tuple):
-            if len(tup) > 2:
-                raise ValueError(
-                    f"Not implemented for number of dimensions greater than 2. Passed: {len(tup)}"
-                )
-            else:
-                return casadi.MX.sym(literal, *tup)
-
-        elif isinstance(tup, int):
-            return casadi.MX.sym(literal, tup)
-
-        else:
-            raise TypeError(
-                f"Passed an invalide argument of type {type(tup)}. Takes either int or tuple data types"
-            )
-
     def norm_1(self, v, rc_type: RCType = NUMPY):
         if rc_type == NUMPY:
             return np.linalg.norm(v, 1)
@@ -809,6 +741,35 @@ class RCTypeHandler(metaclass=metaclassTypeInferenceDecorator):
 
     def soft_abs(self, x, a=20, rc_type: RCType = NUMPY):
         return a * rg.abs(x) ** 3 / (1 + a * x**2)
+
+    def array_symb(
+        self,
+        shape: Optional[Shape] = None,
+        literal: str = "x",
+        rc_type: RCType = NUMPY,
+        prototype: Optional[NumericArray] = None,
+    ) -> MX:
+        """Create a symbolic CasADi array."""
+        if prototype is not None:
+            shape = self.shape(prototype)
+
+        if shape is None:
+            raise ValueError("Either shape or prototype must be provided")
+
+        if isinstance(shape, tuple):
+            if len(shape) > 2:
+                raise ValueError(
+                    f"Not implemented for number of dimensions greater than 2. Passed: {len(shape)}"
+                )
+            return cast(
+                MX, MX.sym(literal, shape[0], shape[1] if len(shape) > 1 else 1)
+            )
+        elif isinstance(shape, int):
+            return cast(MX, MX.sym(literal, shape, 1))
+        else:
+            raise TypeError(
+                f"Passed an invalid argument of type {type(shape)}. Takes either int or tuple data types"
+            )
 
 
 rg = RCTypeHandler()

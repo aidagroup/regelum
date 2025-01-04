@@ -1,5 +1,8 @@
-from regelum.environment.node.base import Node, State, Inputs, MPCNodeFactory
-from regelum.environment.graph import Graph
+from regelum.environment.node.nodes.base import Node
+from regelum.environment.node.nodes.graph import Graph
+from regelum.environment.node.core.inputs import Inputs
+from regelum.environment.node.core.state import State
+from regelum.environment.node.core.mpc_node_factory import MPCNodeFactory
 import numpy as np
 from regelum.utils import rg
 import logging
