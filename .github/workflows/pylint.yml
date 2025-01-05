@@ -40,11 +40,7 @@ jobs:
         && sudo apt install gh -y
     - name: Create badge
       run: |
-        COLOR=$([ $(echo "$PYLINT_SCORE >= 9" | bc -l) -eq 1 ] && echo "brightgreen" || \
-               [ $(echo "$PYLINT_SCORE >= 7" | bc -l) -eq 1 ] && echo "green" || \
-               [ $(echo "$PYLINT_SCORE >= 5" | bc -l) -eq 1 ] && echo "yellow" || echo "red")
-        JSON="{\"schemaVersion\": 1, \"label\": \"pylint\", \"message\": \"$PYLINT_SCORE/10\", \"color\": \"$COLOR\"}"
-        echo "$JSON" > pylint.json
+        echo "{\"score\": \"$PYLINT_SCORE/10\"}" > pylint.json
         gh gist edit cc6dbe4dd30dd1b0f715602f182c1a72 pylint.json
       env:
         GH_TOKEN: ${{ secrets.GIST_SECRET }}
