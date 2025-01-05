@@ -30,6 +30,14 @@ jobs:
           PYLINT_SCORE="0.0"
         fi
         echo "PYLINT_SCORE=$PYLINT_SCORE" >> $GITHUB_ENV
+    - name: Install GitHub CLI
+      run: |
+        type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
     - name: Create badge
       run: |
         COLOR=$([ $(echo "$PYLINT_SCORE >= 9" | bc -l) -eq 1 ] && echo "brightgreen" || \
@@ -39,4 +47,4 @@ jobs:
         echo "$JSON" > pylint.json
         gh gist edit cc6dbe4dd30dd1b0f715602f182c1a72 pylint.json
       env:
-        GITHUB_TOKEN: ${{ secrets.GIST_SECRET }}
+        GH_TOKEN: ${{ secrets.GIST_SECRET }}
