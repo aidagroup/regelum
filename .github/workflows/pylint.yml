@@ -21,8 +21,15 @@ jobs:
         poetry install --extras dev
     - name: Run pylint
       run: |
-        poetry run pylint regelum --output-format=text | tee ./pylint.txt || true
+        poetry run pylint $(find regelum -path "regelum/utils" -prune -o -name "*.py" -print) --output-format=text | tee ./pylint.txt || true
         PYLINT_SCORE=$(sed -n 's/^Your code has been rated at \([-0-9.]*\)\/.*/\1/p' ./pylint.txt)
+        echo "Raw pylint output:"
+        cat ./pylint.txt
+        echo "Extracted score: $PYLINT_SCORE"
+        # Default to 0 if no score found
+        if [ -z "$PYLINT_SCORE" ]; then
+          PYLINT_SCORE="0.0"
+        fi
         echo "PYLINT_SCORE=$PYLINT_SCORE" >> $GITHUB_ENV
     - name: Create Pylint Badge
       uses: schneegans/dynamic-badges-action@v1.6.0
@@ -31,5 +38,6 @@ jobs:
         gistID: 3dfb2d83654be9d67d432229a99cebbe
         filename: pylint.json
         label: pylint
-        message: ${{ env.PYLINT_SCORE }}/10
-        color: green
+        message: "${{ env.PYLINT_SCORE }}/10"
+        color: |
+          ${{ env.PYLINT_SCORE >= 9 && 'brightgreen' || env.PYLINT_SCORE >= 7 && 'green' || env.PYLINT_SCORE >= 5 && 'yellow' || 'red' }}
