@@ -1,4 +1,4 @@
-![Pylint](https://img.shields.io/gist/json/cc6dbe4dd30dd1b0f715602f182c1a72?filename=pylint.json&label=pylint&message=score&color=brightgreen)
+![Pylint](https://img.shields.io/badge/pylint-9.19%2F10-brightgreen)
 
 # Regelum
 regelum: learn in the loop. A framework for reinforcement learning, simulation and control
