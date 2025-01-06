@@ -53,5 +53,5 @@ class StepModifier(IStepModifier[T]):
             original_reset(apply_reset_modifier=False)
             self.reset(apply_reset_modifier=False)
 
-        node.modified_reset = modified_reset  # type: ignore
-        node.original_reset = original_reset  # type: ignore
+        node.modified_reset = modified_reset
+        node.original_reset = original_reset

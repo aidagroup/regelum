@@ -188,12 +188,40 @@ class INode(IResettable, IResolvable[IInputs, IVariable], Protocol):
             mapping: Dictionary mapping old names to new names.
         """
 
+    @property
     @abstractmethod
-    def reset(self, *, apply_reset_modifier: bool = True) -> None:
-        """Reset the node to its initial state.
+    def original_reset(self) -> Optional[Callable[..., None]]:
+        """Get the original reset function before any modifiers.
+
+        Returns:
+            The original reset function if available.
+        """
+
+    @original_reset.setter
+    @abstractmethod
+    def original_reset(self, value: Optional[Callable[..., None]]) -> None:
+        """Set the original reset function.
 
         Args:
-            apply_reset_modifier: Whether to apply reset modifier if available.
+            value: The reset function to set as original.
+        """
+
+    @property
+    @abstractmethod
+    def modified_reset(self) -> Optional[Callable[..., None]]:
+        """Get the modified reset function if available.
+
+        Returns:
+            The modified reset function if available.
+        """
+
+    @modified_reset.setter
+    @abstractmethod
+    def modified_reset(self, value: Optional[Callable[..., None]]) -> None:
+        """Set the modified reset function.
+
+        Args:
+            value: The reset function to set as modified.
         """
 
     @property
@@ -232,10 +260,6 @@ class INode(IResettable, IResolvable[IInputs, IVariable], Protocol):
             value: Resolved inputs configuration.
         """
 
-    @abstractmethod
-    def __deepcopy__(self, memo: Dict[Any, Any]) -> "INode":
-        """Deepcopy the node."""
-
     @classmethod
     @abstractmethod
     def get_instances(cls) -> List[INode]:
@@ -252,17 +276,6 @@ class INode(IResettable, IResolvable[IInputs, IVariable], Protocol):
 
         Returns:
             Number of node instances.
-        """
-
-    @abstractmethod
-    def _normalize_inputs(self, inputs: Optional[IInputs | List[str]]) -> IInputs:
-        """Normalize inputs.
-
-        Args:
-            inputs: Inputs to normalize.
-
-        Returns:
-            Normalized inputs.
         """
 
     @abstractmethod
@@ -285,53 +298,9 @@ class INode(IResettable, IResolvable[IInputs, IVariable], Protocol):
         """
 
     @abstractmethod
-    def __str__(self) -> str:
-        """Get string representation of the node.
+    def __deepcopy__(self, memo: Dict[Any, Any]) -> "INode":
+        """Deepcopy the node.
 
-        Returns:
-            String representation of the node.
-        """
-
-    @abstractmethod
-    def __repr__(self) -> str:
-        """Get string representation of the node.
-
-        Returns:
-            String representation of the node.
-        """
-
-    @property
-    @abstractmethod
-    def original_reset(self) -> Optional[Callable[..., None]]:
-        """Get the original reset function before any modifiers.
-
-        Returns:
-            The original reset function if available.
-        """
-
-    @original_reset.setter
-    @abstractmethod
-    def original_reset(self, value: Optional[Callable[..., None]]) -> None:
-        """Set the original reset function.
-
-        Args:
-            value: The reset function to set as original.
-        """
-
-    @property
-    @abstractmethod
-    def modified_reset(self) -> Optional[Callable[..., None]]:
-        """Get the modified reset function if available.
-
-        Returns:
-            The modified reset function if available.
-        """
-
-    @modified_reset.setter
-    @abstractmethod
-    def modified_reset(self, value: Optional[Callable[..., None]]) -> None:
-        """Set the modified reset function.
-
-        Args:
-            value: The reset function to set as modified.
+        This intended to be an abstract method as deepcopying the node is an ambiguous
+        operation in the context of the graph.
         """

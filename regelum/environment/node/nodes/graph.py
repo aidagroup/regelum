@@ -107,6 +107,16 @@ class Graph(Node, IGraph[Node]):
 
     def apply_reset_modifier(self, node: Node, reset_semaphore: Node) -> None:
         """Apply reset modifier to a node."""
+        RESET_INSTANCE_INDEX = -1
+        RECIPIENT_NAME_START_INDEX = 1
+        reset_semaphore_recipient = "_".join(
+            reset_semaphore._internal_name.split("_")[
+                RECIPIENT_NAME_START_INDEX:RESET_INSTANCE_INDEX
+            ]
+        )
+        assert (
+            reset_semaphore_recipient == node._internal_name
+        ), f"Reset semaphore recipient and node internal name do not match: {reset_semaphore_recipient} != {node._internal_name}"
         ResetOnStep(node, reset_semaphore).bind_to_node(node)
 
     def _align_discrete_nodes_execution_with_step_size(
@@ -468,29 +478,21 @@ class Graph(Node, IGraph[Node]):
         used_nodes = set()
         name_to_node = {node.external_name: node for node in self.nodes}
 
-        # Build variable provider map
         providers = {
             f"{node.external_name}.{var.name}": node
             for node in self.nodes
             for var in node.variables
         }
-
-        # Build dependency graph
         dependencies = self._build_bidirectional_dependencies(providers)
-
-        # Find strongly connected components (feedback loops)
         sccs = self._find_strongly_connected_components(dependencies)
 
-        # Add SCCs (feedback loops) first
         for scc in sccs:
             group = [name_to_node[name] for name in scc]
             subgraphs.append(group)
             used_nodes.update(scc)
 
-        # Group remaining nodes
         remaining = [n for n in self.nodes if n.external_name not in used_nodes]
 
-        # Add root nodes
         root_nodes = [
             n
             for n in remaining
@@ -500,7 +502,6 @@ class Graph(Node, IGraph[Node]):
             subgraphs.append(root_nodes)
             used_nodes.update(n.external_name for n in root_nodes)
 
-        # Group nodes by shared dependencies
         remaining = [n for n in remaining if n.external_name not in used_nodes]
         while remaining:
             node = remaining[0]
@@ -689,7 +690,6 @@ class Graph(Node, IGraph[Node]):
             self._modified_reset()
             return
 
-        # Default behavior: reset all nodes
         for node in self.nodes:
             node.reset(apply_reset_modifier=apply_reset_modifier)
 
@@ -759,10 +759,9 @@ class Graph(Node, IGraph[Node]):
 
         result.nodes = []
 
-        node_mapping = {}  # Map old external names to new nodes
-        internal_nodes = set()  # Track nodes that belong to this graph
+        node_mapping = {}
+        internal_nodes = set()
 
-        # First pass: clone all nodes and build mappings
         for node in self.nodes:
             if id(node) in memo:
                 cloned_node = memo[id(node)]
@@ -773,7 +772,6 @@ class Graph(Node, IGraph[Node]):
             node_mapping[node.external_name] = cloned_node
             internal_nodes.add(cloned_node._internal_name)
 
-        # Second pass: update inputs for each node in the graph
         for node in result.nodes:
             if isinstance(node.inputs, Inputs):
                 new_inputs = []

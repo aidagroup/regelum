@@ -105,24 +105,25 @@ class Node(INode):
         self._external_name = f"{self._internal_name}_{self.get_instance_count()}"
         self._reset_with_modifier = None
 
+    def _normalize_inputs(self, inputs: Optional[IInputs | List[str]]) -> IInputs:
+        """Convert inputs to Inputs instance.
+
+        Args:
+            inputs: Input specification.
+
+        Returns:
+            Normalized Inputs instance.
+        """
+        if not hasattr(self, "_inputs"):
+            if inputs is None:
+                return Inputs([])
+            return Inputs(inputs) if isinstance(inputs, list) else inputs
+        return Inputs(self._inputs) if isinstance(self._inputs, list) else self._inputs
+
     @abstractmethod
     def step(self) -> None:
         """Execute one computational step."""
         pass
-
-    def resolve(self, variables: List[IVariable]) -> Tuple[IInputs, Set[str]]:
-        """Resolve node inputs."""
-        resolved, unresolved = self._inputs.resolve(variables)
-        self._resolved_inputs = (
-            resolved if isinstance(resolved, ResolvedInputs) else None
-        )
-        if unresolved:
-            raise ValueError(
-                f"Couldn't resolve inputs {unresolved} for node {self.external_name}"
-            )
-        if not isinstance(resolved, ResolvedInputs):
-            raise ValueError("Failed to resolve inputs to ResolvedInputs type")
-        return self.inputs, unresolved
 
     @property
     def variables(self) -> Sequence[IVariable]:
@@ -207,72 +208,7 @@ class Node(INode):
         self._variables.append(var)
         return var
 
-    def _normalize_inputs(self, inputs: Optional[IInputs | List[str]]) -> IInputs:
-        """Convert inputs to Inputs instance.
-
-        Args:
-            inputs: Input specification.
-
-        Returns:
-            Normalized Inputs instance.
-        """
-        if not hasattr(self, "_inputs"):
-            if inputs is None:
-                return Inputs([])
-            return Inputs(inputs) if isinstance(inputs, list) else inputs
-        return Inputs(self._inputs) if isinstance(self._inputs, list) else self._inputs
-
     T = TypeVar("T", bound="Node")
-
-    @classmethod
-    def get_instances(cls: Type[T]) -> List[INode]:
-        """Get all instances of this class.
-
-        Returns:
-            List of all instances created.
-        """
-        return cast(List[INode], cls._instances.get(cls.__name__, []))
-
-    @classmethod
-    def get_instance_count(cls) -> int:
-        """Get count of instances for this class.
-
-        Returns:
-            Number of instances created.
-        """
-        return len(cls._instances.get(cls.__name__, []))
-
-    def __deepcopy__(self, memo: Dict[int, Any]) -> Self:
-        """Create a deep copy of the node.
-
-        Args:
-            memo: Dictionary of already copied objects.
-
-        Returns:
-            New Node instance with copied data.
-        """
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-
-        result._internal_name = self._internal_name
-        result._external_name = (
-            f"{result._internal_name}_{len(cls._instances[cls.__name__])}"
-        )
-
-        for k, v in self.__dict__.items():
-            if k == "_variables":
-                vars_copy: List[IVariable] = [deepcopy(var, memo) for var in v]
-                for var in vars_copy:
-                    var.node_name = result._external_name
-                setattr(result, k, vars_copy)
-            elif k == "_resolved_inputs":
-                setattr(result, k, None)
-            else:
-                if k != "_external_name":
-                    setattr(result, k, deepcopy(v, memo))
-
-        return result
 
     @property
     def step_size(self) -> Optional[float]:
@@ -294,26 +230,6 @@ class Node(INode):
         """Get root flag."""
         return self._is_root
 
-    @property
-    def inputs(self) -> IInputs:
-        """Get node's input dependencies."""
-        return self._inputs
-
-    @inputs.setter
-    def inputs(self, value: Inputs) -> None:
-        """Set inputs."""
-        self._inputs = value
-
-    @property
-    def resolved_inputs(self) -> Optional[ResolvedInputs]:
-        """Get resolved inputs."""
-        return self._resolved_inputs
-
-    @resolved_inputs.setter
-    def resolved_inputs(self, value: Optional[ResolvedInputs]) -> None:
-        """Set resolved inputs."""
-        self._resolved_inputs = value
-
     def find_variable(self, name: str) -> Optional[IVariable]:
         """Find variable by name."""
         return next((var for var in self._variables if var.name == name), None)
@@ -332,30 +248,6 @@ class Node(INode):
         """Update variable names using mapping."""
         for var in self._variables:
             var.name = mapping.get(var.name, var.name)
-
-    # Add missing methods from interface
-    def get_resolved_inputs(
-        self, variables: List[IVariable]
-    ) -> Tuple[IResolvedInputs, Set[str]]:
-        """Get resolved inputs and unresolved names."""
-        return self._inputs.resolve(variables)
-
-    @property
-    def unresolved_inputs(self) -> Set[str]:
-        """Get unresolved input names."""
-        if not self._resolved_inputs:
-            _, unresolved = self._inputs.resolve([])
-            return unresolved
-        return set()
-
-    def __str__(self) -> str:
-        """String representation."""
-        class_repr = f"{self.__class__.__name__}({self.external_name})"
-        return f"{class_repr}, inputs={self._inputs}, variables={self._variables})"
-
-    def __repr__(self) -> str:
-        """Detailed string representation."""
-        return self.__str__()
 
     def reset(self, *, apply_reset_modifier: bool = True) -> None:
         """Reset the node to its initial state.
@@ -407,3 +299,110 @@ class Node(INode):
             value: The reset function to set as modified.
         """
         self._modified_reset = value
+
+    @property
+    def inputs(self) -> IInputs:
+        """Get node's input dependencies."""
+        return self._inputs
+
+    @inputs.setter
+    def inputs(self, value: Inputs) -> None:
+        """Set inputs."""
+        self._inputs = value
+
+    @property
+    def resolved_inputs(self) -> Optional[ResolvedInputs]:
+        """Get resolved inputs."""
+        return self._resolved_inputs
+
+    @resolved_inputs.setter
+    def resolved_inputs(self, value: Optional[ResolvedInputs]) -> None:
+        """Set resolved inputs."""
+        self._resolved_inputs = value
+
+    @classmethod
+    def get_instances(cls: Type[T]) -> List[INode]:
+        """Get all instances of this class.
+
+        Returns:
+            List of all instances created.
+        """
+        return cast(List[INode], cls._instances.get(cls.__name__, []))
+
+    @classmethod
+    def get_instance_count(cls) -> int:
+        """Get count of instances for this class.
+
+        Returns:
+            Number of instances created.
+        """
+        return len(cls._instances.get(cls.__name__, []))
+
+    def get_resolved_inputs(
+        self, variables: List[IVariable]
+    ) -> Tuple[IResolvedInputs, Set[str]]:
+        """Get resolved inputs and unresolved names."""
+        return self._inputs.resolve(variables)
+
+    @property
+    def unresolved_inputs(self) -> Set[str]:
+        """Get unresolved input names."""
+        if not self._resolved_inputs:
+            _, unresolved = self._inputs.resolve([])
+            return unresolved
+        return set()
+
+    def __str__(self) -> str:
+        """String representation."""
+        class_repr = f"{self.__class__.__name__}({self.external_name})"
+        return f"{class_repr}, inputs={self._inputs}, variables={self._variables})"
+
+    def __repr__(self) -> str:
+        """Detailed string representation."""
+        return self.__str__()
+
+    def resolve(self, variables: List[IVariable]) -> Tuple[IInputs, Set[str]]:
+        """Resolve node inputs."""
+        resolved, unresolved = self._inputs.resolve(variables)
+        self._resolved_inputs = (
+            resolved if isinstance(resolved, ResolvedInputs) else None
+        )
+        if unresolved:
+            raise ValueError(
+                f"Couldn't resolve inputs {unresolved} for node {self.external_name}"
+            )
+        if not isinstance(resolved, ResolvedInputs):
+            raise ValueError("Failed to resolve inputs to ResolvedInputs type")
+        return self.inputs, unresolved
+
+    def __deepcopy__(self, memo: Dict[int, Any]) -> Self:
+        """Create a deep copy of the node.
+
+        Args:
+            memo: Dictionary of already copied objects.
+
+        Returns:
+            New Node instance with copied data.
+        """
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        result._internal_name = self._internal_name
+        result._external_name = (
+            f"{result._internal_name}_{len(cls._instances[cls.__name__])}"
+        )
+
+        for k, v in self.__dict__.items():
+            if k == "_variables":
+                vars_copy: List[IVariable] = [deepcopy(var, memo) for var in v]
+                for var in vars_copy:
+                    var.node_name = result._external_name
+                setattr(result, k, vars_copy)
+            elif k == "_resolved_inputs":
+                setattr(result, k, None)
+            else:
+                if k != "_external_name":
+                    setattr(result, k, deepcopy(v, memo))
+
+        return result
