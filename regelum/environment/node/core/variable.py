@@ -93,7 +93,7 @@ class Variable(IVariable):
         if sym_val is None:
             shape = self._infer_shape()
             if shape:
-                self.metadata["symbolic_value"] = cs.MX.sym(str(self.name), *shape)
+                self.metadata["symbolic_value"] = cs.MX.sym(str(self.name), *shape)  # type: ignore
                 sym_val = self.metadata["symbolic_value"]
         return (
             sym_val if isinstance(sym_val, (np.ndarray, torch.Tensor, cs.DM)) else None

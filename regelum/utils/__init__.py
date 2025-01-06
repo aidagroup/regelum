@@ -716,7 +716,6 @@ class RCTypeHandler(metaclass=MetaClassDecorator):
         if rc_type == NUMPY:
             return np.append(array, to_append)
 
-    # TODO: DO WE REALLY NEED THIS DM? WHY NOT TO USE HUMAN READABLE TERMINOLOGY? SAY CASADI_NUMERIC, CASADI_SYMB, CASADI_MATSYMB
     @staticmethod
     def DM(mat):
         return casadi.DM(mat)
