@@ -71,6 +71,7 @@ class Logger(Node):
         self, variables_to_log: List[str], step_size: float, cooldown: float = 0.0
     ) -> None:
         """Initialize Logger node."""
+        variables_to_log.extend(["clock_1.time"])
         super().__init__(
             inputs=variables_to_log,
             step_size=step_size,
@@ -86,7 +87,7 @@ class Logger(Node):
         if not self.resolved_inputs:
             return
 
-        time_var = self.resolved_inputs.find("clock.time")
+        time_var = self.resolved_inputs.find("clock_1.time")
         if time_var is None or time_var.value is None:
             return
         current_time = time_var.value
@@ -107,6 +108,8 @@ class Logger(Node):
             value = var.value
             if isinstance(value, np.ndarray):
                 value_str = np.array2string(value, precision=4, suppress_small=True)
+            elif isinstance(value, float):
+                value_str = str(round(value, 3))
             else:
                 value_str = str(value)
             log_str += f"\n{var_name}: {value_str}"

@@ -1,9 +1,9 @@
+"""Reset mechanism demonstration."""
+
 from regelum.environment.node.nodes.base import Node
 from regelum.environment.node.nodes.graph import Graph
 from regelum.environment.node.core.inputs import Inputs
 from typing import TypeGuard, Optional
-
-# from regelum.environment.node.base_new import Node, Graph, Inputs
 
 
 class NodeTest(Node):
@@ -93,13 +93,6 @@ if __name__ == "__main__":
         f"medium_graph: {[var.name for var in medium_graph.variables]}\n",
     )
 
-    print(fast_graph.inputs, medium_graph.inputs)
-    # parallel_graph = main_graph.parallelize()
-
-    # for _ in range(2):
-    #     parallel_graph.step()
-
-    # Run simulation for 10 steps
     for _ in range(20):
         main_graph.step()
         # Print values of all nodes

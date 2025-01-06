@@ -24,15 +24,14 @@ class ResetOnStep(StepModifier[Node]):
         self._node = node
         self._step_function = node.step
         self._reset_semaphore = reset_semaphore
-        # self.bind_to_node(node)
 
     def __call__(self, *args: Any, **kwargs: Any) -> None:
         """Execute modified step with reset check."""
         if self._reset_semaphore.get_variable("flag").value:
-            self._node.reset()
+            self._node.reset(apply_reset_modifier=True)
             return
         self._step_function(*args, **kwargs)
 
     def reset(self, *, apply_reset_modifier: bool = True) -> None:
         """Reset the node's state."""
-        self._node.reset(apply_reset_modifier=False)
+        self._node.reset(apply_reset_modifier=apply_reset_modifier)

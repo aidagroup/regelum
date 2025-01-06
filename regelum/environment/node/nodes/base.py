@@ -191,6 +191,7 @@ class Node(INode):
         value: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
         shape: Optional[tuple[int, ...]] = None,
+        reset_modifier: Optional[Callable[[Any], Any]] = None,
     ) -> IVariable:
         """Create and register a new variable."""
         base_meta = default_metadata()
@@ -204,6 +205,7 @@ class Node(INode):
         if shape is not None:
             base_meta["shape"] = shape
         base_meta["current_value"] = value
+        base_meta["reset_modifier"] = reset_modifier
         var = Variable(name=name, metadata=base_meta, _node_name=self.external_name)
         self._variables.append(var)
         return var

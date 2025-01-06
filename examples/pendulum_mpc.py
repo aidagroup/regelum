@@ -1,67 +1,50 @@
-from regelum.environment.node.base import Node, State, Inputs, MPCNodeFactory
-from regelum.environment.graph import Graph
-import numpy as np
-from regelum.utils import rg
-import logging
-
-# Add this before creating your nodes
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+from regelum.environment.node.nodes.classic_control.envs.continuous.pendulum import (
+    Pendulum,
 )
+from regelum.environment.node.nodes.graph import Graph
+from regelum.environment.node.nodes.classic_control.controllers.mpc import MPCContinuous
+from regelum.environment.node.nodes.reset import Reset
+import numpy as np
 
 
-class Pendulum(Node):
-    state = State("pendulum_state", (2,), np.array([np.pi, 0]))
-    inputs = Inputs(["mpc_pendulum_state_control"])
-    length = 1
-    mass = 1
-    gravity_acceleration = 9.81
+class PendulumReset(Reset):
+    def __init__(self, reset_interval: int):
+        super().__init__(name="reset_pendulum_1", inputs=["step_counter_1.counter"])
+        self.reset_interval = reset_interval
+        self.step_counter = 0
 
-    def system_dynamics(self, x, u):
-        pendulum_mpc_control = u
-
-        angle = x[0]
-        angular_velocity = x[1]
-        torque = pendulum_mpc_control
-
-        d_angle = angular_velocity
-        d_angular_velocity = (
-            -3 * self.gravity_acceleration / (2 * self.length) * rg.sin(angle)
-            + torque / self.mass
-        )
-
-        return {"pendulum_state": rg.vstack([d_angle, d_angular_velocity])}
-
-    def compute_state_dynamics(self):
-        pendulum_mpc_control = self.inputs["mpc_pendulum_state_control"].data
-
-        return self.system_dynamics(self.state.data, pendulum_mpc_control)
+    def step(self) -> None:
+        step_counter = self.resolved_inputs.find("step_counter_1.counter").value
+        self.flag.value = step_counter % self.reset_interval == 0
 
 
-class LoggerStepCounter(Node):
-    state = State("step_counter", (1,), 0)
-    inputs = Inputs(["Clock"])
+reset_pendulum = PendulumReset(reset_interval=10)
 
-    def __init__(self):
-        super().__init__(is_root=False)
-
-    def compute_state_dynamics(self):
-        return {"step_counter": self.state.data + 1}
-
-
-pendulum = Pendulum(is_root=True, is_continuous=True)
-step_counter = LoggerStepCounter()
-mpc_node = MPCNodeFactory(
-    pendulum, control_shape=1, prediction_horizon=4, step_size=0.1
+pendulum = Pendulum(
+    control_signal_name="mpc_1.mpc_action",
+    state_reset_modifier=lambda x: x + np.random.randn(2) * 0.1,
+)
+mpc_node = MPCContinuous(
+    controlled_system=pendulum,
+    controlled_state=pendulum.state,
+    control_dimension=1,
+    objective_function=pendulum.objective_function,
+    control_bounds=(np.array([-10]), np.array([10])),
 )
 
 graph = Graph(
-    [mpc_node, pendulum, step_counter],
-    states_to_log=["pendulum_state", "mpc_pendulum_state_control", "step_counter"],
-    logger_cooldown=0.5,
+    [mpc_node, pendulum, reset_pendulum],
+    initialize_inner_time=True,
+    states_to_log=[
+        pendulum.state.full_name,
+        mpc_node.action.full_name,
+        "step_counter_1.counter",
+    ],
+    logger_cooldown=0,
 )
+graph.resolve(graph.variables)
 
-n_steps = 1000
+n_steps = 11
 
 for _ in range(n_steps):
     graph.step()

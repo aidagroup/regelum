@@ -1,8 +1,30 @@
 """Benchmark parallel execution of node graphs."""
 
-from regelum.environment.node.base_new import Node, Graph, Inputs
+from regelum.environment.node.nodes.base import Node
+from regelum.environment.node.nodes.graph import Graph
+from regelum.environment.node.core.inputs import Inputs
 import numpy as np
 import time
+import os
+
+# Force NumPy to use single thread
+# os.environ["OMP_NUM_THREADS"] = "1"
+# os.environ["OPENBLAS_NUM_THREADS"] = "1"
+# os.environ["MKL_NUM_THREADS"] = "1"
+# os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+# os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
+
+def manual_matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Manual matrix multiplication without BLAS."""
+    n, m = a.shape
+    p = b.shape[1]
+    result = np.zeros((n, p))
+    for i in range(n):
+        for j in range(p):
+            for k in range(m):
+                result[i, j] += a[i, k] * b[k, j]
+    return result
 
 
 class ComputeNode(Node):
@@ -20,6 +42,7 @@ class ComputeNode(Node):
             is_continuous=False,
             is_root=not bool(inputs),
             name=name,
+            step_size=0.1,
         )
         self.output = self.define_variable(
             "output",
@@ -30,10 +53,16 @@ class ComputeNode(Node):
 
     def step(self) -> None:
         """Perform computation."""
-        # Simulate computation
+        print(self.external_name)
+        # CPU-heavy operations (single-threaded)
+        size = 25  # Reduced size since manual computation is slower
         result = 0.0
-        for _ in range(int(self.compute_time * 1e6)):
-            result += np.sin(np.random.random()) * np.cos(np.random.random())
+        matrix = np.random.random((size, size))
+        for _ in range(int(self.compute_time * 1e3)):
+            result += np.sum(manual_matmul(matrix, matrix.T))
+            matrix = 1.0 / (
+                1.0 + np.exp(-matrix)
+            )  # sigmoid, avoiding exp/-exp operations
 
         # If has inputs, combine them
         if isinstance(self.inputs, Inputs):
@@ -65,45 +94,60 @@ def create_complex_graph() -> tuple[Graph, list[Node]]:
                   merge
     """
     # Root node (heavy computation)
-    root = ComputeNode(inputs=[], output_size=3, compute_time=0.002, name="root")
+    root = ComputeNode(inputs=[], output_size=3, compute_time=0.005, name="root")
 
     # First level - three branches
     node1 = ComputeNode(
-        inputs=[f"{root.name}.output"], output_size=2, compute_time=0.001, name="node1"
+        inputs=[f"{root.external_name}.output"],
+        output_size=2,
+        compute_time=0.2,
+        name="node1",
     )
 
     node2 = ComputeNode(
-        inputs=[f"{root.name}.output"], output_size=2, compute_time=0.002, name="node2"
+        inputs=[f"{root.external_name}.output"],
+        output_size=2,
+        compute_time=0.2,
+        name="node2",
     )
 
     node3 = ComputeNode(
-        inputs=[f"{root.name}.output"], output_size=2, compute_time=0.001, name="node3"
+        inputs=[f"{root.external_name}.output"],
+        output_size=2,
+        compute_time=0.005,
+        name="node3",
     )
 
     # Second level - branch split
     node4 = ComputeNode(
-        inputs=[f"{node3.name}.output"], output_size=2, compute_time=0.001, name="node4"
+        inputs=[f"{node3.external_name}.output"],
+        output_size=2,
+        compute_time=0.2,
+        name="node4",
     )
 
     node5 = ComputeNode(
-        inputs=[f"{node3.name}.output"], output_size=2, compute_time=0.002, name="node5"
+        inputs=[f"{node3.external_name}.output"],
+        output_size=2,
+        compute_time=0.2,
+        name="node5",
     )
 
     # Merge node
     merge = ComputeNode(
         inputs=[
-            f"{node1.name}.output",
-            f"{node2.name}.output",
-            f"{node4.name}.output",
-            f"{node5.name}.output",
+            f"{node1.external_name}.output",
+            f"{node2.external_name}.output",
+            f"{node4.external_name}.output",
+            f"{node5.external_name}.output",
         ],
         output_size=1,
-        compute_time=0.001,
+        compute_time=0.005,
         name="merge",
     )
 
     nodes = [root, node1, node2, node3, node4, node5, merge]
-    return Graph(nodes), nodes
+    return Graph(nodes, debug=False), nodes
 
 
 def benchmark_parallel_execution(num_steps: int = 100) -> None:
@@ -125,7 +169,7 @@ def benchmark_parallel_execution(num_steps: int = 100) -> None:
         node.reset()
 
     print("\nParallel Execution Analysis:")
-    parallel_graph = Graph(nodes, debug=True).parallelize()
+    parallel_graph = Graph(nodes, debug=False).parallelize()
 
     # Time parallel execution
     start = time.perf_counter()

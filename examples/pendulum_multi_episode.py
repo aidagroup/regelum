@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 import matplotlib
 
-matplotlib.use("Agg")  # Use non-interactive backend
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
@@ -111,7 +111,6 @@ class DataBuffer(Node):
         )
         self.buffer_size = buffer_size
 
-        # Create buffer for states
         self.state_buffer = self.define_variable(
             "state_buffer",
             value=np.zeros((buffer_size, 2)),
@@ -201,15 +200,11 @@ def main():
             for var in node.variables:
                 var.reset(apply_reset_modifier=True)
 
-    # Add plot dumper
     plot_dumper = PlotDumper(n_trajectories=5, step_size=0.01)
     graph.insert_node(plot_dumper)
-    # graph.step()
-    # Create parallel graph and run
     parallel_graph = graph.parallelize()
     parallel_graph.step()
-    # parallel_graph.step()
-    # # graph.print_info()
+    graph.print_info()
 
 
 if __name__ == "__main__":
