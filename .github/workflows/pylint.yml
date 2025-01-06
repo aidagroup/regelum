@@ -35,6 +35,7 @@ jobs:
           -not -path '*/examples/*' \
           -not -path '*/tests/*' \
           -not -path '*/utils/*' \
+          -not -path '*/old_snippets/*' \
           > filelist.txt
 
         echo "The following Python files will be linted:"
