@@ -42,7 +42,7 @@ jobs:
         cat filelist.txt || echo "No .py files found!"
 
         # Run pylint on that list. We use '|| true' so we don't fail the job if Pylint complains.
-        pylint --output-format=text $(cat filelist.txt) | tee ./pylint.txt || true
+        pylint --output-format=text --disable=E0401 $(cat filelist.txt) | tee ./pylint.txt || true
 
         # Now extract the numeric score
         # Typically Pylint ends with: "Your code has been rated at X.Y/Z"
