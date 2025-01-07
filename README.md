@@ -1,4 +1,4 @@
-![Pylint](https://img.shields.io/badge/pylint-9.52%2F10-brightgreen)
+![Pylint](https://img.shields.io/badge/pylint-9.49%2F10-brightgreen)
 
 
 # Regelum
