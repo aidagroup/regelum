@@ -1,8 +1,9 @@
-"""Pendulum is a node that represents a pendulum system."""
+"""Pendulum environment."""
 
 from typing import Any, Callable
 
 from regelum import Node
+from regelum.node.core.types import NumericArray
 import numpy as np
 from regelum.utils import rg
 
@@ -13,13 +14,15 @@ class Pendulum(Node):
     def __init__(
         self,
         control_signal_name: str,
-        state_reset_modifier: Callable[[Any], Any] = None,
+        initial_state: NumericArray | None = None,
+        state_reset_modifier: Callable[[Any], Any] | None = None,
     ):
         """Initialize the Pendulum node.
 
         Args:
-            control_signal_name (str): The name of the control signal input.
-            state_reset_modifier (Callable[[Any], Any]): A function that modifies the reset state.
+            control_signal_name: The name of the control signal input.
+            initial_state: Initial state of the system [angle, angular_velocity].
+            state_reset_modifier: A function that modifies the reset state.
         """
         super().__init__(
             is_root=True,
@@ -31,9 +34,13 @@ class Pendulum(Node):
         self.length = 1
         self.mass = 1
         self.gravity_acceleration = 9.81
+
+        if initial_state is None:
+            initial_state = np.array([np.pi, 0])
+
         self.state = self.define_variable(
             "state",
-            value=np.array([np.pi, 0]),
+            value=initial_state,
             shape=(2,),
             reset_modifier=state_reset_modifier,
         )
