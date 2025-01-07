@@ -1,56 +1,22 @@
-from regelum import Node, Graph
 import numpy as np
-from pathlib import Path
 import matplotlib.pyplot as plt
+from pathlib import Path
+
+from regelum import Node, Graph
 from regelum.environment.node.nodes.classic_control.envs.continuous.pendulum import (
     Pendulum,
 )
-from regelum.environment.node.nodes.reset import Reset
-
-
-class PendulumPDController(Node):
-
-    def __init__(self, kp: float = 0.01, kd: float = 0.01, step_size: float = 0.01):
-        super().__init__(
-            inputs=["pendulum_1.pendulum_state"],
-            step_size=step_size,
-            is_root=True,
-            name="pendulum_pd_controller",
-        )
-        self.kp = kp
-        self.kd = kd
-
-        self.pendulum_pd_control = self.define_variable(
-            "pendulum_pd_control",
-            value=np.array([0.0]),
-            shape=(1,),
-        )
-
-    def step(self):
-        pendulum_state = self.resolved_inputs.find("pendulum_1.pendulum_state").value
-
-        angle = pendulum_state[0]
-        angular_velocity = pendulum_state[1]
-
-        self.pendulum_pd_control.value = -self.kp * angle - self.kd * angular_velocity
-
-
-class PendulumReset(Reset):
-    def __init__(self, reset_interval: int):
-        super().__init__(name="reset_pendulum_1", inputs=["step_counter_1.counter"])
-        self.reset_interval = reset_interval
-        self.step_counter = 0
-
-    def step(self) -> None:
-        step_counter = self.resolved_inputs.find("step_counter_1.counter").value
-        self.flag.value = step_counter % self.reset_interval == 0
+from regelum.environment.node.nodes.classic_control.controllers.pid import (
+    PIDControllerBase,
+)
+from regelum.environment.node.nodes.reset import ResetEachNSteps
 
 
 class PlotDumper(Node):
     def __init__(self, save_dir: str = "plots", n_steps: int = 1000, **kwargs):
         inputs = [
-            "pendulum_1.pendulum_state",
-            "pendulum_pd_controller_1.pendulum_pd_control",
+            "pendulum_1.state",
+            "pid_controller_1.control_signal",
         ]
         super().__init__(inputs=inputs, is_root=True, **kwargs)
         self.n_steps = n_steps
@@ -60,13 +26,9 @@ class PlotDumper(Node):
         self.controls = []
 
     def step(self) -> None:
-        self.states.append(
-            self.resolved_inputs.find("pendulum_1.pendulum_state").value.copy()
-        )
+        self.states.append(self.resolved_inputs.find("pendulum_1.state").value.copy())
         self.controls.append(
-            self.resolved_inputs.find(
-                "pendulum_pd_controller_1.pendulum_pd_control"
-            ).value
+            self.resolved_inputs.find("pid_controller_1.control_signal").value
         )
 
         if len(self.states) == self.n_steps:
@@ -95,15 +57,16 @@ class PlotDumper(Node):
 
 n_steps = 1000
 
-pd_controller = PendulumPDController(20, 20, step_size=0.01)
-pendulum = Pendulum(control_signal_name="pendulum_pd_controller_1.pendulum_pd_control")
-reset_pendulum = PendulumReset(reset_interval=1000)
+
+pendulum = Pendulum(control_signal_name="pid_controller_1.control_signal")
+pd_controller = PIDControllerBase(pendulum.state, 0, kp=20, ki=0, kd=20, step_size=0.01)
+reset_pendulum = ResetEachNSteps(node_name_to_reset=pendulum.external_name, n_steps=100)
 plot_dumper = PlotDumper(n_steps=n_steps)
 graph = Graph(
-    [pd_controller, pendulum, reset_pendulum, plot_dumper],
+    [pendulum, pd_controller, reset_pendulum, plot_dumper],
     states_to_log=[
-        "pendulum_1.pendulum_state",
-        "pendulum_pd_controller_1.pendulum_pd_control",
+        "pendulum_1.state",
+        "pid_controller_1.control_signal",
     ],
     initialize_inner_time=True,
     logger_cooldown=0.2,

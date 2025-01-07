@@ -32,7 +32,7 @@ class Pendulum(Node):
         self.mass = 1
         self.gravity_acceleration = 9.81
         self.state = self.define_variable(
-            "pendulum_state",
+            "state",
             value=np.array([np.pi, 0]),
             shape=(2,),
             reset_modifier=state_reset_modifier,
@@ -57,7 +57,7 @@ class Pendulum(Node):
         return 4 * x[0] ** 2 + x[1] ** 2
 
     def step(self):
-        action = self.resolved_inputs.find(self.control_signal_name).value
+        action = self.resolved_inputs.find(self.inputs.inputs[0]).value
         self.state.value += (
             self.state_transition_map(self.state.value, action) * self.step_size
         ).reshape(-1)

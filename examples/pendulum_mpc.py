@@ -3,27 +3,15 @@ from regelum.environment.node.nodes.classic_control.envs.continuous.pendulum imp
 )
 from regelum.environment.node.nodes.graph import Graph
 from regelum.environment.node.nodes.classic_control.controllers.mpc import MPCContinuous
-from regelum.environment.node.nodes.reset import Reset
+from regelum.environment.node.nodes.reset import ResetEachNSteps
 import numpy as np
 
-
-class PendulumReset(Reset):
-    def __init__(self, reset_interval: int):
-        super().__init__(name="reset_pendulum_1", inputs=["step_counter_1.counter"])
-        self.reset_interval = reset_interval
-        self.step_counter = 0
-
-    def step(self) -> None:
-        step_counter = self.resolved_inputs.find("step_counter_1.counter").value
-        self.flag.value = step_counter % self.reset_interval == 0
-
-
-reset_pendulum = PendulumReset(reset_interval=10)
 
 pendulum = Pendulum(
     control_signal_name="mpc_1.mpc_action",
     state_reset_modifier=lambda x: x + np.random.randn(2) * 0.1,
 )
+reset_pendulum = ResetEachNSteps(node_name_to_reset=pendulum.external_name, n_steps=10)
 mpc_node = MPCContinuous(
     controlled_system=pendulum,
     controlled_state=pendulum.state,

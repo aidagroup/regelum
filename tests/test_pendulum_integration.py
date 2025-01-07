@@ -154,7 +154,7 @@ def test_multi_episode_reset():
     # Run multiple episodes with fewer steps
     initial_states = []
     for _ in range(3):
-        pendulum.reset(apply_reset_modifier=True)
+        pendulum.reset()
         initial_states.append(pendulum.state.value.copy())
         for _ in range(3):
             graph.step()

@@ -5,14 +5,6 @@ from regelum.environment.node.nodes.graph import Graph
 from regelum.environment.node.core.inputs import Inputs
 import numpy as np
 import time
-import os
-
-# Force NumPy to use single thread
-# os.environ["OMP_NUM_THREADS"] = "1"
-# os.environ["OPENBLAS_NUM_THREADS"] = "1"
-# os.environ["MKL_NUM_THREADS"] = "1"
-# os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-# os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 
 def manual_matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:

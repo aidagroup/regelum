@@ -1,64 +1,13 @@
 from regelum.environment.node.nodes.base import Node
 from regelum.environment.node.nodes.graph import Graph
+from regelum.environment.node.nodes.classic_control.envs.continuous.pendulum import (
+    Pendulum,
+)
 import numpy as np
-from numpy.typing import NDArray
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
-
-class Pendulum(Node):
-    """Pendulum system dynamics."""
-
-    def __init__(self, step_size: float = 0.001) -> None:
-        """Initialize Pendulum node.
-
-        Args:
-            step_size: Integration time step
-        """
-        super().__init__(
-            inputs=["controller_1.action"],
-            step_size=step_size,
-            is_continuous=True,
-            is_root=True,
-            name="pendulum",
-        )
-
-        # Physical parameters
-        self.length = 1.0
-        self.mass = 1.0
-        self.gravity_acceleration = 9.81
-
-        # State variable
-        self.state = self.define_variable(
-            "state",
-            value=np.array([np.pi, 0.0]),
-            metadata={
-                "shape": (2,),
-                "reset_modifier": lambda x: np.array(
-                    [np.random.uniform(-np.pi, np.pi), 0.0]
-                ),
-            },
-        )
-
-    def state_transition_map(self, state: NDArray, action: NDArray) -> NDArray:
-        """Compute state derivatives."""
-        angle, angular_velocity = state
-        torque = action[0]  # Assuming 1D control input
-
-        d_angle = angular_velocity
-        d_angular_velocity = self.gravity_acceleration / self.length * np.sin(
-            angle
-        ) + torque / (self.mass * self.length**2)
-
-        return np.array([d_angle, d_angular_velocity])
-
-    def step(self) -> None:
-        """Update pendulum state using Euler integration."""
-        action = self.resolved_inputs.inputs[0].value
-        derivatives = self.state_transition_map(self.state.value, action)
-        self.state.value += self.step_size * derivatives
 
 
 class PendulumPDController(Node):
@@ -159,9 +108,12 @@ class PlotDumper(Node):
 
 
 def main():
-    # Create base nodes
-    pendulum = Pendulum(step_size=0.05)
+
     controller = PendulumPDController(kp=10, kd=10, step_size=0.01)
+    pendulum = Pendulum(
+        control_signal_name=controller.action.full_name,
+        state_reset_modifier=lambda x: x + np.random.randn(2) * 0.1,
+    )
     data_buffer = DataBuffer(step_size=0.01, buffer_size=300)
 
     # Create initial graph
@@ -173,8 +125,7 @@ def main():
         states_to_log=["pendulum_1.state"],
         logger_cooldown=0.1,
     )
-
-    # Create subgraph with step counter
+    graph.resolve(graph.variables)
     subgraph = graph.extract_as_subgraph(
         [
             "step_counter_1",
@@ -187,15 +138,12 @@ def main():
         n_step_repeats=300,
     )
 
-    # Reset the initial subgraph
     for node in subgraph.nodes:
         for var in node.variables:
             var.reset(apply_reset_modifier=True)
 
-    # Clone the graph multiple times
-    for _ in range(4):  # We already have one instance
+    for _ in range(4):
         cloned = graph.clone_node("graph_2")
-        # Reset the cloned subgraph
         for node in cloned.nodes:
             for var in node.variables:
                 var.reset(apply_reset_modifier=True)

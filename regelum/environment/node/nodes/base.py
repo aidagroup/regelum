@@ -205,7 +205,6 @@ class Node(INode):
         if shape is not None:
             base_meta["shape"] = shape
         base_meta["current_value"] = value
-        base_meta["reset_modifier"] = reset_modifier
         var = Variable(name=name, metadata=base_meta, _node_name=self.external_name)
         self._variables.append(var)
         return var
@@ -272,7 +271,7 @@ class Node(INode):
             variables_to_reset = [var.name for var in self._variables]
         for var_name in variables_to_reset:
             var = self.get_variable(var_name)
-            var.reset()
+            var.reset(apply_reset_modifier=True)
 
     @property
     def original_reset(self) -> Optional[Callable[..., None]]:
