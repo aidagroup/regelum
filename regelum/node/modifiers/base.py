@@ -2,8 +2,8 @@
 
 from abc import abstractmethod
 from typing import Callable, Any, TypeVar
-from regelum.environment.node.interfaces.modifiers import IStepModifier
-from regelum.environment.node.interfaces.node import INode
+from regelum.node.interfaces.modifiers import IStepModifier
+from regelum.node.interfaces.node import INode
 
 T = TypeVar("T", bound=INode)
 

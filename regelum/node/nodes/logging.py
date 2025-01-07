@@ -5,7 +5,7 @@ from typing import List
 
 import numpy as np
 
-from regelum.environment.node.nodes.base import Node
+from regelum.node.nodes.base import Node
 from regelum.utils.logger import logger
 
 

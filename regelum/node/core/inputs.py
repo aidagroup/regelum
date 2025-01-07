@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Set, Optional, Tuple, Sequence
 
-from regelum.environment.node.interfaces.base import IInputs, IResolvedInputs, IVariable
+from regelum.node.interfaces.base import IInputs, IResolvedInputs, IVariable
 from .types import FullName
 
 

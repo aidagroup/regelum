@@ -9,8 +9,8 @@ import casadi as cs
 import numpy as np
 import torch
 
-from regelum.environment.node.interfaces.base import IVariable
-from regelum.environment.node.core.globals import _SYMBOLIC_INFERENCE_ACTIVE
+from regelum.node.interfaces.base import IVariable
+from regelum.node.core.globals import _SYMBOLIC_INFERENCE_ACTIVE
 from .types import (
     Value,
     Metadata,

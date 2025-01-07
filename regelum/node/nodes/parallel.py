@@ -8,8 +8,8 @@ from dask.distributed import Client, LocalCluster, as_completed, Future
 from dask.base import visualize
 
 from regelum.utils.logger import logger
-from regelum.environment.node.nodes.base import Node
-from regelum.environment.node.nodes.graph import Graph
+from regelum.node.nodes.base import Node
+from regelum.node.nodes.graph import Graph
 
 
 NodeState = Dict[str, Any]

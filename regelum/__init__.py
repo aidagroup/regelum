@@ -14,20 +14,20 @@ Key Features:
 from contextlib import contextmanager
 from typing import Dict, Any, Iterator
 
-from regelum.environment.node.core.globals import _SYMBOLIC_INFERENCE_ACTIVE
-from regelum.environment.node.core.variable import Variable
-from regelum.environment.node.core.inputs import Inputs
+from regelum.node.core.globals import _SYMBOLIC_INFERENCE_ACTIVE
+from regelum.node.core.variable import Variable
+from regelum.node.core.inputs import Inputs
 
 __version__ = "1.0.0"
 __author__ = "Regelum Team"
 __license__ = "MIT"
 
 # Core components
-from regelum.environment.node.nodes.base import Node
-from regelum.environment.node.core.types import ResolveStatus
-from regelum.environment.node.nodes.graph import Graph
-from regelum.environment.node.nodes.logging import Clock, StepCounter, Logger
-from regelum.environment.node.nodes.parallel import ParallelGraph
+from regelum.node.nodes.base import Node
+from regelum.node.core.types import ResolveStatus
+from regelum.node.nodes.graph import Graph
+from regelum.node.nodes.logging import Clock, StepCounter, Logger
+from regelum.node.nodes.parallel import ParallelGraph
 
 
 @contextmanager

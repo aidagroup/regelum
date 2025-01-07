@@ -13,7 +13,7 @@ from typing import (
     Set,
     Callable,
 )
-from regelum.environment.node.interfaces.base import (
+from regelum.node.interfaces.base import (
     IVariable,
     IInputs,
     IResettable,

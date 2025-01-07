@@ -1,8 +1,8 @@
 """PID controller for a continuous system."""
 
 from typing import Optional
-from regelum.environment.node.nodes.base import Node
-from regelum.environment.node.core.variable import Variable
+from regelum.node.nodes.base import Node
+from regelum.node.core.variable import Variable
 
 import numpy as np
 

@@ -2,8 +2,8 @@
 
 from typing import Optional, List
 
-from regelum.environment.node.nodes.base import Node
-from regelum.environment.node.core.inputs import Inputs
+from regelum.node.nodes.base import Node
+from regelum.node.core.inputs import Inputs
 
 
 class Reset(Node):

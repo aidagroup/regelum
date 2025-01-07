@@ -17,7 +17,7 @@ from typing import (
     runtime_checkable,
 )
 
-from regelum.environment.node.core.types import Metadata
+from regelum.node.core.types import Metadata
 
 T = TypeVar("T")
 V = TypeVar("V")

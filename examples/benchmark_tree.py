@@ -1,8 +1,8 @@
 """Benchmark parallel execution of node graphs."""
 
-from regelum.environment.node.nodes.base import Node
-from regelum.environment.node.nodes.graph import Graph
-from regelum.environment.node.core.inputs import Inputs
+from regelum.node.nodes.base import Node
+from regelum.node.nodes.graph import Graph
+from regelum.node.core.inputs import Inputs
 import numpy as np
 import time
 

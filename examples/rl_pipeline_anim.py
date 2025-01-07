@@ -1,6 +1,6 @@
-from regelum.environment.node.base import Node, State, Inputs
-from regelum.environment.graph import Graph
-from regelum.environment.node.continuous import Pendulum
+from regelum.node.base import Node, State, Inputs
+from regelum.graph import Graph
+from regelum.node.continuous import Pendulum
 from typing import Dict, Any
 import numpy as np
 import torch

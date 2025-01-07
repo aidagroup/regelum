@@ -19,11 +19,11 @@ from typing import (
 )
 from copy import deepcopy
 
-from regelum.environment.node.interfaces.node import INode
-from regelum.environment.node.interfaces.base import IVariable, IInputs, IResolvedInputs
-from regelum.environment.node.core.variable import Variable
-from regelum.environment.node.core.inputs import Inputs, ResolvedInputs
-from regelum.environment.node.core.types import (
+from regelum.node.interfaces.node import INode
+from regelum.node.interfaces.base import IVariable, IInputs, IResolvedInputs
+from regelum.node.core.variable import Variable
+from regelum.node.core.inputs import Inputs, ResolvedInputs
+from regelum.node.core.types import (
     MetadataKey,
     default_metadata,
     Value,

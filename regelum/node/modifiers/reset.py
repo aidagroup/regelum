@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from regelum.environment.node.modifiers.base import StepModifier
-from regelum.environment.node.nodes.base import Node
+from regelum.node.modifiers.base import StepModifier
+from regelum.node.nodes.base import Node
 
 
 class ResetOnStep(StepModifier[Node]):

@@ -1,8 +1,8 @@
 import pytest
 import numpy as np
-from regelum.environment.node.nodes.base import Node
-from regelum.environment.node.nodes.graph import Graph
-from regelum.environment.node.nodes.reset import Reset
+from regelum.node.nodes.base import Node
+from regelum.node.nodes.graph import Graph
+from regelum.node.nodes.reset import Reset
 from regelum.utils import rg
 
 

@@ -3,13 +3,13 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from regelum import Node, Graph
-from regelum.environment.node.nodes.classic_control.envs.continuous.pendulum import (
+from regelum.node.nodes.classic_control.envs.continuous.pendulum import (
     Pendulum,
 )
-from regelum.environment.node.nodes.classic_control.controllers.pid import (
+from regelum.node.nodes.classic_control.controllers.pid import (
     PIDControllerBase,
 )
-from regelum.environment.node.nodes.reset import ResetEachNSteps
+from regelum.node.nodes.reset import ResetEachNSteps
 
 
 class PlotDumper(Node):
