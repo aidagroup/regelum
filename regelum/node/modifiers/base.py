@@ -50,8 +50,8 @@ class StepModifier(IStepModifier[T]):
 
         def modified_reset() -> None:
             """Modified reset that includes modifier reset."""
-            original_reset(apply_reset_modifier=True)
-            self.reset(apply_reset_modifier=True)
+            original_reset(apply_reset_modifier=False)
+            self.reset(apply_reset_modifier=False)
 
         node.modified_reset = modified_reset
         node.original_reset = original_reset

@@ -1,6 +1,6 @@
 """MPC controller demonstration."""
 
-from regelum.node.nodes.base import Node
+from regelum.node.base import Node
 from regelum.node.core.variable import Variable
 from enum import Enum
 import numpy as np
@@ -121,8 +121,8 @@ class MPCContinuous(Node):
 
         u_min = self.control_bounds[0][:, None]
         u_max = self.control_bounds[1][:, None]
-        opti.subject_to(U >= u_min)
-        opti.subject_to(U <= u_max)
+        opti.subject_to(ca.vec(U) >= ca.vec(ca.DM(np.repeat(u_min, N, axis=1))))
+        opti.subject_to(ca.vec(U) <= ca.vec(ca.DM(np.repeat(u_max, N, axis=1))))
 
         opts = {"ipopt.print_level": 0, "print_time": 0}
         opti.solver("ipopt", opts)

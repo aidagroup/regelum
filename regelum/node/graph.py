@@ -15,13 +15,13 @@ from copy import deepcopy
 from functools import reduce
 from math import gcd
 
-from regelum.node.nodes.base import Node
+from regelum.node.base import Node
 from regelum.node.core.inputs import Inputs, ResolvedInputs
 from regelum.node.interfaces.base import IVariable
 from regelum.node.interfaces.graph import IGraph
 from regelum.node.interfaces.base import IInputs
-from regelum.node.nodes.logging import Clock, StepCounter, Logger
-from regelum.node.nodes.reset import Reset
+from regelum.node.logging import Clock, StepCounter, Logger
+from regelum.node.reset import Reset
 from regelum.node.modifiers.reset import ResetOnStep
 from regelum.node.modifiers.zero_order_hold import ZeroOrderHold
 from regelum.node.core.types import ResolveStatus
@@ -29,7 +29,7 @@ from regelum.utils.logger import logger
 from regelum.utils import find_scc
 
 if TYPE_CHECKING:
-    from regelum.node.nodes.parallel import ParallelGraph
+    from regelum.node.parallel import ParallelGraph
 
 
 class Graph(Node, IGraph[Node]):
@@ -794,7 +794,7 @@ class Graph(Node, IGraph[Node]):
 
     def parallelize(self, **kwargs: Any) -> ParallelGraph:
         """Convert to parallel execution mode."""
-        from regelum.node.nodes.parallel import ParallelGraph
+        from regelum.node.parallel import ParallelGraph
 
         return ParallelGraph(self.nodes, self.debug, **kwargs)
 

@@ -3,7 +3,7 @@
 from typing import Any
 
 from regelum.node.modifiers.base import StepModifier
-from regelum.node.nodes.base import Node
+from regelum.node.base import Node
 
 
 class ResetOnStep(StepModifier[Node]):

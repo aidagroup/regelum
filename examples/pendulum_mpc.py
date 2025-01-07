@@ -1,9 +1,9 @@
-from regelum.node.nodes.classic_control.envs.continuous.pendulum import (
+from regelum.node.classic_control.envs.continuous.pendulum import (
     Pendulum,
 )
-from regelum.node.nodes.graph import Graph
-from regelum.node.nodes.classic_control.controllers.mpc import MPCContinuous
-from regelum.node.nodes.reset import ResetEachNSteps
+from regelum.node.graph import Graph
+from regelum.node.classic_control.controllers.mpc import MPCContinuous
+from regelum.node.reset import ResetEachNSteps
 import numpy as np
 
 

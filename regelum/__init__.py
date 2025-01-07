@@ -23,11 +23,11 @@ __author__ = "Regelum Team"
 __license__ = "MIT"
 
 # Core components
-from regelum.node.nodes.base import Node
+from regelum.node.base import Node
 from regelum.node.core.types import ResolveStatus
-from regelum.node.nodes.graph import Graph
-from regelum.node.nodes.logging import Clock, StepCounter, Logger
-from regelum.node.nodes.parallel import ParallelGraph
+from regelum.node.graph import Graph
+from regelum.node.logging import Clock, StepCounter, Logger
+from regelum.node.parallel import ParallelGraph
 
 
 @contextmanager

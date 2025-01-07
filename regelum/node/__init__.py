@@ -1,1 +1,1 @@
-"""Node-based computation framework."""
+"""Node implementations for building computational graphs."""

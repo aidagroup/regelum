@@ -2,7 +2,7 @@
 
 from typing import Optional, List
 
-from regelum.node.nodes.base import Node
+from regelum.node.base import Node
 from regelum.node.core.inputs import Inputs
 
 
