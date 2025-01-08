@@ -22,6 +22,8 @@ motor = DCMotor(
 
 # Create reward functions
 class MSDReward(RewardTracker):
+    """Reward function for mass-spring-damper system."""
+
     def objective_function(self, x: np.ndarray) -> float:
         return x[0] ** 2 + 0.1 * x[1] ** 2
 
@@ -31,6 +33,8 @@ class MSDReward(RewardTracker):
 
 
 class MotorReward(RewardTracker):
+    """Reward function for DC motor system."""
+
     def objective_function(self, x: np.ndarray) -> float:
         return x[0] ** 2 + 0.1 * x[1] ** 2 + 0.01 * x[2] ** 2
 

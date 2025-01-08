@@ -92,7 +92,7 @@ class DoublePendulumRenderer(PyGameRenderer):
         center = (self.dashboard_width // 2, self.dashboard_height // 2)
         scale = min(self.dashboard_width, self.dashboard_height) // 4
 
-        theta1, theta2 = self.state_variable[0:2]
+        theta1, theta2 = self.state_variable.value[0:2]
 
         x1 = center[0] + scale * np.sin(theta1)
         y1 = center[1] + scale * np.cos(theta1)
@@ -131,8 +131,8 @@ class DoublePendulumRenderer(PyGameRenderer):
         labels = [
             f"θ₁: {theta1:.2f}",
             f"θ₂: {theta2:.2f}",
-            f"ω₁: {self.state_variable[2]:.2f}",
-            f"ω₂: {self.state_variable[3]:.2f}",
+            f"ω₁: {self.state_variable.value[2]:.2f}",
+            f"ω₂: {self.state_variable.value[3]:.2f}",
         ]
         for i, label in enumerate(labels):
             text = font.render(label, True, (0, 0, 0))

@@ -10,6 +10,9 @@ from regelum.node.visualization.pygame_renderer.three_wheeled_robot import (
     ThreeWheeledRobotRenderer,
 )
 from regelum.node.visualization.pygame_renderer.dc_motor import DCMotorRenderer
+from regelum.node.visualization.pygame_renderer.double_pendulum import (
+    DoublePendulumRenderer,
+)
 
 __all__ = [
     "PyGameRenderer",
@@ -18,4 +21,5 @@ __all__ = [
     "PendulumRenderer",
     "ThreeWheeledRobotRenderer",
     "DCMotorRenderer",
+    "DoublePendulumRenderer",
 ]
