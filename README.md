@@ -4,6 +4,7 @@
 ![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Black](https://img.shields.io/badge/Black-passing-brightgreen)
 
 Regelum (German: "to control") is a powerful framework for reinforcement learning, simulation, and control systems. It provides a modular, node-based architecture for building dynamic simulation pipelines with minimal overhead.
 
@@ -174,4 +175,4 @@ If you use Regelum in your research, please cite:
 }
 ```
 
-![Black](https://img.shields.io/badge/Black-failing-red)
+

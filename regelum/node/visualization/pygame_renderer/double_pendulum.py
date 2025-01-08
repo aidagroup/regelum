@@ -76,9 +76,9 @@ class DoublePendulumRenderer(PyGameRenderer):
             reward_variable=reward_variable,
         )
         self.trail_length = trail_length
-        self.position_history: List[
-            Tuple[Tuple[float, float], Tuple[float, float]]
-        ] = []
+        self.position_history: List[Tuple[Tuple[float, float], Tuple[float, float]]] = (
+            []
+        )
 
     def _render_animation_dashboard(self) -> None:
         """Render double pendulum animation in the left dashboard."""
