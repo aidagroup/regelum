@@ -55,6 +55,8 @@ class DoublePendulumRenderer(PyGameRenderer):
         visible_history: int = 200,
         reward_variable: Optional[Variable] = None,
         trail_length: int = 50,
+        record_video: bool = False,
+        video_path: str = "my_animation.avi",
     ):
         """Initialize double pendulum renderer.
 
@@ -66,6 +68,8 @@ class DoublePendulumRenderer(PyGameRenderer):
             visible_history: Number of points visible in the plot window.
             reward_variable: Optional variable containing the reward to track.
             trail_length: Number of previous positions to show in trail (0 to disable).
+            record_video: Whether to record a video of the simulation.
+            video_path: Path to save the video.
         """
         super().__init__(
             state_variable=state_variable,
@@ -74,6 +78,8 @@ class DoublePendulumRenderer(PyGameRenderer):
             background_color=background_color,
             visible_history=visible_history,
             reward_variable=reward_variable,
+            record_video=record_video,
+            video_path=video_path,
         )
         self.trail_length = trail_length
         self.position_history: List[Tuple[Tuple[float, float], Tuple[float, float]]] = (

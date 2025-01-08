@@ -143,6 +143,8 @@ if __name__ == "__main__":
         reward_variable=reward.reward,
         show_current_flow=True,
         estimated_state_variable=ukf.state_estimate,  # Show estimated state
+        record_video=True,
+        video_path="./examples/gfx/dc_motor_ukf.avi",
     )
 
     # Configure computation graph
@@ -162,6 +164,6 @@ if __name__ == "__main__":
     graph.resolve(graph.variables)
 
     # Run simulation
-    n_steps = 10000
+    n_steps = 400
     for _ in range(n_steps):
         graph.step()

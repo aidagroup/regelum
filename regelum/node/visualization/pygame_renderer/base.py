@@ -20,6 +20,7 @@ from typing import Optional, List, Tuple, Dict, ClassVar
 import ctypes
 
 import pygame
+import cv2
 
 from regelum import Node
 from regelum import Variable
@@ -49,6 +50,7 @@ class PyGameRenderer(Node):
     - Time synchronization via FPS control
     - Resource cleanup
     - Multiple window support with automatic positioning
+    - Video recording (optional)
 
     Attributes:
         screen: PyGame display surface
@@ -57,6 +59,9 @@ class PyGameRenderer(Node):
         reward_history: Optional reward trajectory
         visible_history: Number of points to show
         dashboard_width: Width of each panel
+        record_video: Whether to record video
+        video_writer: OpenCV VideoWriter instance
+        video_path: Path to save the video
     """
 
     _initialized_pygame: ClassVar[bool] = False
@@ -74,6 +79,8 @@ class PyGameRenderer(Node):
         delayed_init: bool = False,
         window_name: Optional[str] = None,
         window_position: Optional[Tuple[int, int]] = None,
+        record_video: bool = False,
+        video_path: Optional[str] = None,
     ):
         """Initialize PyGame renderer.
 
@@ -87,6 +94,9 @@ class PyGameRenderer(Node):
             delayed_init: Whether to delay the initialization of the renderer.
             window_name: Optional name for the window. If None, uses class name.
             window_position: Optional (x, y) position for the window. If None, auto-positions.
+            record_video: Whether to record video.
+            video_path: Path to save the video. If None and record_video is True,
+                       uses 'animation_{window_name}.mp4'.
         """
         inputs = [state_variable.full_name]
         if reward_variable:
@@ -94,6 +104,53 @@ class PyGameRenderer(Node):
 
         super().__init__(inputs=inputs, name="pygame-renderer")
         self.initialized = False
+        self.record_video = record_video
+        self.video_writer = None
+
+        if record_video:
+            if video_path is None:
+                window_name = (
+                    window_name
+                    or f"{self.__class__.__name__}_{len(self.__class__._instances[self.__class__.__name__])}"
+                )
+                video_path = f"animation_{window_name}.mp4"
+            self.video_path = video_path
+
+            # Try different codecs in order of preference
+            codecs = [
+                ("avc1", ".mp4"),
+                ("H264", ".mp4"),
+                ("XVID", ".avi"),
+                ("MJPG", ".avi"),
+                ("mp4v", ".mp4"),
+            ]
+
+            for codec, ext in codecs:
+                if video_path.endswith(".mp4") or video_path.endswith(".avi"):
+                    current_path = video_path
+                else:
+                    current_path = video_path + ext
+
+                try:
+                    fourcc = cv2.VideoWriter_fourcc(*codec)
+                    writer = cv2.VideoWriter(
+                        current_path, fourcc, fps, window_size, True
+                    )
+                    if writer.isOpened():
+                        self.video_writer = writer
+                        self.video_path = current_path
+                        break
+                except Exception:
+                    if writer is not None:
+                        writer.release()
+                    continue
+
+            if self.video_writer is None:
+                print(
+                    "Warning: Could not initialize any video codec. Video recording will be disabled."
+                )
+                self.record_video = False
+
         if not delayed_init:
             if not PyGameRenderer._initialized_pygame:
                 pygame.init()
@@ -447,11 +504,30 @@ class PyGameRenderer(Node):
 
         self._render_state(state)
         self._render_reward_dashboard()
-        pygame.display.update()  # Update only this window
+        pygame.display.update()
+
+        if self.record_video and self.video_writer is not None:
+            try:
+                # Convert PyGame surface to OpenCV format
+                frame = pygame.surfarray.array3d(self.screen)
+                frame = frame.transpose([1, 0, 2])  # Transpose for correct orientation
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                self.video_writer.write(frame)
+            except Exception as e:
+                print(f"Warning: Failed to write video frame: {e}")
+                self.record_video = False
+                if self.video_writer is not None:
+                    self.video_writer.release()
+                    self.video_writer = None
+
         self.clock.tick(self.fps)
 
     def _close_window(self) -> None:
         """Clean up resources and close the window."""
+        if self.record_video and self.video_writer is not None:
+            self.video_writer.release()
+            self.video_writer = None
+
         if self.window_name in PyGameRenderer._active_windows:
             del PyGameRenderer._active_windows[self.window_name]
             self.initialized = False

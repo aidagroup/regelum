@@ -36,6 +36,8 @@ class DCMotorRenderer(PyGameRenderer):
         reward_variable: Optional[Variable] = None,
         show_current_flow: bool = True,
         estimated_state_variable: Optional[Variable] = None,
+        record_video: bool = False,
+        video_path: str = "my_animation.avi",
     ):
         """Initialize DC motor renderer.
 
@@ -48,6 +50,8 @@ class DCMotorRenderer(PyGameRenderer):
             reward_variable: Optional variable containing the reward to track
             show_current_flow: Whether to show current flow animation
             estimated_state_variable: Optional variable containing state estimates
+            record_video: Whether to record a video of the simulation
+            video_path: Path to save the video
         """
         inputs = [state_variable.full_name]
         if reward_variable:
@@ -62,6 +66,8 @@ class DCMotorRenderer(PyGameRenderer):
             background_color=background_color,
             visible_history=visible_history,
             reward_variable=reward_variable,
+            record_video=record_video,
+            video_path=video_path,
         )
         self.show_current_flow = show_current_flow
         self.current_flow_offset = 0
