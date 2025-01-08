@@ -15,7 +15,7 @@ class RewardRobot(RewardTracker):
     """Reward function for the robot."""
 
     def objective_function(self, x: NumericArray) -> float:
-        return -rg.sum(x[:3] ** 2)
+        return rg.sum(x[:3] ** 2)
 
 
 robot = ThreeWheeledRobotDynamic(

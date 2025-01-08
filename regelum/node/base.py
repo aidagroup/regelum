@@ -1,4 +1,16 @@
-"""Base node implementation module."""
+"""Base node implementation module.
+
+This module provides the foundational Node class that serves as the building block
+for computational graphs. Nodes encapsulate computation logic and manage their own
+state through variables.
+
+Key concepts:
+- Nodes are stateful computational units
+- They manage their own variables and dependencies
+- Support both continuous and discrete-time dynamics
+- Can be composed into hierarchical structures
+- Handle automatic dependency resolution
+"""
 
 from abc import abstractmethod
 from typing import (
@@ -32,13 +44,50 @@ from regelum.node.core.types import (
 
 
 class Node(INode):
-    """Base implementation of INode for computational nodes.
+    """Base implementation for computational nodes.
 
-    A node is a unit of computation that:
-    - Manages its own variables
-    - Can be reset to initial state
-    - Resolves dependencies on other nodes
-    - Executes computational steps
+    A node is a self-contained computational unit that:
+    - Manages its own variables and state
+    - Declares dependencies on other nodes
+    - Supports automatic reset behavior
+    - Can participate in continuous or discrete-time dynamics
+    - Enables hierarchical composition in graphs
+
+    The node system distinguishes between:
+    - Root nodes: Can execute without external inputs
+    - Continuous nodes: Represent continuous-time dynamics
+    - Discrete nodes: Execute at fixed time steps
+
+    Attributes:
+        _instances: Class-level registry of node instances
+        _inputs: Input dependencies configuration
+        _step_size: Time step for execution (None for event-based)
+        _is_continuous: Whether node represents continuous dynamics
+        _is_root: Whether node can execute without inputs
+        _variables: List of node's variables
+        _resolved_inputs: Actual input variables after resolution
+        _internal_name: Base name for the node
+        _external_name: Unique name including instance number
+        last_update_time: Last execution timestamp
+        _original_reset: Original reset behavior
+        _modified_reset: Modified reset behavior (e.g., for Monte Carlo)
+
+    Example:
+        ```python
+        class Pendulum(Node):
+            def __init__(self):
+                super().__init__(
+                    inputs=["controller_1.action"],
+                    is_continuous=True,
+                    step_size=0.01
+                )
+                self.state = self.define_variable("state",
+                                                value=np.array([0.0, 0.0]))
+
+            def step(self):
+                # Implement pendulum dynamics
+                pass
+        ```
     """
 
     _instances: ClassVar[Dict[str, List["Node"]]] = {}
@@ -106,13 +155,16 @@ class Node(INode):
         self._reset_with_modifier = None
 
     def _normalize_inputs(self, inputs: Optional[IInputs | List[str]]) -> IInputs:
-        """Convert inputs to Inputs instance.
+        """Convert inputs to standardized Inputs instance.
+
+        Handles different input specifications and converts them to a consistent format.
+        Supports both string lists and existing Inputs instances.
 
         Args:
-            inputs: Input specification.
+            inputs: Raw input specification (string list or Inputs instance)
 
         Returns:
-            Normalized Inputs instance.
+            Normalized Inputs instance
         """
         if not hasattr(self, "_inputs"):
             if inputs is None:
@@ -122,7 +174,12 @@ class Node(INode):
 
     @abstractmethod
     def step(self) -> None:
-        """Execute one computational step."""
+        """Execute one computational step.
+
+        This is the main computation method that must be implemented by derived nodes.
+        For continuous nodes, this typically implements numerical integration.
+        For discrete nodes, this implements the state update logic.
+        """
         pass
 
     @property
@@ -193,8 +250,40 @@ class Node(INode):
         shape: Optional[tuple[int, ...]] = None,
         reset_modifier: Optional[Callable[[Any], Any]] = None,
     ) -> IVariable:
-        """Create and register a new variable."""
+        """Create and register a new variable in this node.
+
+        This is the primary method for nodes to declare their state variables.
+        Variables are automatically tracked and can be reset to initial values.
+
+        Args:
+            name: Variable name (must be unique within the node)
+            value: Initial value
+            metadata: Additional configuration (e.g., bounds, constraints)
+            shape: Explicit shape override for symbolic computation
+            reset_modifier: Function to modify reset behavior (e.g., for randomization).
+                If provided, overrides any reset_modifier in metadata.
+
+        Returns:
+            New variable instance registered with this node
+
+        Note:
+            While reset_modifier can be specified both in metadata and as a direct
+            argument, the direct argument takes precedence if provided. This allows
+            overriding metadata-defined modifiers when needed.
+
+        Example:
+            ```python
+            # Direct modifier takes precedence
+            self.state = self.define_variable(
+                "state",
+                value=np.zeros(3),
+                metadata={"reset_modifier": lambda x: x * 2},
+                reset_modifier=lambda x: x + np.random.randn(3) * 0.1  # This one is used
+            )
+            ```
+        """
         base_meta = default_metadata()
+
         if metadata:
             typed_meta: Dict[MetadataKey, Union[Value, Shape, Callable[[Any], Any]]] = {
                 cast(MetadataKey, k): v
@@ -202,6 +291,8 @@ class Node(INode):
                 if k in MetadataKey.__args__  # type: ignore
             }
             base_meta.update(typed_meta)
+            if reset_modifier is not None:
+                base_meta["reset_modifier"] = reset_modifier
         if shape is not None:
             base_meta["shape"] = shape
         base_meta["current_value"] = value
@@ -251,10 +342,17 @@ class Node(INode):
             var.name = mapping.get(var.name, var.name)
 
     def reset(self, *, apply_reset_modifier: bool = True) -> None:
-        """Reset the node to its initial state.
+        """Reset node to initial state.
+
+        Resets all variables to their initial values, optionally applying
+        reset modifiers. This is crucial for:
+        - Monte Carlo simulations
+        - Episode-based learning
+        - Handling system restarts
 
         Args:
-            apply_reset_modifier: Whether to apply reset modifier if available.
+            apply_reset_modifier: Whether to apply reset modifiers
+                (e.g., for randomization in reinforcement learning)
         """
         if apply_reset_modifier and self._modified_reset is not None:
             self._modified_reset()
@@ -363,7 +461,22 @@ class Node(INode):
         return self.__str__()
 
     def resolve(self, variables: List[IVariable]) -> Tuple[IInputs, Set[str]]:
-        """Resolve node inputs."""
+        """Resolve node's input dependencies against available variables.
+
+        This is a crucial step in graph construction that:
+        - Maps input names to actual variable instances
+        - Validates that all required inputs are available
+        - Enables dependency checking and execution ordering
+
+        Args:
+            variables: List of all available variables in the graph
+
+        Returns:
+            Tuple of (inputs configuration, set of unresolved names)
+
+        Raises:
+            ValueError: If required inputs cannot be resolved
+        """
         resolved, unresolved = self._inputs.resolve(variables)
         self._resolved_inputs = (
             resolved if isinstance(resolved, ResolvedInputs) else None
@@ -377,13 +490,39 @@ class Node(INode):
         return self.inputs, unresolved
 
     def __deepcopy__(self, memo: Dict[int, Any]) -> Self:
-        """Create a deep copy of the node.
+        """Create an independent deep copy of the node.
+
+        This method is crucial for graph operations like cloning and parallelization.
+        It handles several complex aspects:
+
+        1. Instance Registry:
+           - Creates new instance in the class-level registry
+           - Assigns unique external name based on instance count
+
+        2. Variable Management:
+           - Deep copies all variables
+           - Updates variable node references to the new instance
+           - Preserves variable values and metadata
+
+        3. Input Handling:
+           - Clears resolved inputs (will be re-resolved in new context)
+           - Preserves input specifications for later resolution
+
+        4. State Preservation:
+           - Copies all instance attributes except special cases
+           - Maintains node configuration (continuous/root flags, step size)
 
         Args:
-            memo: Dictionary of already copied objects.
+            memo: Dictionary tracking already copied objects to handle
+                 circular references and shared objects
 
         Returns:
-            New Node instance with copied data.
+            Independent copy of the node with proper registration and naming
+
+        Example use cases:
+            - Creating parallel instances for multi-processing
+            - Cloning subgraphs for hierarchical composition
+            - Duplicating nodes for Monte Carlo simulations
         """
         cls = self.__class__
         result = cls.__new__(cls)

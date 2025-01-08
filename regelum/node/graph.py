@@ -1,4 +1,20 @@
-"""Graph node implementation module."""
+"""Graph node implementation module.
+
+This module provides the Graph class that manages collections of nodes and their execution.
+Graphs handle:
+- Node dependency resolution and execution ordering
+- Hierarchical composition of nodes
+- Time synchronization and step size management
+- Reset behavior coordination (through ResetOnStep and ZeroOrderHold modifiers)
+- Parallel execution preparation
+- Logging and debugging support
+
+Key concepts:
+- Graphs are themselves nodes, enabling hierarchical composition
+- They manage execution order based on dependencies
+- They coordinate time steps across continuous and discrete nodes
+- They support parallel execution through subgraph detection
+"""
 
 from __future__ import annotations
 from typing import (
@@ -33,7 +49,52 @@ if TYPE_CHECKING:
 
 
 class Graph(Node, IGraph[Node]):
-    """A graph of connected nodes."""
+    """A container and manager for interconnected nodes.
+
+    Graphs serve multiple crucial roles:
+    1. Dependency Management:
+       - Resolve node dependencies
+       - Determine correct execution order
+       - Validate input/output connections
+
+    2. Execution Control:
+       - Coordinate time steps
+       - Handle continuous/discrete node interactions
+       - Support parallel execution
+
+    3. State Management:
+       - Coordinate resets across nodes
+       - Handle logging and debugging
+       - Support Monte Carlo simulations
+
+    Attributes:
+        _nodes: List of managed nodes
+        _clock: Optional clock for time synchronization
+        debug: Whether to enable detailed logging
+        n_step_repeats: Number of times to repeat step execution
+        resolve_status: Current dependency resolution status
+
+    Example:
+        ```python
+        # Create nodes
+        pendulum = Pendulum()
+        controller = PDController(kp=10, kd=2)
+        reset = ResetEachNSteps("pendulum_1", n_steps=100)
+
+        # Create graph with time management
+        graph = Graph(
+            [pendulum, controller, reset],
+            initialize_inner_time=True,
+            debug=True,
+            states_to_log=["pendulum_1.state"]
+        )
+
+        # Resolve dependencies and run
+        graph.resolve(graph.variables)
+        for _ in range(1000):
+            graph.step()
+        ```
+    """
 
     _nodes: List[Node]
     _clock: Optional[Clock]
@@ -51,7 +112,44 @@ class Graph(Node, IGraph[Node]):
         logger_cooldown: float = 0.0,
         name: str = "graph",
     ) -> None:
-        """Initialize Graph node."""
+        """Initialize Graph node.
+
+        This constructor handles several crucial setup tasks:
+        1. Time Management:
+           - Computes fundamental step size from node step sizes
+           - Sets up clock if inner time tracking is requested
+           - Aligns discrete nodes with continuous time steps
+
+        2. Reset Handling:
+           - Processes reset nodes and applies modifiers
+           - Sets up reset coordination between nodes
+
+        3. Logging Setup:
+           - Configures state logging if requested
+           - Sets up logging cooldown to manage data collection
+
+        Args:
+            nodes: List of nodes to manage
+            debug: Enable detailed logging and visualization
+            n_step_repeats: Number of times to repeat step execution
+            initialize_inner_time: Whether to track time internally
+            states_to_log: List of variable names to log
+            logger_cooldown: Minimum time between log entries
+            name: Base name for the graph node
+
+        Example:
+            ```python
+            # Basic graph with time management
+            graph = Graph([node1, node2], initialize_inner_time=True)
+
+            # Graph with logging
+            graph = Graph(
+                [node1, node2],
+                states_to_log=["node1.state", "node2.output"],
+                logger_cooldown=0.1 # (real-world time in seconds between consecutive log entries)
+            )
+            ```
+        """
         super().__init__(name=name)
         fundamental_step_size = self._validate_and_set_step_sizes(nodes)
         self.step_size = fundamental_step_size
@@ -203,13 +301,46 @@ class Graph(Node, IGraph[Node]):
         self._variables = [var for node in self.nodes for var in node.variables]
 
     def step(self) -> None:
-        """Execute all nodes in sequence."""
+        """Execute all nodes in sequence.
+
+        Executes nodes in dependency order, handling:
+        - Multiple step repetitions if configured
+        - Proper execution order based on dependencies
+        - Time synchronization between nodes
+        - Logging of specified states
+
+        The execution respects:
+        - Node dependencies (inputs must be computed first)
+        - Continuous vs discrete time steps
+        - Reset triggers and modifiers
+        """
         for _ in range(self.n_step_repeats):
             for node in self.nodes:
                 node.step()
 
     def resolve(self, variables: Sequence[IVariable]) -> Tuple[IInputs, set[str]]:
-        """Resolve inputs for all nodes and determine execution order."""
+        """Resolve inputs for all nodes and determine execution order.
+
+        This is a critical setup step that:
+        1. Validates variable full name uniqueness across all nodes
+        2. Maps dependencies between nodes
+        3. Determines correct execution order
+        4. Detects circular dependencies
+
+        Args:
+            variables: All available variables for resolution
+
+        Returns:
+            Tuple of (graph inputs, unresolved variable names)
+
+        Raises:
+            ValueError: If duplicate variables or unresolvable dependencies found
+
+        Example:
+            ```python
+            graph.resolve(graph.variables)  # Setup before execution
+            ```
+        """
         var_names: Dict[str, Node] = {}
         for node in self.nodes:
             for var in node.variables:
@@ -473,7 +604,21 @@ class Graph(Node, IGraph[Node]):
         return f"Graph with {len(self.nodes)} nodes:\n{nodes_str}"
 
     def detect_subgraphs(self) -> List[List[Node]]:
-        """Detect independent subgraphs in the node network."""
+        """Detect independent subgraphs in the node network.
+
+        This method analyzes the dependency structure to:
+        1. Find strongly connected components
+        2. Identify independent execution groups
+        3. Handle root nodes separately
+
+        Returns:
+            List of node groups that can be  in principle executed independently
+
+        Example:
+            ```python
+            subgraphs = graph.detect_subgraphs()
+            ```
+        """
         subgraphs: List[List[Node]] = []
         used_nodes = set()
         name_to_node = {node.external_name: node for node in self.nodes}
@@ -568,12 +713,29 @@ class Graph(Node, IGraph[Node]):
     ) -> Graph:
         """Extract specified nodes into a single subgraph node.
 
+        This method supports hierarchical composition by:
+        1. Creating a new graph from selected nodes
+        2. Maintaining proper dependencies
+        3. Supporting nested parallelization
+
         Args:
-            node_names: List of node names to include in the subgraph
+            node_names: Names of nodes to include in subgraph
             n_step_repeats: Number of times to repeat step execution
 
         Returns:
-            Graph: The created subgraph
+            New graph containing specified nodes
+
+        Example:
+            ```python
+            # Create hierarchical structure
+            fast_graph = graph.extract_as_subgraph(
+                ["sensor1", "controller1"],
+                n_step_repeats=10
+            )
+            ```
+
+        Raises:
+            ValueError: If specified nodes don't exist
         """
         name_to_node = {node.external_name: node for node in self.nodes}
         missing = [name for name in node_names if name not in name_to_node]
