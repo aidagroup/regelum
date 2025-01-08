@@ -12,7 +12,7 @@ docs/
 │   │   └── javascripts/   # Custom JavaScript (e.g., MathJax config)
 │   ├── stylesheets/       # Custom CSS
 │   └── learn/             # Tutorial notebooks
-├── overrides/             # Theme customization for rendering 
+├── overrides/             # Theme customization for rendering
 └── README.md              # This file
 ```
 

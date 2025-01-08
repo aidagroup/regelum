@@ -174,3 +174,6 @@ mlruns/
 *.bmp
 *.tiff
 *.ico
+old_snippets/
+.cursorignore
+old_snippets/
