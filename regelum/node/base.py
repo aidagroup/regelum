@@ -296,6 +296,8 @@ class Node(INode):
         if shape is not None:
             base_meta["shape"] = shape
         base_meta["current_value"] = value
+        if reset_modifier is not None:
+            base_meta["reset_modifier"] = reset_modifier
         var = Variable(name=name, metadata=base_meta, _node_name=self.external_name)
         self._variables.append(var)
         return var

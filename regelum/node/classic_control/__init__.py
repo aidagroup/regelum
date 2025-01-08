@@ -17,7 +17,6 @@ Environments:
 3. Linear Systems:
    - Mass-spring-damper
    - DC motor
-   - Integrator chains
 
 Controllers:
 1. Classical Controllers:

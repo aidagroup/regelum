@@ -3,9 +3,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from regelum import Node, Graph
-from regelum.node.classic_control.envs.continuous.pendulum import (
-    Pendulum,
-)
+from regelum.node.classic_control.envs.continuous import Pendulum
 from regelum.node.classic_control.controllers.pid import (
     PIDControllerBase,
 )

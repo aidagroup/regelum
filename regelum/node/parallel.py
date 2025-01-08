@@ -199,6 +199,7 @@ class ParallelGraph(Graph):
         self.client = Client(self.cluster)
         self._futures_cache: Dict[Node, NodeFuture] = {}
         self.dependency_tree = self._build_dependency_graph()
+        print()
 
     def _get_node_future(self, node: Node) -> NodeFuture:
         """Create or retrieve a Dask task for node execution.
@@ -218,6 +219,8 @@ class ParallelGraph(Graph):
             Tasks are created with pure=False to ensure execution
             on every step, as node state can change between steps.
         """
+        if self.debug:
+            print(f"Getting future for {node.external_name}")
         if node in self._futures_cache:
             return self._futures_cache[node]
 
@@ -335,7 +338,11 @@ class ParallelGraph(Graph):
                         providers[f"{indexed_name}.{var.name}"] = node.external_name
 
         for node in self.nodes:
-            if node.resolved_inputs and node.resolved_inputs.inputs:
+            if (
+                node.resolved_inputs
+                and node.resolved_inputs.inputs
+                and not node.is_root
+            ):
                 for input_var in node.resolved_inputs.inputs:
                     input_name = input_var.full_name
                     if input_name in providers:

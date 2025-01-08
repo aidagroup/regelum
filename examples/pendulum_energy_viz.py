@@ -1,8 +1,10 @@
-"""Example of pendulum control using LQR with visualization."""
+"""Example of pendulum swing-up using energy-based control."""
 
 import numpy as np
 from regelum.node.classic_control.envs.continuous import Pendulum
-from regelum.node.classic_control.controllers.lqr import LQRController
+from regelum.node.classic_control.controllers.energy_based import (
+    EnergyBasedSwingUpController,
+)
 from regelum.node.visualization.pygame_renderer import PendulumRenderer
 from regelum.node.graph import Graph
 from regelum.node.reset import ResetEachNSteps
@@ -21,25 +23,31 @@ class RewardPendulum(RewardTracker):
         return float(4 * angle_error**2 + x[1] ** 2)
 
 
+# Create pendulum system
 pendulum = Pendulum(
-    control_signal_name="lqr_1.action", initial_state=np.array([np.pi, 0.0])
+    control_signal_name="energy_swing_up_1.action",
+    initial_state=np.array([np.pi, 0.0]),  # Start from downward position
 )
 
+# Create reward tracker
 reward_tracker = RewardPendulum(state_variable=pendulum.state)
 
-A = np.array([[0, 1], [-3 * pendulum.gravity_acceleration / (2 * pendulum.length), 0]])
-B = np.array([[0], [1 / pendulum.mass]])
-Q = np.diag([10.0, 1.0])
-R = np.array([[0.1]])
-
-lqr = LQRController(
+# Create energy-based controller with friction compensation
+controller = EnergyBasedSwingUpController(
     controlled_state=pendulum.state,
-    system_matrices=(A, B),
-    cost_matrices=(Q, R),
+    pendulum_params={
+        "mass": pendulum.mass,
+        "length": pendulum.length,
+        "gravity": pendulum.gravity_acceleration,
+        "friction": 0,  # Add friction coefficient
+    },
     control_limits=(-10.0, 10.0),
-    step_size=0.01,
+    gain=2.0,
+    pd_gains=(10.0, 1.0),  # Tune PD gains for stabilization
+    switch_threshold=0.95,  # cos(theta) ≈ 18 degrees from vertical
 )
 
+# Create visualization
 viz = PendulumRenderer(
     state_variable=pendulum.state,
     fps=60.0,
@@ -48,17 +56,19 @@ viz = PendulumRenderer(
     reward_variable=reward_tracker.reward,
 )
 
+# Create reset node
 reset_node = ResetEachNSteps(
     node_name_to_reset=pendulum.external_name,
     n_steps=1000,
 )
 
+# Create and configure graph
 graph = Graph(
-    [pendulum, lqr, viz, reset_node, reward_tracker],
+    [pendulum, controller, viz, reset_node, reward_tracker],
     initialize_inner_time=True,
     states_to_log=[
         pendulum.state.full_name,
-        lqr.action.full_name,
+        controller.action.full_name,
         reward_tracker.reward.full_name,
         "step_counter_1.counter",
     ],
@@ -66,6 +76,7 @@ graph = Graph(
 )
 graph.resolve(graph.variables)
 
+# Run simulation
 n_steps = 5000
 for _ in range(n_steps):
     graph.step()

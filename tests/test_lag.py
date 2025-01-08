@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from regelum.node.memory.lag import Lag
-from regelum.node.classic_control.envs.continuous.pendulum import Pendulum
+from regelum.node.classic_control.envs.continuous import Pendulum
 from regelum.node.classic_control.controllers.mpc import MPCContinuous
 from regelum.node.graph import Graph
 from regelum.node.base import Node

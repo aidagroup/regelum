@@ -1,6 +1,4 @@
-from regelum.node.classic_control.envs.continuous.pendulum import (
-    Pendulum,
-)
+from regelum.node.classic_control.envs.continuous import Pendulum
 from regelum.node.graph import Graph
 from regelum.node.classic_control.controllers.mpc import MPCContinuous
 from regelum.node.reset import ResetEachNSteps

@@ -1,4 +1,4 @@
-from regelum.node.classic_control.envs.continuous.kin_point import KinematicPoint
+from regelum.node.classic_control.envs.continuous import KinematicPoint
 from regelum.node.graph import Graph
 from regelum.node.classic_control.controllers.mpc import MPCContinuous
 from regelum.node.reset import ResetEachNSteps

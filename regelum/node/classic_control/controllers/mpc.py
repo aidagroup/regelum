@@ -29,7 +29,6 @@ class MPCContinuous(Node):
         control_bounds: Tuple[np.ndarray, np.ndarray],
         step_size: float = 0.01,
         prediction_horizon: int = 3,
-        engine: Engine = Engine.CASADI,
         name: str = "mpc",
     ):
         """Initialize MPC controller.
@@ -57,7 +56,6 @@ class MPCContinuous(Node):
         self.controlled_state = controlled_state
         self.control_dimension = control_dimension
         self.prediction_horizon = prediction_horizon
-        self.engine = engine
         self.objective_function = objective_function
         self.control_bounds = control_bounds
         self.optimization_problem: Callable[[np.ndarray], np.ndarray] = (
@@ -127,12 +125,16 @@ class MPCContinuous(Node):
         opts = {"ipopt.print_level": 0, "print_time": 0}
         opti.solver("ipopt", opts)
 
-        def solve_mpc(current_state: np.ndarray) -> np.ndarray:
-            opti.set_value(x0, current_state)
-            sol = opti.solve()
-            return sol.value(U[:, 0])
+        self.opti = opti
+        self.x0 = x0
+        self.U = U
 
-        return solve_mpc
+        return self.solve_mpc
+
+    def solve_mpc(self, current_state: np.ndarray) -> np.ndarray:
+        self.opti.set_value(self.x0, current_state)
+        sol = self.opti.solve()
+        return sol.value(self.U[:, 0])
 
     def step(self) -> None:
         if self.resolved_inputs is None:

@@ -17,9 +17,12 @@ class ResetOnStep(StepModifier[Node]):
             reset_semaphore: Node that triggers resets.
         """
         super().__init__()
-        if reset_semaphore.name.split("_")[1] != node.name:
+        if (
+            "_".join(reset_semaphore.external_name.split("_")[1:-1])
+            != node.external_name
+        ):
             raise ValueError(
-                f"Reset semaphore {reset_semaphore.name} must be the same as the node {node.name}."
+                f"Reset semaphore {'_'.join(reset_semaphore.external_name.split('_')[1:-1])} must be the same as the node {node.external_name}."
             )
         self._node = node
         self._step_function = node.step

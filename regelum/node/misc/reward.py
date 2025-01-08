@@ -17,7 +17,7 @@ class RewardTracker(Node, ABC):
         """
         super().__init__(
             inputs=[state_variable.full_name],
-            name="reward_tracker",
+            name=self.name,
             is_continuous=False,
             step_size=0,
         )
@@ -27,6 +27,12 @@ class RewardTracker(Node, ABC):
             value=0.0,
             shape=(1,),
         )
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Name of the reward tracker."""
+        pass
 
     @abstractmethod
     def objective_function(self, x: NumericArray) -> float:

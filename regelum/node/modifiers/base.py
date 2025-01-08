@@ -30,6 +30,11 @@ class StepModifier(IStepModifier[T]):
     def node(self) -> T:
         return self._node
 
+    def modified_reset(self) -> None:
+        """Modified reset that includes modifier reset."""
+        self.original_reset(apply_reset_modifier=False)
+        self.reset(apply_reset_modifier=False)
+
     def bind_to_node(self, node: T) -> None:
         """Bind the modifier to a node.
 
@@ -42,16 +47,11 @@ class StepModifier(IStepModifier[T]):
             node: Node to modify.
         """
         self._node = node
-        original_reset = node.reset
+        self.original_reset = node.reset
 
         # Create bound method for step
         bound_call = self.__call__.__get__(self, self.__class__)
         node.step = bound_call  # type: ignore
 
-        def modified_reset() -> None:
-            """Modified reset that includes modifier reset."""
-            original_reset(apply_reset_modifier=False)
-            self.reset(apply_reset_modifier=False)
-
-        node.modified_reset = modified_reset
-        node.original_reset = original_reset
+        node.modified_reset = self.modified_reset
+        node.original_reset = self.original_reset

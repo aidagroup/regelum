@@ -1,8 +1,6 @@
 from regelum.node.base import Node
 from regelum.node.graph import Graph
-from regelum.node.classic_control.envs.continuous.pendulum import (
-    Pendulum,
-)
+from regelum.node.classic_control.envs.continuous import Pendulum
 import numpy as np
 import matplotlib
 

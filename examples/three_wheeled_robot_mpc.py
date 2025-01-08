@@ -1,6 +1,4 @@
-from regelum.node.classic_control.envs.continuous.three_wheeled_robot import (
-    ThreeWheeledRobotKinematic,
-)
+from regelum.node.classic_control.envs.continuous import ThreeWheeledRobotKinematic
 from regelum.node.graph import Graph
 from regelum.node.classic_control.controllers.mpc import MPCContinuous
 from regelum.node.reset import ResetEachNSteps
