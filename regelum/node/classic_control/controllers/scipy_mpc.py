@@ -4,7 +4,7 @@ import numpy as np
 from typing import Callable, Tuple
 from scipy.optimize import minimize
 from regelum.node.base import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 
 
 class MPCContinuous(Node):

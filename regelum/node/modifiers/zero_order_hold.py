@@ -4,7 +4,7 @@ from typing import Optional, final, Any
 import numpy as np
 from regelum.node.modifiers.base import StepModifier
 from regelum.node.interfaces.node import INode
-from regelum.node.core.variable import Variable
+from regelum import Variable
 
 
 @final

@@ -19,7 +19,7 @@ The module follows the Node architecture, where each output node:
 """
 
 from regelum import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 from regelum.node.core.types import NumericArray
 from typing import Optional, List
 import numpy as np
@@ -45,17 +45,20 @@ class Output(Node):
         ```
     """
 
-    def __init__(self, observing_variable: Variable, name: Optional[str] = None):
+    def __init__(
+        self, observing_variable: Variable, name: Optional[str] = None, suffix=""
+    ):
         """Initialize output node.
 
         Args:
             observing_variable: Variable to observe
             name: Optional name for the node
+            suffix: Optional suffix for the observed variable
         """
         super().__init__(name=name, inputs=[observing_variable.full_name])
         self.observing_variable = observing_variable
         self.observed_value = self.define_variable(
-            name=f"{observing_variable.name}@observed",
+            name=f"{observing_variable.name}@observed" + suffix,
             value=self.observe(self.observing_variable.value),
         )
 
@@ -113,7 +116,7 @@ class OutputWithNoise(Output):
             name: Optional name for the node
         """
         self.noise_std = noise_std
-        super().__init__(observing_variable, name)
+        super().__init__(observing_variable, name, suffix="-noisy")
 
     def observe(self, value: NumericArray) -> NumericArray:
         """Add Gaussian noise to the observation.
@@ -163,7 +166,7 @@ class OutputPartial(Output):
             name: Optional name for the node
         """
         self.observed_indices = observed_indices
-        super().__init__(observing_variable, name)
+        super().__init__(observing_variable, name, suffix="-partial")
 
     def observe(self, value: NumericArray) -> NumericArray:
         """Select specified components of the observation.

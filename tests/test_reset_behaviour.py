@@ -1,3 +1,5 @@
+"""Test reset behaviour."""
+
 import pytest
 import numpy as np
 from regelum.node.base import Node

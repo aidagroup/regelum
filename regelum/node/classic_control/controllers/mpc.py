@@ -1,7 +1,7 @@
 """MPC controller demonstration."""
 
 from regelum.node.base import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 from enum import Enum
 import numpy as np
 from typing import Callable, Tuple

@@ -1,3 +1,5 @@
+"""Test pendulum integration."""
+
 import pytest
 import numpy as np
 from typing import cast

@@ -12,7 +12,7 @@ the pendulum's state relative to the upright position.
 import numpy as np
 from typing import List
 from regelum.node.base import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 from regelum.node.core.types import NumericArray
 from regelum.node.classic_control.envs.continuous.pendulum_motor import (
     PendulumWithMotor,

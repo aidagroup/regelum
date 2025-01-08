@@ -1,3 +1,5 @@
+"""Kinematic point MPC example."""
+
 from regelum.node.classic_control.envs.continuous import KinematicPoint
 from regelum.node.graph import Graph
 from regelum.node.classic_control.controllers.mpc import MPCContinuous

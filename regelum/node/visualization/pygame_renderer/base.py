@@ -23,7 +23,7 @@ import pygame
 import numpy as np
 
 from regelum import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 from regelum.node.core.types import NumericArray
 
 

@@ -3,7 +3,7 @@
 from typing import Optional, Tuple
 import numpy as np
 from regelum.node.base import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 
 
 def hard_switch(signal1: float, signal2: float, condition: bool) -> float:
@@ -84,7 +84,10 @@ class EnergyBasedSwingUpController(Node):
 
     def _compute_energy(self, state: np.ndarray) -> float:
         """Compute total mechanical energy of the pendulum."""
-        theta, omega, x = state
+        if len(state) == 2:
+            theta, omega = state
+        else:
+            theta, omega, x = state
 
         # Kinetic energy
         T = 0.5 * self.moment_inertia * omega**2
@@ -104,7 +107,10 @@ class EnergyBasedSwingUpController(Node):
             return
 
         state = state_var.value
-        theta, omega, x = state
+        if len(state) == 2:
+            theta, omega = state
+        else:
+            theta, omega, x = state
 
         # Energy shaping with friction compensation
         energy = self._compute_energy(state)

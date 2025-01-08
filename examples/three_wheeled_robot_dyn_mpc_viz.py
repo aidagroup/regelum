@@ -1,3 +1,5 @@
+"""Three wheeled robot dynamic MPC example."""
+
 from regelum.node.classic_control.envs.continuous import ThreeWheeledRobotDynamic
 from regelum.node.graph import Graph
 from regelum.node.classic_control.controllers.mpc import MPCContinuous
@@ -11,6 +13,10 @@ from regelum.utils import NumericArray
 
 class RewardRobot(RewardTracker):
     """Reward function for the robot."""
+
+    @property
+    def name(self) -> str:
+        return "reward_robot"
 
     def objective_function(self, x: NumericArray) -> float:
         return rg.sum(x[:3] ** 2)

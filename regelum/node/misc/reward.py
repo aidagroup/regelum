@@ -1,7 +1,7 @@
 """Reward tracker node implementation module."""
 
 from regelum.node.base import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 from abc import ABC, abstractmethod
 from regelum.utils import NumericArray
 

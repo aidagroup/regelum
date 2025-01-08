@@ -4,7 +4,7 @@ from typing import Dict, List
 import numpy as np
 
 from regelum.node.base import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 
 
 class DataBuffer(Node):

@@ -1,3 +1,5 @@
+"""Test zero order hold functionality."""
+
 import pytest
 import numpy as np
 from regelum.node.base import Node

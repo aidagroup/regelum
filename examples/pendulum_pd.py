@@ -1,3 +1,5 @@
+"""Pendulum PD example."""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -57,7 +59,9 @@ n_steps = 1000
 
 
 pendulum = Pendulum(control_signal_name="pid_controller_1.control_signal")
-pd_controller = PIDControllerBase(pendulum.state, 0, kp=20, ki=0, kd=20, step_size=0.01)
+pd_controller = PIDControllerBase(
+    pendulum.state, idx_controlled_state=0, kp=20, ki=0, kd=20, step_size=0.01
+)
 reset_pendulum = ResetEachNSteps(node_name_to_reset=pendulum.external_name, n_steps=100)
 plot_dumper = PlotDumper(n_steps=n_steps)
 graph = Graph(

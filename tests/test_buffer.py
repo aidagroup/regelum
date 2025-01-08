@@ -1,3 +1,5 @@
+"""Test buffer functionality."""
+
 import numpy as np
 import pytest
 

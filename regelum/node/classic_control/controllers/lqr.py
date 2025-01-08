@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 import numpy as np
 from scipy import linalg
 from regelum.node.base import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 
 
 class LQRController(Node):

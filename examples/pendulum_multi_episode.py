@@ -1,49 +1,12 @@
 from regelum.node.base import Node
 from regelum.node.graph import Graph
 from regelum.node.classic_control.envs.continuous import Pendulum
+from regelum.node.classic_control.controllers.pid import PIDControllerBase
 import numpy as np
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
-
-class PendulumPDController(Node):
-    """PD controller for pendulum."""
-
-    def __init__(
-        self, kp: float = 0.01, kd: float = 0.01, step_size: float = 0.01
-    ) -> None:
-        """Initialize PD controller.
-
-        Args:
-            kp: Proportional gain
-            kd: Derivative gain
-            step_size: Control update interval
-        """
-        super().__init__(
-            inputs=["pendulum_1.state"],
-            step_size=step_size,
-            is_continuous=False,
-            name="controller",
-        )
-
-        self.kp = kp
-        self.kd = kd
-
-        # Control output
-        self.action = self.define_variable(
-            "action",
-            value=np.array([0.0]),
-            metadata={"shape": (1,)},
-        )
-
-    def step(self) -> None:
-        """Compute control action using PD law."""
-        pendulum_state = self.resolved_inputs.find("pendulum.state").value
-        angle = pendulum_state[0]
-        angular_velocity = pendulum_state[1]
-        self.action.value[0] = -self.kp * angle - self.kd * angular_velocity
 
 
 class DataBuffer(Node):
@@ -107,21 +70,27 @@ class PlotDumper(Node):
 
 def main():
 
-    controller = PendulumPDController(kp=10, kd=10, step_size=0.01)
     pendulum = Pendulum(
-        control_signal_name=controller.action.full_name,
+        control_signal_name="pid_controller_1.control_signal",
         state_reset_modifier=lambda x: x + np.random.randn(2) * 0.1,
+    )
+    controller = PIDControllerBase(
+        controlled_state=pendulum.state,
+        idx_controlled_state=0,
+        kp=10,
+        ki=0.0,
+        kd=10,
+        step_size=0.01,
     )
     data_buffer = DataBuffer(step_size=0.01, buffer_size=300)
 
-    # Create initial graph
     nodes = [pendulum, controller, data_buffer]
     graph = Graph(
         nodes,
         debug=True,
         initialize_inner_time=True,
         states_to_log=["pendulum_1.state"],
-        logger_cooldown=0.1,
+        logger_cooldown=0.0,
     )
     graph.resolve(graph.variables)
     subgraph = graph.extract_as_subgraph(
@@ -129,11 +98,11 @@ def main():
             "step_counter_1",
             "clock_1",
             "pendulum_1",
-            "controller_1",
+            "pid_controller_1",
             "buffer_1",
             "logger_1",
         ],
-        n_step_repeats=300,
+        n_step_repeats=100,
     )
 
     for node in subgraph.nodes:
@@ -148,6 +117,7 @@ def main():
 
     plot_dumper = PlotDumper(n_trajectories=5, step_size=0.01)
     graph.insert_node(plot_dumper)
+    # graph.step()
     parallel_graph = graph.parallelize()
     parallel_graph.step()
     graph.print_info()
