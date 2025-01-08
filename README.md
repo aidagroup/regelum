@@ -26,7 +26,7 @@ Regelum (German: "to control") is a powerful framework for reinforcement learnin
 
 - **🚀 Production Ready**
   - Type-checked with MyPy
-  - Comprehensive linting (Pylint score: 9.23/10)
+  - Comprehensive linting (Pylint score: 9.5+/10)
   - Pre-commit hooks for code quality
   - Extensive documentation
 
