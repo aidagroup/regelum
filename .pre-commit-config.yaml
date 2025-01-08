@@ -49,3 +49,10 @@ repos:
         language: script
         pass_filenames: false
         stages: [commit]
+
+      - id: black-badge
+        name: "Black Badge"
+        entry: scripts/update_black_badge.sh
+        language: script
+        pass_filenames: false
+        stages: [commit]

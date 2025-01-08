@@ -173,3 +173,5 @@ If you use Regelum in your research, please cite:
   url = {https://github.com/aidagroup/regelum}
 }
 ```
+
+![Black](https://img.shields.io/badge/Black-failing-red)
