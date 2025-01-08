@@ -15,13 +15,16 @@ Key features:
 - Multiple window support
 """
 
+import os
 from typing import Optional, List, Tuple, Dict, ClassVar
+import ctypes
+
 import pygame
 import numpy as np
+
 from regelum import Node
 from regelum.node.core.variable import Variable
 from regelum.node.core.types import NumericArray
-import os
 
 
 class PyGameRenderer(Node):
@@ -127,8 +130,6 @@ class PyGameRenderer(Node):
             # Set window position after creation
             if hasattr(pygame.display, "get_wm_info"):
                 try:
-                    import ctypes
-
                     if os.name == "nt":  # Windows
                         hwnd = pygame.display.get_wm_info()["window"]
                         ctypes.windll.user32.SetWindowPos(
@@ -143,9 +144,8 @@ class PyGameRenderer(Node):
                     else:  # Linux/X11
                         wminfo = pygame.display.get_wm_info()
                         if "window" in wminfo:
-                            os.environ["SDL_VIDEO_WINDOW_POS"] = (
-                                f"{window_position[0]},{window_position[1]}"
-                            )
+                            pos_str = f"{window_position[0]},{window_position[1]}"
+                            os.environ["SDL_VIDEO_WINDOW_POS"] = pos_str
                             pygame.display.set_mode(
                                 window_size, pygame.RESIZABLE | pygame.SHOWN
                             )
@@ -182,23 +182,9 @@ class PyGameRenderer(Node):
         if not self.state_history:
             self.state_history = [[] for _ in range(state_dim)]
 
-    def _render_animation_dashboard(self, state: NumericArray) -> None:
-        """Render left dashboard with custom animation if implemented.
-
-        Args:
-            state: Current state vector.
-        """
-        # Draw dashboard border
-        pygame.draw.rect(
-            self.screen,
-            (200, 200, 200),
-            (0, 0, self.dashboard_width, self.dashboard_height),
-            2,
-        )
-        # Default implementation is empty
-        text = self.font.render("Animation Dashboard", True, (0, 0, 0))
-        text_rect = text.get_rect(center=(self.dashboard_width // 2, 30))
-        self.screen.blit(text, text_rect)
+    def _render_animation_dashboard(self) -> None:
+        """Base animation dashboard. Override in subclasses."""
+        pass
 
     def _render_plots_dashboard(self, state: NumericArray) -> None:
         """Render right dashboard with state evolution plots.
@@ -424,7 +410,7 @@ class PyGameRenderer(Node):
         Args:
             state: System state vector.
         """
-        self._render_animation_dashboard(state)
+        self._render_animation_dashboard()
         self._render_plots_dashboard(state)
 
     def step(self) -> None:
@@ -437,11 +423,10 @@ class PyGameRenderer(Node):
             if event.type == pygame.QUIT:
                 self._close_window()
                 return
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:  # Allow closing with ESC
-                    self._close_window()
-                    return
-            elif event.type == pygame.VIDEORESIZE:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self._close_window()
+                return
+            if event.type == pygame.VIDEORESIZE:
                 self.window_size = (event.w, event.h)
                 self.screen = pygame.display.set_mode(
                     self.window_size, pygame.RESIZABLE | pygame.SHOWN
@@ -506,11 +491,11 @@ class PendulumRenderer(PyGameRenderer):
 
     def _render_state(self, state: NumericArray) -> None:
         # Override animation dashboard with pendulum
-        self._render_animation_dashboard(state)
+        self._render_animation_dashboard()
         # Use parent's plot dashboard
         self._render_plots_dashboard(state)
 
-    def _render_animation_dashboard(self, state: NumericArray) -> None:
+    def _render_animation_dashboard(self) -> None:
         """Render pendulum animation in the left dashboard."""
         pygame.draw.rect(
             self.screen,
@@ -521,7 +506,7 @@ class PendulumRenderer(PyGameRenderer):
 
         center = (self.dashboard_width // 2, self.dashboard_height // 2)
         length = 200
-        angle = state[0]
+        angle = self.state_variable[0]
 
         end_pos = (
             center[0] + length * np.sin(angle),
@@ -559,10 +544,10 @@ class KinematicPointRenderer(PyGameRenderer):
     """
 
     def _render_state(self, state: NumericArray) -> None:
-        self._render_animation_dashboard(state)
+        self._render_animation_dashboard()
         self._render_plots_dashboard(state)
 
-    def _render_animation_dashboard(self, state: NumericArray) -> None:
+    def _render_animation_dashboard(self) -> None:
         """Render point animation in the left dashboard."""
         pygame.draw.rect(
             self.screen,
@@ -572,8 +557,8 @@ class KinematicPointRenderer(PyGameRenderer):
         )
 
         scale = 100
-        x = self.dashboard_width // 2 + int(state[0] * scale)
-        y = self.dashboard_height // 2 - int(state[1] * scale)
+        x = self.dashboard_width // 2 + int(self.state_variable[0] * scale)
+        y = self.dashboard_height // 2 - int(self.state_variable[1] * scale)
 
         pygame.draw.line(
             self.screen,
@@ -623,7 +608,7 @@ class ThreeWheeledRobotRenderer(PyGameRenderer):
         ```
     """
 
-    def _render_animation_dashboard(self, state: NumericArray) -> None:
+    def _render_animation_dashboard(self) -> None:
         """Render robot animation in the left dashboard.
 
         Args:
@@ -641,9 +626,9 @@ class ThreeWheeledRobotRenderer(PyGameRenderer):
         self.screen.blit(text, text_rect)
 
         scale = 100
-        x = self.dashboard_width // 2 + int(state[0] * scale)
-        y = self.dashboard_height // 2 - int(state[1] * scale)
-        angle = state[2]
+        x = self.dashboard_width // 2 + int(self.state_variable[0] * scale)
+        y = self.dashboard_height // 2 - int(self.state_variable[1] * scale)
+        angle = self.state_variable[2]
 
         pygame.draw.line(
             self.screen,
@@ -701,7 +686,7 @@ class CartPoleRenderer(PyGameRenderer):
     - Right (optional): Reward evolution
     """
 
-    def _render_animation_dashboard(self, state: np.ndarray) -> None:
+    def _render_animation_dashboard(self) -> None:
         """Render cart-pole animation in the left dashboard."""
         pygame.draw.rect(
             self.screen,
@@ -723,7 +708,7 @@ class CartPoleRenderer(PyGameRenderer):
 
         # Cart position (constrained to visible area)
         cart_x = np.clip(
-            center_x + int(state[1] * scale),
+            center_x + int(self.state_variable[1] * scale),
             cart_width // 2 + 50,
             self.dashboard_width - cart_width // 2 - 50,
         )
@@ -766,8 +751,8 @@ class CartPoleRenderer(PyGameRenderer):
         )
 
         pendulum_end = (
-            cart_x + pendulum_length * np.sin(state[0]),
-            cart_y - pendulum_length * np.cos(state[0]),
+            cart_x + pendulum_length * np.sin(self.state_variable[0]),
+            cart_y - pendulum_length * np.cos(self.state_variable[0]),
         )
         pygame.draw.line(
             self.screen,
@@ -848,7 +833,7 @@ class DoublePendulumRenderer(PyGameRenderer):
             Tuple[Tuple[float, float], Tuple[float, float]]
         ] = []
 
-    def _render_animation_dashboard(self, state: NumericArray) -> None:
+    def _render_animation_dashboard(self) -> None:
         """Render double pendulum animation in the left dashboard."""
         pygame.draw.rect(
             self.screen,
@@ -860,7 +845,7 @@ class DoublePendulumRenderer(PyGameRenderer):
         center = (self.dashboard_width // 2, self.dashboard_height // 2)
         scale = min(self.dashboard_width, self.dashboard_height) // 4
 
-        theta1, theta2 = state[0:2]
+        theta1, theta2 = self.state_variable[0:2]
 
         x1 = center[0] + scale * np.sin(theta1)
         y1 = center[1] + scale * np.cos(theta1)
@@ -899,8 +884,8 @@ class DoublePendulumRenderer(PyGameRenderer):
         labels = [
             f"θ₁: {theta1:.2f}",
             f"θ₂: {theta2:.2f}",
-            f"ω₁: {state[2]:.2f}",
-            f"ω₂: {state[3]:.2f}",
+            f"ω₁: {self.state_variable[2]:.2f}",
+            f"ω₂: {self.state_variable[3]:.2f}",
         ]
         for i, label in enumerate(labels):
             text = font.render(label, True, (0, 0, 0))
@@ -1021,7 +1006,7 @@ class DCMotorRenderer(PyGameRenderer):
             ),
         )
 
-    def _render_animation_dashboard(self, state: NumericArray) -> None:
+    def _render_animation_dashboard(self) -> None:
         """Render DC motor animation in the left dashboard."""
         # Draw dashboard border
         pygame.draw.rect(
@@ -1036,7 +1021,7 @@ class DCMotorRenderer(PyGameRenderer):
         true_center_x = self.dashboard_width // 3
         true_center_y = self.dashboard_height // 2
         self._render_motor(
-            state,
+            self.state_variable.value,
             true_center_x,
             true_center_y,
             motor_radius,
@@ -1068,7 +1053,11 @@ class DCMotorRenderer(PyGameRenderer):
             )
 
         font = pygame.font.SysFont("Arial", 16)
-        theta, omega, current = state[0], state[1], state[2]
+        theta, omega, current = (
+            self.state_variable.value[0],
+            self.state_variable.value[1],
+            self.state_variable.value[2],
+        )
         labels = [
             f"θ: {theta:.2f} rad",
             f"ω: {omega:.2f} rad/s",
