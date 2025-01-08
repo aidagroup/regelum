@@ -1,8 +1,9 @@
 """Reward tracker node implementation module."""
 
+from abc import ABC, abstractmethod
+
 from regelum.node.base import Node
 from regelum import Variable
-from abc import ABC, abstractmethod
 from regelum.utils import NumericArray
 
 
@@ -32,12 +33,10 @@ class RewardTracker(Node, ABC):
     @abstractmethod
     def name(self) -> str:
         """Name of the reward tracker."""
-        pass
 
     @abstractmethod
     def objective_function(self, x: NumericArray) -> float:
         """Objective function to compute reward."""
-        pass
 
     def step(self) -> None:
         self.reward.value = self.objective_function(
