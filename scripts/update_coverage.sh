@@ -2,7 +2,7 @@
 set -eu
 
 # 1) Run tests locally with coverage
-pytest --cov=regelum --cov-report=term-missing tests/ | tee coverage.txt
+python -m pytest --cov=regelum --cov-config=.coveragerc . | tee coverage.txt
 
 # 2) Extract coverage percentage from the line containing "TOTAL"
 COVERAGE=$(grep "TOTAL" coverage.txt | awk '{print $NF}' | sed 's/%//')

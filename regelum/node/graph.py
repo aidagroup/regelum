@@ -344,7 +344,7 @@ class Graph(Node, IGraph[Node]):
         var_names: Dict[str, Node] = {}
         for node in self.nodes:
             for var in node.variables:
-                full_name = f"{node.external_name}.{var.name}"
+                full_name = var.full_name
                 if full_name in var_names:
                     self.resolve_status = ResolveStatus.FAILURE
                     raise ValueError(
@@ -356,9 +356,7 @@ class Graph(Node, IGraph[Node]):
 
         dependencies: Dict[str, Set[str]] = {}
         providers = {
-            f"{node.external_name}.{var.name}": node
-            for node in self.nodes
-            for var in node.variables
+            var.full_name: node for node in self.nodes for var in node.variables
         }
 
         for node in self.nodes:

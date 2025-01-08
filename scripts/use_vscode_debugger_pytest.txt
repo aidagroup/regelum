@@ -1,0 +1,7 @@
+Add this into your .vscode/settings.json file:
+
+```json
+{
+    "python.testing.pytestArgs": ["tests", "--import-mode=importlib", "--no-cov"]
+}
+```

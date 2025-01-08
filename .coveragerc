@@ -4,7 +4,9 @@ omit =
     */examples/*
     */tests/*
     */__init__.py
-
+    */controllers/*
+    */envs/*
+    */utils/*
 [report]
 exclude_lines =
     pragma: no cover

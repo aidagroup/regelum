@@ -177,3 +177,4 @@ mlruns/
 old_snippets/
 .cursorignore
 old_snippets/
+coverage.txt
