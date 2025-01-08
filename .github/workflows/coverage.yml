@@ -1,0 +1,81 @@
+name: Test Coverage
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to commit changes to README
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install poetry
+        poetry install --with dev
+
+    - name: Run tests with coverage
+      run: |
+        poetry run pytest --cov=regelum --cov-report=term-missing tests/ | tee ./coverage.txt
+        
+        # Extract coverage percentage
+        COVERAGE=$(grep "TOTAL" coverage.txt | awk '{print $NF}' | sed 's/%//')
+        
+        # If extraction fails, default to 0
+        if [ -z "$COVERAGE" ]; then
+          COVERAGE="0"
+        fi
+        
+        echo "Raw coverage output:"
+        cat ./coverage.txt
+        
+        echo "Extracted coverage: $COVERAGE%"
+        echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+
+    - name: Update README badge
+      if: ${{ github.event_name == 'push' }}
+      run: |
+        # Determine color based on coverage thresholds
+        if [ $(echo "$COVERAGE >= 90" | bc -l) -eq 1 ]; then
+          COLOR="brightgreen"
+        elif [ $(echo "$COVERAGE >= 80" | bc -l) -eq 1 ]; then
+          COLOR="green"
+        elif [ $(echo "$COVERAGE >= 70" | bc -l) -eq 1 ]; then
+          COLOR="yellow"
+        else
+          COLOR="red"
+        fi
+        
+        echo "Coverage: $COVERAGE%, Color: $COLOR"
+        
+        # Replace or add coverage badge in README
+        SEARCH='!\[Coverage\]\(https://img\.shields\.io/badge/coverage-[0-9.]*%25-[a-z]*\)'
+        REPLACE="![Coverage](https://img.shields.io/badge/coverage-${COVERAGE}%25-${COLOR})"
+        
+        if grep -q "!\[Coverage\]" README.md; then
+          sed -i -E "s|$SEARCH|$REPLACE|g" README.md
+        else
+          # If badge doesn't exist, add it after the first badge
+          sed -i "0,/!\[.*\].*)/s//&\n$REPLACE/" README.md
+        fi
+        
+        git config --global user.name 'GitHub Action'
+        git config --global user.email 'action@github.com'
+        git add README.md
+        
+        git commit -m "Update coverage badge to ${COVERAGE}%" || echo "No changes to commit"
+        git push 

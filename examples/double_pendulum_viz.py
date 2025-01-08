@@ -54,7 +54,7 @@ if __name__ == "__main__":
     # Create visualization with motion trails
     viz = DoublePendulumRenderer(
         state_variable=pendulum.state,
-        fps=80.0,
+        fps=15.0,
         window_size=(1200, 600),
         visible_history=1000,
         reward_variable=reward.reward,

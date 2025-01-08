@@ -42,7 +42,7 @@ lqr = LQRController(
 
 viz = PendulumRenderer(
     state_variable=pendulum.state,
-    fps=60.0,
+    fps=240.0,
     window_size=(1200, 400),
     visible_history=1000,
     reward_variable=reward_tracker.reward,
