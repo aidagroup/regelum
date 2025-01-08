@@ -1,39 +1,51 @@
+---
 exclude: ^(examples|docs|old_snippets|plots|tests|regelum/utils)
 default_stages: [commit]
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-    -   id: check-yaml
-    -   id: check-added-large-files
-    -   id: debug-statements
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: debug-statements
 
--   repo: https://github.com/astral-sh/ruff-pre-commit
+  - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.5
     hooks:
-    -   id: ruff
+      - id: ruff
         args: [--fix]
-    -   id: ruff-format
+      - id: ruff-format
 
--   repo: https://github.com/pre-commit/mirrors-mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.14.1
     hooks:
-    -   id: mypy
+      - id: mypy
         additional_dependencies:
-        - types-PyYAML
-        - types-setuptools
-        - types-requests
-        args: [--strict, --ignore-missing-imports]
+          - types-PyYAML
+          - types-setuptools
+          - types-requests
+        args:
+          - --strict
+          - --ignore-missing-imports
         exclude: ^(examples|regelum/utils)/.*$
         stages: [manual]
 
--   repo: https://github.com/PyCQA/pylint
+  - repo: https://github.com/PyCQA/pylint
     rev: v3.3.3
     hooks:
-    -   id: pylint
+      - id: pylint
         language: system
         args:
-        - --max-line-length=100
-        - --ignore-imports=yes
-        - --disable=C0111,R0903,C0103
+          - --max-line-length=100
+          - --ignore-imports=yes
+          - --disable=C0111,R0903,C0103
         stages: [manual]
+
+  - repo: local
+    hooks:
+      - id: coverage-badge
+        name: "Coverage Badge"
+        entry: scripts/update_coverage.sh
+        language: script
+        pass_filenames: false
+        stages: [commit]

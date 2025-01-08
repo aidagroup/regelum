@@ -18,6 +18,9 @@ pandas = "^2.2.3"
 omegaconf = "^2.3.0"
 scipy = "^1.14.1"
 matplotlib = "^3.9.2"
+loguru = "^0.7.3"
+dask = {extras = ["complete"], version = "^2024.12.1"}
+graphviz = "^0.20.3"
 
 # Dev dependencies as optional
 pytest = {version = "^8.3.4", optional = true}
@@ -37,6 +40,7 @@ pylint = {version = "^3.0.3", optional = true}
 types-PyYAML = {version = "^6.0.12", optional = true}
 types-setuptools = {version = "^75.6.0.20241223", optional = true}
 types-requests = {version = "^2.32.0.20241016", optional = true}
+
 
 [tool.poetry.extras]
 dev = [
