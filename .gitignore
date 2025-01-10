@@ -188,3 +188,4 @@ coverage.txt
 *.wav
 *.wma
 *.wmv
+coverage.txt*

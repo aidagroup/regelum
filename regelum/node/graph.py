@@ -451,7 +451,12 @@ class Graph(Node, IGraph[Node]):
         self.resolve(list(self.variables))
         return self.resolve_status
 
-    def clone_node(self, node_name: str, new_name: Optional[str] = None) -> Node:
+    def clone_node(
+        self,
+        node_name: str,
+        new_name: Optional[str] = None,
+        defer_resolution: bool = False,
+    ) -> Node:
         """Clone a node and its variables."""
         original = next(
             (node for node in self.nodes if node.external_name == node_name),
@@ -469,8 +474,41 @@ class Graph(Node, IGraph[Node]):
         if new_name:
             cloned.alter_name(new_name)
 
-        self.insert_node(cloned)
+        self.nodes.append(cloned)
+        if not defer_resolution:
+            self._collect_node_data()
+            self.resolve(list(self.variables))
         return cloned
+
+    def resolve_all_clones(self) -> None:
+        """Batch resolve all cloned nodes at once."""
+        self._collect_node_data()
+        self.resolve(list(self.variables))
+
+        # Update dependencies for all nodes
+        providers = {
+            f"{node.external_name}.{var.name}": node
+            for node in self.nodes
+            for var in node.variables
+        }
+
+        for node in self.nodes:
+            if isinstance(node.inputs, Inputs):
+                new_inputs = []
+                for input_name in node.inputs.inputs:
+                    provider_name, var_name = input_name.split(".", 1)
+                    if f"{provider_name}.{var_name}" in providers:
+                        new_inputs.append(input_name)
+                    else:
+                        base_name = "_".join(provider_name.split("_")[:-1])
+                        instance_num = int(provider_name.split("_")[-1])
+                        new_provider = f"{base_name}_{instance_num}"
+                        new_inputs.append(f"{new_provider}.{var_name}")
+                node.inputs = Inputs(new_inputs)
+                node.resolved_inputs = None
+
+        # Final resolution pass
+        self.resolve(list(self.variables))
 
     def _update_graph_node_names(self, graph: Graph) -> None:
         """Update names of nodes in a cloned graph."""

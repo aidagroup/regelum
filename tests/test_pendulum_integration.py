@@ -228,19 +228,25 @@ def test_parallel_execution():
 class TestPendulumIntegration:
     """Integration test suite for pendulum environment."""
 
-    def __init__(self):
-        """Initialize test environment."""
+    @pytest.fixture(autouse=True)
+    def setup_method(self):
+        """Setup test environment."""
+        pass
 
 
 class TestPendulumIntegrationWithNoise:
     """Integration test suite for pendulum with noise."""
 
-    def __init__(self):
-        """Initialize test environment with noise components."""
+    @pytest.fixture(autouse=True)
+    def setup_method(self):
+        """Setup test environment with noise components."""
+        pass
 
 
 class TestPendulumIntegrationWithReward:
     """Integration test suite for pendulum with reward system."""
 
-    def __init__(self):
-        """Initialize test environment with reward components."""
+    @pytest.fixture(autouse=True)
+    def setup_method(self):
+        """Setup test environment with reward components."""
+        pass

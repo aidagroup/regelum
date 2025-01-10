@@ -80,5 +80,7 @@ def test_reward_with_state_reset():
 class TestReward:
     """Test suite for reward functionality."""
 
-    def __init__(self):
-        """Initialize test environment."""
+    @pytest.fixture(autouse=True)
+    def setup_method(self):
+        """Setup test environment."""
+        pass

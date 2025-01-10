@@ -115,5 +115,7 @@ def test_output_chaining():
 class TestOutput:
     """Test suite for output functionality."""
 
-    def __init__(self):
-        """Initialize test environment."""
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        """Setup test environment."""
+        pass

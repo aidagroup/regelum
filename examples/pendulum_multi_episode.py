@@ -76,7 +76,7 @@ def main():
         debug=True,
         initialize_inner_time=True,
         states_to_log=[pendulum.state.full_name],
-        logger_cooldown=0.0,
+        logger_cooldown=0.3,
     )
     graph.resolve(graph.variables)
     subgraph = graph.extract_as_subgraph(
@@ -88,18 +88,24 @@ def main():
             "data_buffer_1",
             "logger_1",
         ],
-        n_step_repeats=500,
+        n_step_repeats=300,
     )
 
     for node in subgraph.nodes:
         for var in node.variables:
             var.reset(apply_reset_modifier=True)
 
-    for _ in range(199):
-        cloned = graph.clone_node("graph_2")
+    # Batch clone all nodes at once
+    cloned_graphs = []
+    for i in range(199):
+        cloned = graph.clone_node(f"graph_2", defer_resolution=True)
+        cloned_graphs.append(cloned)
         for node in cloned.nodes:
             for var in node.variables:
                 var.reset(apply_reset_modifier=True)
+
+    # Resolve all at once after cloning
+    graph.resolve_all_clones()
 
     plot_dumper = PlotDumper(
         inputs=[
