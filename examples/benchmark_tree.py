@@ -29,6 +29,7 @@ class ComputeNode(Node):
         compute_time: float = 0.001,
         name: str = "compute",
     ) -> None:
+        """Initialize the compute node."""
         super().__init__(
             inputs=inputs,
             is_continuous=False,

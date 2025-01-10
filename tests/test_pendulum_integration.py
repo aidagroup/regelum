@@ -1,3 +1,5 @@
+"""Integration tests for pendulum environment."""
+
 import pytest
 import numpy as np
 from typing import cast
@@ -221,3 +223,24 @@ def test_parallel_execution():
     assert not np.allclose(
         original_buffer, cloned_buffer
     ), "Parallel instances should have different trajectories"
+
+
+class TestPendulumIntegration:
+    """Integration test suite for pendulum environment."""
+
+    def __init__(self):
+        """Initialize test environment."""
+
+
+class TestPendulumIntegrationWithNoise:
+    """Integration test suite for pendulum with noise."""
+
+    def __init__(self):
+        """Initialize test environment with noise components."""
+
+
+class TestPendulumIntegrationWithReward:
+    """Integration test suite for pendulum with reward system."""
+
+    def __init__(self):
+        """Initialize test environment with reward components."""

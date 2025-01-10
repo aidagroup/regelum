@@ -1,7 +1,7 @@
 """MPC controller demonstration."""
 
 from regelum.node.base import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 from enum import Enum
 import numpy as np
 from typing import Callable, Tuple
@@ -20,6 +20,12 @@ class MPCContinuous(Node):
         CASADI = "casadi"
         SCIPY = "scipy"
 
+    class PredictionMethod(Enum):
+        """Integration method for prediction."""
+
+        RK4 = "rk4"
+        EULER = "euler"
+
     def __init__(
         self,
         controlled_system: Node,
@@ -29,7 +35,7 @@ class MPCContinuous(Node):
         control_bounds: Tuple[np.ndarray, np.ndarray],
         step_size: float = 0.01,
         prediction_horizon: int = 3,
-        engine: Engine = Engine.CASADI,
+        prediction_method: PredictionMethod = PredictionMethod.RK4,
         name: str = "mpc",
     ):
         """Initialize MPC controller.
@@ -42,7 +48,7 @@ class MPCContinuous(Node):
             control_bounds: Control bounds.
             step_size: Step size.
             prediction_horizon: Prediction horizon.
-            engine: MPC solver engine.
+            prediction_method: Integration method for prediction (RK4 or Euler).
             name: Name of the MPC controller.
         """
         assert controlled_system.is_continuous
@@ -57,9 +63,9 @@ class MPCContinuous(Node):
         self.controlled_state = controlled_state
         self.control_dimension = control_dimension
         self.prediction_horizon = prediction_horizon
-        self.engine = engine
         self.objective_function = objective_function
         self.control_bounds = control_bounds
+        self.prediction_method = prediction_method
         self.optimization_problem: Callable[[np.ndarray], np.ndarray] = (
             self._create_optimization_problem()
         )
@@ -107,16 +113,25 @@ class MPCContinuous(Node):
         opti.subject_to(X[:, 0] == x0)
 
         for k in range(N):
-            # RK4 integration using the system's state transition map
             x_k = X[:, k]
             u_k = U[:, k]
-            with symbolic_mode():
-                k1 = self.controlled_system.state_transition_map(x_k, u_k)
-                k2 = self.controlled_system.state_transition_map(x_k + dt / 2 * k1, u_k)
-                k3 = self.controlled_system.state_transition_map(x_k + dt / 2 * k2, u_k)
-                k4 = self.controlled_system.state_transition_map(x_k + dt * k3, u_k)
 
-            x_next = x_k + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+            if self.prediction_method == self.PredictionMethod.RK4:
+                with symbolic_mode():
+                    k1 = self.controlled_system.state_transition_map(x_k, u_k)
+                    k2 = self.controlled_system.state_transition_map(
+                        x_k + dt / 2 * k1, u_k
+                    )
+                    k3 = self.controlled_system.state_transition_map(
+                        x_k + dt / 2 * k2, u_k
+                    )
+                    k4 = self.controlled_system.state_transition_map(x_k + dt * k3, u_k)
+                x_next = x_k + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+            else:  # Euler
+                with symbolic_mode():
+                    dx = self.controlled_system.state_transition_map(x_k, u_k)
+                x_next = x_k + dt * dx
+
             opti.subject_to(X[:, k + 1] == x_next)
 
         u_min = self.control_bounds[0][:, None]
@@ -127,12 +142,16 @@ class MPCContinuous(Node):
         opts = {"ipopt.print_level": 0, "print_time": 0}
         opti.solver("ipopt", opts)
 
-        def solve_mpc(current_state: np.ndarray) -> np.ndarray:
-            opti.set_value(x0, current_state)
-            sol = opti.solve()
-            return sol.value(U[:, 0])
+        self.opti = opti
+        self.x0 = x0
+        self.U = U
 
-        return solve_mpc
+        return self.solve_mpc
+
+    def solve_mpc(self, current_state: np.ndarray) -> np.ndarray:
+        self.opti.set_value(self.x0, current_state)
+        sol = self.opti.solve()
+        return sol.value(self.U[:, 0])
 
     def step(self) -> None:
         if self.resolved_inputs is None:

@@ -18,9 +18,13 @@ pandas = "^2.2.3"
 omegaconf = "^2.3.0"
 scipy = "^1.14.1"
 matplotlib = "^3.9.2"
+loguru = "^0.7.3"
+dask = {extras = ["complete"], version = "^2024.12.1"}
+graphviz = "^0.20.3"
 
 # Dev dependencies as optional
 pytest = {version = "^8.3.4", optional = true}
+pytest-cov = {version = "^4.1.0", optional = true}
 pre-commit = {version = "^3.6.0", optional = true}
 mkdocs-material = {version = "^9.5.47", optional = true}
 mkdocs-autorefs = {version = "^1.2.0", optional = true}
@@ -37,9 +41,11 @@ types-PyYAML = {version = "^6.0.12", optional = true}
 types-setuptools = {version = "^75.6.0.20241223", optional = true}
 types-requests = {version = "^2.32.0.20241016", optional = true}
 
+
 [tool.poetry.extras]
 dev = [
     "pytest",
+    "pytest-cov",
     "pre-commit",
     "mkdocs-material",
     "black",
@@ -60,3 +66,27 @@ dev = [
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+addopts = "--cov=regelum --cov-report=term-missing"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["regelum"]
+omit = [
+    "regelum/utils/*",
+    "regelum/node/visualization/*",
+    "regelum/node/classic_control/*",
+    "tests/*",
+    "examples/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError",
+]

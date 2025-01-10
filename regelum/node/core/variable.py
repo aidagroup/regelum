@@ -1,4 +1,22 @@
-"""Variable implementation module."""
+"""Variable implementation for the node system.
+
+This module provides the core Variable class that represents data within nodes. Variables
+can hold numeric values, track their history, support symbolic computation, and manage
+their own reset behavior.
+
+Key features:
+- Value storage and access with type safety
+- Automatic shape inference
+- Reset behavior with optional modifiers
+- Symbolic computation support via CasADi
+- Deep copy support for graph operations
+
+Full names (node_name.variable_name) are essential because:
+- They uniquely identify variables across the entire computation graph
+- Multiple instances of the same node type can exist (e.g., pendulum_1, pendulum_2)
+- They enable proper dependency resolution in nested graph structures
+- They support correct variable lookup during graph modifications and cloning
+"""
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -24,7 +42,28 @@ from .types import (
 
 @dataclass(slots=True)
 class Variable(IVariable):
-    """Implementation of IVariable for the node system."""
+    """A variable that holds data within a node.
+
+    Variables are the primary data containers in the node system. They support:
+    - Numeric values (numpy arrays, torch tensors, CasADi matrices)
+    - Automatic shape inference
+    - Reset behavior with optional modifiers
+    - Symbolic computation via CasADi integration
+    - Full qualified naming (node_name.variable_name)
+
+    Attributes:
+        name: The variable's local name within its node
+        metadata: Dictionary containing variable configuration and state
+        _node_name: Name of the owning node (used for full qualification)
+
+    The metadata dict supports:
+        current_value: Current variable value
+        initial_value: Value to reset to
+        shape: Explicit shape override
+        reset_modifier: Optional function to modify reset behavior (especially for
+            Monte Carlo learning)
+        symbolic_value: CasADi symbolic representation
+    """
 
     name: VarName
     metadata: Metadata = field(default_factory=default_metadata)
@@ -126,6 +165,10 @@ class Variable(IVariable):
 
     def __deepcopy__(self, memo: Dict[int, Any]) -> Variable:
         """Create a deep copy of the variable."""
+        if id(self) in memo:
+            return memo[id(self)]
+
+        memo[id(self)] = self
         return Variable(
             name=self.name,
             metadata=deepcopy(self.metadata, memo),

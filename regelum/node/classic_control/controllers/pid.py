@@ -2,7 +2,7 @@
 
 from typing import Optional
 from regelum.node.base import Node
-from regelum.node.core.variable import Variable
+from regelum import Variable
 
 import numpy as np
 
@@ -51,7 +51,7 @@ class PIDControllerBase(Node):
         )
         self.previous_error = self.define_variable(
             "previous_error",
-            value=np.zeros((1,)),
+            value=None,
         )
         self.control_signal = self.define_variable(
             "control_signal",
@@ -69,7 +69,11 @@ class PIDControllerBase(Node):
         current_error = (
             self.controlled_state.value[self.idx_controlled_state] - self.setpoint.value
         )
-        error_derivative = (current_error - self.previous_error.value) / self.step_size
+        error_derivative = (
+            (current_error - self.previous_error.value) / self.step_size
+            if self.previous_error.value is not None
+            else 0.0
+        )
         self.previous_error.value = current_error
 
         if self.ki != 0:

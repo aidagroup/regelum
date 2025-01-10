@@ -177,3 +177,14 @@ mlruns/
 old_snippets/
 .cursorignore
 old_snippets/
+coverage.txt
+*.mp4
+*.avi
+*.mp3
+*.mpg
+*.mpeg
+*.mp2
+*.mp1
+*.wav
+*.wma
+*.wmv
