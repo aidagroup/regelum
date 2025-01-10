@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import List, Set, Optional, Tuple, Sequence
 
 from regelum.node.interfaces.base import IInputs, IResolvedInputs, IVariable
-from .types import FullName
+from .types import FullName, VarName
 
 
 @dataclass(slots=True, frozen=True)
@@ -90,25 +90,33 @@ class ResolvedInputs(IResolvedInputs):
 
     _inputs: List[IVariable]
 
-    def find(self, full_name: FullName) -> Optional[IVariable]:
-        """Find variable by full name.
+    def find(self, full_or_var_name: FullName | VarName) -> Optional[IVariable]:
+        """Find variable by full name or variable name.
 
         Args:
-            full_name: Fully qualified name to search for.
+            full_or_var_name: Fully qualified name or just variable name to search for.
 
         Returns:
             Matching variable or None if not found.
         """
-        node_name, var_name = full_name.split(".")
+        first_dot = full_or_var_name.find(".")
+        first_bracket = full_or_var_name.find("[")
 
-        for var in self._inputs:
-            if var.full_name == full_name:
-                return var
+        if first_dot != -1 and (first_bracket == -1 or first_dot < first_bracket):
+            node_name, var_name = full_or_var_name.split(".", 1)
+            for var in self._inputs:
+                if var.full_name == full_or_var_name:
+                    return var
 
-            if (var.name in var_name or var_name in var.name) and (
-                var.node_name in node_name or node_name in var.node_name
-            ):
-                return var
+                if (var.name in var_name or var_name in var.name) and (
+                    var.node_name in node_name or node_name in var.node_name
+                ):
+                    return var
+        else:
+            var_name = full_or_var_name
+            for var in self._inputs:
+                if var.name == var_name:
+                    return var
 
         return None
 

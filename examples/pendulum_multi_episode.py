@@ -2,43 +2,22 @@ from regelum.node.base import Node
 from regelum.node.graph import Graph
 from regelum.node.classic_control.envs.continuous import Pendulum
 from regelum.node.classic_control.controllers.pid import PIDControllerBase
+from regelum.node.memory.buffer import DataBuffer
 import numpy as np
 import matplotlib
+from typing import List
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-class DataBuffer(Node):
-    """Buffer for storing trajectory data."""
-
-    def __init__(self, buffer_size: int = 1000, step_size: float = 0.01) -> None:
-        super().__init__(
-            inputs=["pendulum_1.state", "step_counter_1.counter"],
-            step_size=step_size,
-            is_continuous=False,
-            name="buffer",
-        )
-        self.buffer_size = buffer_size
-
-        self.state_buffer = self.define_variable(
-            "state_buffer",
-            value=np.zeros((buffer_size, 2)),
-            metadata={"shape": (buffer_size, 2)},
-        )
-
-    def step(self) -> None:
-        """Store current state in buffer."""
-        current_buffer_idx = self.resolved_inputs.find("step_counter.counter").value - 1
-        current_state = self.resolved_inputs.find("pendulum.state").value
-        self.state_buffer.value[current_buffer_idx] = current_state
-
-
 class PlotDumper(Node):
     """Node for collecting and plotting trajectories."""
 
-    def __init__(self, n_trajectories: int = 100, step_size: float = 0.01) -> None:
-        inputs = [f"buffer_{i+1}.state_buffer" for i in range(n_trajectories)]
+    def __init__(
+        self, inputs: List[str], n_trajectories: int = 100, step_size: float = 0.01
+    ) -> None:
+
         super().__init__(
             inputs=inputs,
             step_size=step_size,
@@ -56,15 +35,15 @@ class PlotDumper(Node):
         """Collect data and create plot."""
         plt.figure(figsize=(10, 6))
 
-        for i in range(self.n_trajectories):
-            buffer_data = self.resolved_inputs.find(f"buffer_{i+1}.state_buffer").value
+        for input_name in self.inputs.inputs:
+            buffer_data = self.resolved_inputs.find(input_name).value
             plt.plot(buffer_data[:, 0], buffer_data[:, 1], alpha=0.3)
 
         plt.xlabel("Angle")
         plt.ylabel("Angular Velocity")
         plt.title(f"Phase Portrait of {self.n_trajectories} Pendulum Trajectories")
         plt.grid(True)
-        plt.savefig("pendulum_trajectories.png")
+        plt.savefig("./examples/gfx/pendulum_trajectories.png")
         plt.close()
 
 
@@ -82,14 +61,21 @@ def main():
         kd=10,
         step_size=0.01,
     )
-    data_buffer = DataBuffer(step_size=0.01, buffer_size=300)
+    data_buffer = DataBuffer(
+        variable_full_names=[
+            pendulum.state.full_name,
+            controller.control_signal.full_name,
+        ],
+        buffer_sizes=[300, 300],
+        step_sizes=[0.01, 0.01],
+    )
 
     nodes = [pendulum, controller, data_buffer]
     graph = Graph(
         nodes,
         debug=True,
         initialize_inner_time=True,
-        states_to_log=["pendulum_1.state"],
+        states_to_log=[pendulum.state.full_name],
         logger_cooldown=0.0,
     )
     graph.resolve(graph.variables)
@@ -99,28 +85,34 @@ def main():
             "clock_1",
             "pendulum_1",
             "pid_controller_1",
-            "buffer_1",
+            "data_buffer_1",
             "logger_1",
         ],
-        n_step_repeats=100,
+        n_step_repeats=500,
     )
 
     for node in subgraph.nodes:
         for var in node.variables:
             var.reset(apply_reset_modifier=True)
 
-    for _ in range(4):
+    for _ in range(199):
         cloned = graph.clone_node("graph_2")
         for node in cloned.nodes:
             for var in node.variables:
                 var.reset(apply_reset_modifier=True)
 
-    plot_dumper = PlotDumper(n_trajectories=5, step_size=0.01)
+    plot_dumper = PlotDumper(
+        inputs=[
+            var
+            for var in graph.get_full_names()
+            if "pendulum" in var and "buffer" in var
+        ],
+        n_trajectories=200,
+        step_size=0.01,
+    )
     graph.insert_node(plot_dumper)
-    # graph.step()
     parallel_graph = graph.parallelize()
     parallel_graph.step()
-    graph.print_info()
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
-"""Test parallel node functionality."""
+"""Tests for parallel execution functionality."""
 
 import numpy as np
 import pytest
-from typing import Dict, Set, Optional, List
+from typing import Optional, List
 import time
 
 from regelum.node.base import Node
@@ -28,6 +28,7 @@ class ComputeNode(Node):
         inputs: Optional[List[str]] = None,
         step_size: float = 0.1,
     ):
+        """Initialize test environment for parallel execution tests."""
         super().__init__(
             name=name,
             inputs=inputs or [],

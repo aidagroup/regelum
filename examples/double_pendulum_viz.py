@@ -47,18 +47,22 @@ if __name__ == "__main__":
         controlled_state=pendulum.state,
         control_dimension=2,
         objective_function=reward.objective_function,
-        control_bounds=(np.array([-10, -10]), np.array([10, 10])),
-        prediction_horizon=15,
+        control_bounds=(np.array([-400, -400]), np.array([400, 400])),
+        prediction_horizon=35,
+        prediction_method=MPCContinuous.PredictionMethod.EULER,
+        step_size=0.03,
     )
 
     # Create visualization with motion trails
     viz = DoublePendulumRenderer(
         state_variable=pendulum.state,
-        fps=15.0,
-        window_size=(1200, 600),
+        fps=60.0,
+        window_size=(1000, 400),
         visible_history=1000,
         reward_variable=reward.reward,
-        trail_length=100,  # Show motion trails
+        trail_length=30,
+        record_video=True,
+        video_path="./examples/gfx/double_pendulum_viz.avi",
     )
 
     # Reset every 1000 steps to see different behaviors
@@ -77,6 +81,6 @@ if __name__ == "__main__":
     graph.resolve(graph.variables)
 
     # Run simulation
-    n_steps = 10000
+    n_steps = 1000
     for _ in range(n_steps):
         graph.step()

@@ -208,6 +208,7 @@ class ParallelGraph(Graph):
         1. Getting futures for all dependency nodes
         2. Creating a new task that depends on those futures
         3. Caching the future to avoid duplicate tasks
+        4. Skipping future wrapping for ParallelGraph nodes
 
         Args:
             node: Node to create task for
@@ -230,9 +231,15 @@ class ParallelGraph(Graph):
             dep_node = next(n for n in self.nodes if n.external_name == dep_name)
             dep_futures[dep_name] = self._get_node_future(dep_node)
 
-        node_future = delayed(_run_node_step, pure=False)(
-            node, dep_futures if dep_futures else {}
-        )
+        # Skip wrapping ParallelGraph nodes into futures
+        if isinstance(node, ParallelGraph):
+            node.step()
+            node_future = delayed(lambda x: x, pure=False)(_extract_node_state(node))
+        else:
+            node_future = delayed(_run_node_step, pure=False)(
+                node, dep_futures if dep_futures else {}
+            )
+
         self._futures_cache[node] = node_future
         return node_future
 
@@ -310,44 +317,64 @@ class ParallelGraph(Graph):
 
         Creates a mapping of node dependencies by:
         1. Analyzing variable providers and consumers
-        2. Tracking dependencies through nested graphs
-        3. Handling indexed names in parallel contexts
+        2. Treating each graph as a single unit
+        3. Using only external interfaces of graphs
 
         Returns:
             Dict mapping node names to sets of dependency node names
-
-        Note:
-            This graph is used by Dask to determine task execution order
-            and optimize task distribution across workers.
         """
         node_dependencies: Dict[str, Set[str]] = {
             node.external_name: set() for node in self.nodes
         }
         providers = {}
 
-        for graph_idx, node in enumerate(self.nodes, 1):
-            for var in node.variables:
-                providers[f"{node.external_name}.{var.name}"] = node.external_name
+        print("\nBuilding dependency graph...")
+        print("\nNodes:", [node.external_name for node in self.nodes])
 
-            if isinstance(node, Graph):
-                for internal_node in node.nodes:
-                    original_name = internal_node.external_name
-                    indexed_name = f"{original_name}_{graph_idx}"
-                    for var in internal_node.variables:
-                        providers[f"{original_name}.{var.name}"] = node.external_name
-                        providers[f"{indexed_name}.{var.name}"] = node.external_name
-
+        # Register providers for each node's variables
+        print("\nRegistering providers:")
         for node in self.nodes:
+            print(f"\nNode: {node.external_name}")
+            if isinstance(node, Graph):
+                print("  Graph node variables:")
+                # Use get_full_names() to get all variable names from the graph
+                for var_name in node.get_full_names():
+                    providers[var_name] = node.external_name
+                    print(f"    {var_name} -> {node.external_name}")
+            else:
+                print("  Regular node variables:")
+                for var in node.variables:
+                    providers[f"{node.external_name}.{var.name}"] = node.external_name
+                    print(
+                        f"    {node.external_name}.{var.name} -> {node.external_name}"
+                    )
+
+        print("\nBuilding dependencies:")
+        # Build dependencies based on resolved inputs
+        for node in self.nodes:
+            print(f"\nChecking dependencies for {node.external_name}")
+            print(f"  Is root: {node.is_root}")
             if (
                 node.resolved_inputs
                 and node.resolved_inputs.inputs
                 and not node.is_root
             ):
+                print("  Input variables:")
                 for input_var in node.resolved_inputs.inputs:
                     input_name = input_var.full_name
+                    print(f"    Input: {input_name}")
                     if input_name in providers:
                         provider_name = providers[input_name]
                         if provider_name != node.external_name:
                             node_dependencies[node.external_name].add(provider_name)
+                            print(
+                                f"      Added dependency: {node.external_name} -> {provider_name}"
+                            )
+                    else:
+                        print(f"      No provider found for {input_name}")
+
+        print("\nFinal dependency graph:")
+        for node, deps in node_dependencies.items():
+            print(f"{node} depends on: {deps}")
 
         return node_dependencies

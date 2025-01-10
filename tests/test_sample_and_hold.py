@@ -15,6 +15,8 @@ def reset_node_instances():
 
 
 class PendulumPDController(Node):
+    """Pendulum PD controller."""
+
     def __init__(self, kp: float = 0.01, kd: float = 0.01, step_size: float = 0.01):
         super().__init__(
             inputs=["pendulum_1.state", "clock_1.time"],
@@ -41,7 +43,10 @@ class PendulumPDController(Node):
 
 
 class Pendulum(Node):
+    """Pendulum node."""
+
     def __init__(self):
+        """Initialize test environment for basic sample and hold tests."""
         super().__init__(
             inputs=["pendulum_pd_control_1.control"],
             is_continuous=True,
@@ -76,7 +81,10 @@ class Pendulum(Node):
 
 
 class PendulumReset(Reset):
+    """Reset the pendulum to a random initial state."""
+
     def __init__(self, reset_interval: int, step_size: float = 0.01):
+        """Initialize the reset node."""
         super().__init__(name="reset_pendulum_1")
         self.reset_interval = reset_interval
         self.step_counter = 0

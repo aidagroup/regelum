@@ -18,7 +18,6 @@ def cleanup_node_instances():
 
 
 def test_buffer_with_pendulum():
-    # Initialize nodes
     pendulum = Pendulum(
         control_signal_name="mpc_1.mpc_action",
     )
@@ -30,12 +29,10 @@ def test_buffer_with_pendulum():
         control_bounds=(np.array([-2.0]), np.array([2.0])),
     )
     buffer = DataBuffer(
-        variable_names=["pendulum_1.state", "mpc_1.mpc_action"],
-        buffer_size=10,
-        step_size=0.01,
+        variable_full_names=["pendulum_1.state", "mpc_1.mpc_action"],
+        buffer_sizes=[10, 10],
+        step_sizes=[0.01, 0.01],
     )
-
-    # Create graph
     graph = Graph(
         [pendulum, mpc, buffer],
         initialize_inner_time=True,
@@ -43,20 +40,17 @@ def test_buffer_with_pendulum():
     )
     graph.resolve(variables=graph.variables)
 
-    # Run simulation for buffer_size steps
     for _ in range(10):
         graph.step()
 
-    # Get buffers
-    state_buffer = buffer.find_variable("pendulum_1.state@buffer")
-    action_buffer = buffer.find_variable("mpc_1.mpc_action@buffer")
+    state_buffer = buffer.find_variable("buffer[pendulum_1.state]")
+    action_buffer = buffer.find_variable("buffer[mpc_1.mpc_action]")
 
     assert state_buffer is not None, "State buffer not found"
     assert action_buffer is not None, "Action buffer not found"
     assert state_buffer.value is not None, "State buffer not initialized"
     assert action_buffer.value is not None, "Action buffer not initialized"
 
-    # Check buffer shapes
     assert state_buffer.value.shape == (
         10,
         2,
@@ -65,11 +59,9 @@ def test_buffer_with_pendulum():
         10,
     ), f"Wrong action buffer shape: {action_buffer.value.shape}"
 
-    # Check if buffers contain non-zero values (simulation happened)
     assert not np.allclose(state_buffer.value, 0), "State buffer is all zeros"
     assert not np.allclose(action_buffer.value, 0), "Action buffer is all zeros"
 
-    # Test circular buffer behavior
     old_state_buffer = state_buffer.value.copy()
     old_action_buffer = action_buffer.value.copy()
 

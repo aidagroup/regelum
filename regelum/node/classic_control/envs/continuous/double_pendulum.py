@@ -150,8 +150,7 @@ class DoublePendulum(Node):
 
     def step(self, control: Optional[NumericArray] = None) -> None:
         """Step the double pendulum system."""
-        self.state.value = (
-            self.state.value
-            + self.state_transition_map(self.state.value, control).reshape(-1)
+        self.state.value += (
+            self.state_transition_map(self.state.value, control).reshape(-1)
             * self.step_size
         )

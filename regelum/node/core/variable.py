@@ -165,6 +165,10 @@ class Variable(IVariable):
 
     def __deepcopy__(self, memo: Dict[int, Any]) -> Variable:
         """Create a deep copy of the variable."""
+        if id(self) in memo:
+            return memo[id(self)]
+
+        memo[id(self)] = self
         return Variable(
             name=self.name,
             metadata=deepcopy(self.metadata, memo),

@@ -1,10 +1,9 @@
-"""Test output node functionality."""
+"""Tests for output functionality."""
 
 import numpy as np
 import pytest
 from regelum.node.base import Node
 from regelum.node.misc.output import Output, OutputWithNoise, OutputPartial
-from regelum.node.core.variable import Variable
 from regelum.node.graph import Graph
 
 
@@ -111,3 +110,10 @@ def test_output_chaining():
     graph.step()
     assert partial_output.observed_value.value.shape == (1,)
     assert isinstance(partial_output.observed_value.value, np.ndarray)
+
+
+class TestOutput:
+    """Test suite for output functionality."""
+
+    def __init__(self):
+        """Initialize test environment."""

@@ -324,13 +324,17 @@ class Node(INode):
         """Get root flag."""
         return self._is_root
 
-    def find_variable(self, name: str) -> Optional[IVariable]:
+    def find_variable(
+        self, name: str, by_full_name: bool = False
+    ) -> Optional[IVariable]:
         """Find variable by name."""
+        if by_full_name:
+            return next((var for var in self._variables if var.full_name == name), None)
         return next((var for var in self._variables if var.name == name), None)
 
-    def get_variable(self, name: str) -> IVariable:
+    def get_variable(self, name: str, by_full_name: bool = False) -> IVariable:
         """Get variable by name or raise error."""
-        if var := self.find_variable(name):
+        if var := self.find_variable(name, by_full_name):
             return var
         raise ValueError(f"Variable '{name}' not found in node '{self.external_name}'")
 
@@ -526,6 +530,8 @@ class Node(INode):
             - Cloning subgraphs for hierarchical composition
             - Duplicating nodes for Monte Carlo simulations
         """
+        if id(self) in memo:
+            return memo[id(self)]
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result

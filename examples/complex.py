@@ -16,6 +16,7 @@ class NodeTest(Node):
         node_variable_name: str,
         step_size: float,
     ) -> None:
+        """Initialize the test node."""
         super().__init__(name=name, inputs=node_input_variables, step_size=step_size)
         self.x = self.define_variable(node_variable_name, value=0.0)
 

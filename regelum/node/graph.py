@@ -225,7 +225,11 @@ class Graph(Node, IGraph[Node]):
             raise ValueError("Clock not found in graph")
 
         for node in discrete_nodes:
-            ZeroOrderHold(node, self.clock).bind_to_node(node)
+            if isinstance(node, Graph):
+                for subnode in node.nodes:
+                    ZeroOrderHold(subnode, self.clock).bind_to_node(subnode)
+            else:
+                ZeroOrderHold(node, self.clock).bind_to_node(node)
 
     def _setup_logger(
         self,
@@ -274,11 +278,7 @@ class Graph(Node, IGraph[Node]):
 
     def _collect_node_data(self) -> None:
         """Collect inputs and variables from all nodes."""
-        provided_vars = {
-            f"{node.external_name}.{var.name}"
-            for node in self.nodes
-            for var in node.variables
-        }
+        provided_vars = {var.full_name for node in self.nodes for var in node.variables}
         external_inputs: List[str] = []
 
         for node in self.nodes:
@@ -397,6 +397,8 @@ class Graph(Node, IGraph[Node]):
         else:
             self.resolve_status = ResolveStatus.SUCCESS
 
+        self._collect_node_data()
+
         return self.inputs, unresolved
 
     def _log_unresolved_inputs(self, unresolved: Dict[str, Set[str]]) -> None:
@@ -488,7 +490,7 @@ class Graph(Node, IGraph[Node]):
             if isinstance(node.inputs, Inputs):
                 new_inputs = []
                 for input_name in node.inputs.inputs:
-                    provider_name, var_name = input_name.split(".")
+                    provider_name, var_name = input_name.split(".", 1)
                     provider_base = "_".join(provider_name.split("_")[:-1])
 
                     if provider_name in node_mapping:
@@ -895,8 +897,19 @@ class Graph(Node, IGraph[Node]):
             logger.info(msg)
         return msg
 
+    def get_full_names(self) -> List[str]:
+        """Get fully qualified names of all variables.
+
+        Returns:
+            List of strings in format 'node_name.variable_name'.
+        """
+        return [name for node in self.nodes for name in node.get_full_names()]
+
     def __deepcopy__(self, memo: Dict[Any, Any]) -> Graph:
         """Custom deepcopy implementation to handle graph context."""
+        if id(self) in memo:
+            return memo[id(self)]
+
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
@@ -929,28 +942,45 @@ class Graph(Node, IGraph[Node]):
                 cloned_node = deepcopy(node, memo)
                 memo[id(node)] = cloned_node
             result.nodes.append(cloned_node)
-            node_mapping[node.external_name] = cloned_node
-            internal_nodes.add(cloned_node._internal_name)
+            if isinstance(node, Graph):
+                for node_inner, node_corresponding in zip(
+                    node.nodes, cloned_node.nodes
+                ):
+                    node_mapping[node_inner.external_name] = node_corresponding
+                    internal_nodes.add(node_corresponding._internal_name)
+            else:
+                node_mapping[node.external_name] = cloned_node
+                internal_nodes.add(cloned_node._internal_name)
 
         for node in result.nodes:
-            if isinstance(node.inputs, Inputs):
-                new_inputs = []
-                for input_name in node.inputs.inputs:
-                    provider_name, var_name = input_name.split(".")
-                    provider_base = provider_name.rsplit("_", 1)[0]
-                    if provider_name in node_mapping:
-                        new_inputs.append(
-                            f"{node_mapping[provider_name].external_name}.{var_name}"
-                        )
-                    elif provider_base in internal_nodes:
-                        new_provider_name = f"{provider_base}_{len(node_mapping)}"
-                        new_inputs.append(f"{new_provider_name}.{var_name}")
-                    else:
-                        new_inputs.append(input_name)
-                node.inputs = Inputs(new_inputs)
+            if isinstance(node, Graph):
+                for node_inner in node.nodes:
+                    self._map_new_inputs(node_inner, node_mapping, internal_nodes)
+                node._collect_node_data()
+            else:
+                self._map_new_inputs(node, node_mapping, internal_nodes)
+
         result._collect_node_data()
 
         return result
+
+    def _map_new_inputs(
+        self, node: Node, node_mapping: Dict[str, Node], internal_nodes: Set[str]
+    ) -> None:
+        new_inputs = []
+        for input_name in node.inputs.inputs:
+            provider_name, var_name = input_name.split(".", 1)
+            provider_base = provider_name.rsplit("_", 1)[0]
+            if provider_name in node_mapping:
+                new_inputs.append(
+                    f"{node_mapping[provider_name].external_name}.{var_name}"
+                )
+            elif provider_base in internal_nodes:
+                new_provider_name = f"{provider_base}_{len(node_mapping)}"
+                new_inputs.append(f"{new_provider_name}.{var_name}")
+            else:
+                new_inputs.append(input_name)
+        node.inputs = Inputs(new_inputs)
 
     def parallelize(self, **kwargs: Any) -> ParallelGraph:
         """Convert to parallel execution mode."""

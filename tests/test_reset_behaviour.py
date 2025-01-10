@@ -1,4 +1,4 @@
-"""Test reset behaviour."""
+"""Tests for reset behavior functionality."""
 
 import pytest
 import numpy as np
@@ -118,3 +118,24 @@ def test_reset_behavior(pendulum_system):
 
     # Check if pendulum state was reset to initial condition
     assert np.allclose(pendulum.state.value, initial_pendulum_state)
+
+
+class TestResetBehaviour:
+    """Test suite for basic reset behavior."""
+
+    def __init__(self):
+        """Initialize test environment."""
+
+
+class TestResetBehaviourWithNoise:
+    """Test suite for reset behavior with noise components."""
+
+    def __init__(self):
+        """Initialize test environment with noise components."""
+
+
+class TestResetBehaviourWithReward:
+    """Test suite for reset behavior with reward system."""
+
+    def __init__(self):
+        """Initialize test environment with reward components."""

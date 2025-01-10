@@ -83,7 +83,7 @@ class Output(Node):
         Called each time step to update the observed_value with
         the latest measurement.
         """
-        self.observed_value.value = self.observe(self.observing_variable.value)
+        self.observed_value.value = self.observe(self.resolved_inputs.inputs[0].value)
 
 
 class OutputWithNoise(Output):

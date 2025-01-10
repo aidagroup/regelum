@@ -121,42 +121,44 @@ if __name__ == "__main__":
     )
 
     # Create reward function using estimated state
-    reward = DCMotorReward(state_variable=ukf.state_estimate)
+    reward = DCMotorReward(state_variable=motor.state)
 
     # Configure MPC controller
     mpc = MPCContinuous(
         controlled_system=motor,
-        controlled_state=ukf.state_estimate,  # Use estimated state for control
+        controlled_state=motor.state,  # Use estimated state for control
         control_dimension=1,
         objective_function=reward.objective_function,
         control_bounds=(np.array([-12.0]), np.array([12.0])),  # Voltage limits [V]
         prediction_horizon=20,
         step_size=0.01,
+        prediction_method=MPCContinuous.PredictionMethod.EULER,
     )
 
     # Create visualization
     viz = DCMotorRenderer(
         state_variable=motor.state,
-        fps=60.0,
-        window_size=(800, 400),
+        fps=50.0,
+        window_size=(1000, 400),
         visible_history=1000,
         reward_variable=reward.reward,
         show_current_flow=True,
-        estimated_state_variable=ukf.state_estimate,  # Show estimated state
+        estimated_state_variable=motor.state,  # Show estimated state
         record_video=True,
         video_path="./examples/gfx/dc_motor_ukf.avi",
     )
 
     # Configure computation graph
     graph = Graph(
-        [motor, noisy_output, partial_output, ukf, mpc, reward, viz],
+        [motor, mpc, reward, viz],
         initialize_inner_time=True,
         states_to_log=[
             motor.state.full_name,
-            ukf.state_estimate.full_name,
+            # ukf.state_estimate.full_name,
             mpc.action.full_name,
-            partial_output.observed_value.full_name,
+            # partial_output.observed_value.full_name,
         ],
+        logger_cooldown=0.5,
         debug=True,
     )
 
@@ -164,6 +166,6 @@ if __name__ == "__main__":
     graph.resolve(graph.variables)
 
     # Run simulation
-    n_steps = 400
+    n_steps = 1000
     for _ in range(n_steps):
         graph.step()

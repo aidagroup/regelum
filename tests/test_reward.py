@@ -1,4 +1,4 @@
-"""Test reward tracker functionality."""
+"""Tests for reward functionality."""
 
 import numpy as np
 import pytest
@@ -75,3 +75,10 @@ def test_reward_with_state_reset():
     graph.step()
     expected_reward = -(2.0**2 + 3.0**2)
     assert np.isclose(reward.reward.value, expected_reward)
+
+
+class TestReward:
+    """Test suite for reward functionality."""
+
+    def __init__(self):
+        """Initialize test environment."""

@@ -116,15 +116,15 @@ class PyGameRenderer(Node):
                 video_path = f"animation_{window_name}.mp4"
             self.video_path = video_path
 
-            # Try different codecs in order of preference
             codecs = [
-                ("avc1", ".mp4"),
-                ("H264", ".mp4"),
+                ("mp4v", ".mp4"),
                 ("XVID", ".avi"),
                 ("MJPG", ".avi"),
-                ("mp4v", ".mp4"),
+                ("X264", ".mp4"),
+                ("DIVX", ".avi"),
             ]
 
+            writer = None
             for codec, ext in codecs:
                 if video_path.endswith(".mp4") or video_path.endswith(".avi"):
                     current_path = video_path
@@ -134,13 +134,21 @@ class PyGameRenderer(Node):
                 try:
                     fourcc = cv2.VideoWriter_fourcc(*codec)
                     writer = cv2.VideoWriter(
-                        current_path, fourcc, fps, window_size, True
+                        current_path,
+                        fourcc,
+                        int(fps),
+                        (
+                            int(window_size[0]),
+                            int(window_size[1]),
+                        ),
+                        True,
                     )
-                    if writer.isOpened():
+                    if writer is not None and writer.isOpened():
                         self.video_writer = writer
                         self.video_path = current_path
                         break
-                except Exception:
+                except Exception as e:
+                    print(f"Failed to initialize codec {codec}: {str(e)}")
                     if writer is not None:
                         writer.release()
                     continue
@@ -159,17 +167,13 @@ class PyGameRenderer(Node):
                 PyGameRenderer._display_info = pygame.display.Info()
 
             self.font = pygame.font.SysFont("Arial", 14)
-
-            # Set window name using Node's instance tracking
             self.window_name = (
                 window_name
                 or f"{self.__class__.__name__}_{len(self.__class__._instances[self.__class__.__name__])}"
             )
 
-            # Set window position
             if window_position is None:
-                # Auto-position windows in a grid based on active instances
-                grid_size = 3  # 3x3 grid
+                grid_size = 3
                 active_count = len(PyGameRenderer._active_windows)
                 screen_width = PyGameRenderer._display_info.current_w
                 screen_height = PyGameRenderer._display_info.current_h
@@ -177,16 +181,14 @@ class PyGameRenderer(Node):
                 pos_y = (active_count // grid_size) * (screen_height // grid_size)
                 window_position = (pos_x, pos_y)
 
-            # Create a new window with position
             self.screen = pygame.display.set_mode(
                 window_size, pygame.RESIZABLE | pygame.SHOWN
             )
             pygame.display.set_caption(self.window_name)
 
-            # Set window position after creation
             if hasattr(pygame.display, "get_wm_info"):
                 try:
-                    if os.name == "nt":  # Windows
+                    if os.name == "nt":
                         hwnd = pygame.display.get_wm_info()["window"]
                         ctypes.windll.user32.SetWindowPos(
                             hwnd,
@@ -196,8 +198,8 @@ class PyGameRenderer(Node):
                             0,
                             0,
                             0x0001,
-                        )  # SWP_NOSIZE
-                    else:  # Linux/X11
+                        )
+                    else:
                         wminfo = pygame.display.get_wm_info()
                         if "window" in wminfo:
                             pos_str = f"{window_position[0]},{window_position[1]}"
@@ -206,7 +208,7 @@ class PyGameRenderer(Node):
                                 window_size, pygame.RESIZABLE | pygame.SHOWN
                             )
                 except Exception:
-                    pass  # Fallback if window positioning fails
+                    pass
 
             self.clock = pygame.time.Clock()
             self.fps = fps
@@ -299,23 +301,20 @@ class PyGameRenderer(Node):
                 ),
             )
 
-            # Draw zero line first (if it's within the range)
             if y_min <= 0 <= y_max:
                 zero_pixel = plot_y + plot_area_height * (
                     1 - (0 - y_min) / (y_max - y_min)
                 )
                 pygame.draw.line(
                     self.screen,
-                    (150, 150, 150),  # Darker gray for better visibility
+                    (150, 150, 150),
                     (self.dashboard_width + 50, zero_pixel),
                     (self.dashboard_width + 50 + plot_width, zero_pixel),
-                    2,  # Thicker line for zero
+                    2,
                 )
 
-            # Draw grid lines
             n_grid_lines = 5
             for j in range(n_grid_lines):
-                # Horizontal grid lines
                 y_grid = y_min + (y_max - y_min) * j / (n_grid_lines - 1)
                 y_pixel = plot_y + plot_area_height * (
                     1 - (y_grid - y_min) / (y_max - y_min)
@@ -327,12 +326,10 @@ class PyGameRenderer(Node):
                     (self.dashboard_width + 50 + plot_width, y_pixel),
                     1,
                 )
-                # Draw y-axis labels
                 label = f"{y_grid:.2f}"
                 text = self.font.render(label, True, (100, 100, 100))
                 self.screen.blit(text, (self.dashboard_width + 20, y_pixel - 8))
 
-            # Vertical grid lines (time)
             for j in range(n_grid_lines):
                 x_grid = self.dashboard_width + 50 + j * plot_width / (n_grid_lines - 1)
                 pygame.draw.line(
@@ -343,7 +340,6 @@ class PyGameRenderer(Node):
                     1,
                 )
 
-            # Draw axis labels
             state_label = f"State {i}"
             text = self.font.render(state_label, True, (0, 0, 0))
             self.screen.blit(text, (self.dashboard_width + 50, plot_y - 20))
@@ -397,14 +393,12 @@ class PyGameRenderer(Node):
         plot_height = self.dashboard_height - 2 * margin
         plot_width = self.dashboard_width - 100
 
-        # Draw plot background
         pygame.draw.rect(
             self.screen,
             (240, 240, 240),
             (x_start + 50, margin, plot_width, plot_height),
         )
 
-        # Draw zero line if in range
         if y_min <= 0 <= y_max:
             zero_pixel = margin + plot_height * (1 - (0 - y_min) / (y_max - y_min))
             pygame.draw.line(
@@ -415,10 +409,9 @@ class PyGameRenderer(Node):
                 2,
             )
 
-        # Draw grid lines
         n_grid_lines = 5
         for j in range(n_grid_lines):
-            # Horizontal grid lines
+            y_grid = y_min + (y_max - y_min) * j / (n_grid_lines - 1)
             y_grid = y_min + (y_max - y_min) * j / (n_grid_lines - 1)
             y_pixel = margin + plot_height * (1 - (y_grid - y_min) / (y_max - y_min))
             pygame.draw.line(
@@ -428,12 +421,10 @@ class PyGameRenderer(Node):
                 (x_start + 50 + plot_width, y_pixel),
                 1,
             )
-            # Draw y-axis labels
             label = f"{y_grid:.2f}"
             text = self.font.render(label, True, (100, 100, 100))
             self.screen.blit(text, (x_start + 20, y_pixel - 8))
 
-        # Vertical grid lines (time)
         for j in range(n_grid_lines):
             x_grid = x_start + 50 + j * plot_width / (n_grid_lines - 1)
             pygame.draw.line(
@@ -474,7 +465,6 @@ class PyGameRenderer(Node):
         if not self.initialized:
             return
 
-        # Handle events for this window
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self._close_window()
@@ -508,9 +498,8 @@ class PyGameRenderer(Node):
 
         if self.record_video and self.video_writer is not None:
             try:
-                # Convert PyGame surface to OpenCV format
                 frame = pygame.surfarray.array3d(self.screen)
-                frame = frame.transpose([1, 0, 2])  # Transpose for correct orientation
+                frame = frame.transpose([1, 0, 2])
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                 self.video_writer.write(frame)
             except Exception as e:
@@ -533,4 +522,4 @@ class PyGameRenderer(Node):
             self.initialized = False
 
         if not PyGameRenderer._active_windows:
-            pygame.quit()  # Quit pygame if no windows remain
+            pygame.quit()

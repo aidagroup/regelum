@@ -81,54 +81,115 @@ class DCMotorRenderer(PyGameRenderer):
         motor_radius: int,
         color_scheme: tuple[tuple[int, int, int], ...],
     ) -> None:
-        """Render a single motor visualization.
-
-        Args:
-            state: Motor state [θ, ω, i]
-            center_x: X coordinate of motor center
-            center_y: Y coordinate of motor center
-            motor_radius: Radius of motor visualization
-            color_scheme: Tuple of colors for (housing, rotor, indicator)
-        """
-        theta, _, _ = state[0], state[1], state[2]
+        """Render a single motor visualization."""
+        theta, _, current = state[0], state[1], state[2]
         housing_color, rotor_color, indicator_color = color_scheme
 
-        # Draw motor housing (stator)
+        # Draw motor housing with gradient effect
+        for i in range(4):
+            shade = max(0, housing_color[0] - i * 15)
+            pygame.draw.circle(
+                self.screen,
+                (shade, shade, shade),
+                (center_x, center_y),
+                motor_radius - i,
+            )
+
+        # Inner motor circle with metallic look
         pygame.draw.circle(
-            self.screen, housing_color, (center_x, center_y), motor_radius
+            self.screen,
+            (180, 180, 180),
+            (center_x, center_y),
+            motor_radius - 8,
         )
         pygame.draw.circle(
-            self.screen, (200, 200, 200), (center_x, center_y), motor_radius - 4
+            self.screen,
+            (200, 200, 200),
+            (center_x, center_y),
+            motor_radius - 12,
         )
 
-        indicator_length = motor_radius - 8
+        # Draw rotor with thickness and shading
+        indicator_length = motor_radius - 16
         end_x = center_x + indicator_length * np.cos(theta)
         end_y = center_y + indicator_length * np.sin(theta)
+
+        # Rotor shadow
         pygame.draw.line(
-            self.screen, rotor_color, (center_x, center_y), (end_x, end_y), 6
+            self.screen,
+            (50, 50, 50),
+            (center_x + 2, center_y + 2),
+            (end_x + 2, end_y + 2),
+            8,
         )
 
-        shaft_width = 20
-        pygame.draw.rect(
+        # Main rotor
+        pygame.draw.line(
             self.screen,
-            indicator_color,
-            (
-                center_x - shaft_width // 2,
-                center_y - motor_radius - 10,
-                shaft_width,
-                20,
-            ),
+            rotor_color,
+            (center_x, center_y),
+            (end_x, end_y),
+            6,
         )
-        pygame.draw.rect(
+
+        # Draw mounting brackets with 3D effect
+        bracket_width = 24
+        bracket_height = 16
+        for y_offset in [-motor_radius - 5, motor_radius - bracket_height + 5]:
+            # Bracket shadow
+            pygame.draw.rect(
+                self.screen,
+                (100, 100, 100),
+                (
+                    center_x - bracket_width // 2 + 2,
+                    center_y + y_offset + 2,
+                    bracket_width,
+                    bracket_height,
+                ),
+            )
+            # Main bracket
+            pygame.draw.rect(
+                self.screen,
+                indicator_color,
+                (
+                    center_x - bracket_width // 2,
+                    center_y + y_offset,
+                    bracket_width,
+                    bracket_height,
+                ),
+            )
+
+        # Draw center bearing
+        pygame.draw.circle(
             self.screen,
-            indicator_color,
-            (
-                center_x - shaft_width // 2,
-                center_y + motor_radius - 10,
-                shaft_width,
-                20,
-            ),
+            (100, 100, 100),
+            (center_x, center_y),
+            8,
         )
+        pygame.draw.circle(
+            self.screen,
+            (150, 150, 150),
+            (center_x, center_y),
+            6,
+        )
+
+        # Current flow indicator
+        if self.show_current_flow and abs(current) > 0.1:
+            flow_points = []
+            for i in range(8):
+                angle = 2 * np.pi * i / 8 + self.current_flow_offset
+                x = center_x + (motor_radius + 15) * np.cos(angle)
+                y = center_y + (motor_radius + 15) * np.sin(angle)
+                flow_points.append((x, y))
+
+            current_color = (0, 0, 255) if current > 0 else (255, 0, 0)
+            for i in range(len(flow_points)):
+                start = flow_points[i]
+                end = flow_points[(i + 1) % len(flow_points)]
+                pygame.draw.line(self.screen, current_color, start, end, 2)
+
+            # Update flow animation
+            self.current_flow_offset += 0.1 * np.sign(current)
 
     def _render_animation_dashboard(self) -> None:
         """Render DC motor animation in the left dashboard."""
@@ -142,7 +203,7 @@ class DCMotorRenderer(PyGameRenderer):
 
         motor_radius = min(self.dashboard_width // 3, self.dashboard_height // 3)
 
-        true_center_x = self.dashboard_width // 3
+        true_center_x = self.dashboard_width // 2
         true_center_y = self.dashboard_height // 2
         self._render_motor(
             self.state_variable.value,
@@ -155,7 +216,7 @@ class DCMotorRenderer(PyGameRenderer):
         # Draw estimated state motor if available (right side)
         if self.estimated_state_variable and len(self.inputs.inputs) > 2:
             est_state = self.resolved_inputs.find(self.inputs.inputs[2]).value
-            est_center_x = 2 * self.dashboard_width // 3
+            est_center_x = 3 * self.dashboard_width // 4
             est_center_y = self.dashboard_height // 2
             self._render_motor(
                 est_state,

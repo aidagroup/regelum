@@ -9,7 +9,7 @@ from regelum.utils import rg
 
 
 def objective_function(x):
-    return rg.sum(x**2)  # Minimize distance from origin
+    return rg.sum(x**2)
 
 
 kin_point = KinematicPoint(
@@ -25,8 +25,8 @@ mpc_node = MPCContinuous(
     control_dimension=2,
     objective_function=objective_function,
     control_bounds=(
-        np.array([-10, -10]),  # .reshape(2, 1),
-        np.array([10, 10]),  # reshape(2, 1),
+        np.array([-10, -10]),
+        np.array([10, 10]),
     ),
 )
 

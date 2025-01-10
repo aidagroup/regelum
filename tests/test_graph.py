@@ -1,7 +1,13 @@
-import pytest
-from typing import List, Dict, Set, Optional
+"""Tests for the Graph class functionality."""
+
 import numpy as np
+import pytest
 from unittest.mock import MagicMock
+from regelum.node.base import Node
+from regelum.node.graph import Graph
+import sys
+from typing import List, Optional
+import copy
 
 # Mock torch module
 mock_torch = MagicMock()
@@ -9,14 +15,8 @@ mock_torch.float32 = "float32"
 mock_torch.set_default_dtype = MagicMock()
 mock_torch.Tensor = type("MockTensor", (), {})
 
-import sys
 
 sys.modules["torch"] = mock_torch
-
-from regelum.node.base import Node
-from regelum.node.graph import Graph
-from regelum.node.core.inputs import Inputs
-from regelum.node.core.variable import Variable
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +26,8 @@ def reset_node_instances():
 
 
 class DummyNode(Node):
+    """Dummy node for testing."""
+
     def __init__(
         self,
         name: str,
@@ -33,6 +35,7 @@ class DummyNode(Node):
         is_continuous: bool = False,
         inputs: Optional[List[str]] = None,
     ):
+        """Initialize the node."""
         super().__init__(
             name=name,
             inputs=inputs or [],
@@ -60,6 +63,8 @@ class DummyNode(Node):
 
 
 class DependentNode(Node):
+    """Node that depends on other nodes."""
+
     def __init__(
         self,
         name: str,
@@ -67,6 +72,7 @@ class DependentNode(Node):
         step_size: float = 0.1,
         is_continuous: bool = False,
     ):
+        """Initialize the node."""
         super().__init__(
             name=name,
             inputs=dependencies,
@@ -94,6 +100,8 @@ class DependentNode(Node):
 
 
 class ProvidingNode(Node):
+    """Node that provides a variable."""
+
     def __init__(
         self,
         name: str,
@@ -102,6 +110,7 @@ class ProvidingNode(Node):
         step_size: float = 0.1,
         is_continuous: bool = False,
     ):
+        """Initialize the node."""
         super().__init__(
             name=name, inputs=[], step_size=step_size, is_continuous=is_continuous
         )
@@ -122,8 +131,10 @@ class ProvidingNode(Node):
 
 
 class TestGraph:
+    """Test graph functionality."""
+
     def test_init_basic(self):
-        """Test basic graph initialization"""
+        """Test basic graph initialization."""
         node1 = DummyNode("node1", step_size=0.1)
         node2 = DummyNode("node2", step_size=0.2)
         graph = Graph([node1, node2])
@@ -134,7 +145,7 @@ class TestGraph:
         assert graph.n_step_repeats == 1
 
     def test_step_execution(self):
-        """Test that step() executes on all nodes"""
+        """Test that step() executes on all nodes."""
         node1 = DummyNode("node1")
         node2 = DummyNode("node2")
         graph = Graph([node1, node2])
@@ -152,7 +163,7 @@ class TestGraph:
         assert np.allclose(node2.dummy_var.value, [2.0])
 
     def test_reset(self):
-        """Test reset functionality"""
+        """Test reset functionality."""
         node1 = DummyNode("node1")
         node2 = DummyNode("node2")
         graph = Graph([node1, node2])
@@ -170,7 +181,7 @@ class TestGraph:
         assert np.allclose(node2.dummy_var.value, [0.0])
 
     def test_node_management(self):
-        """Test adding and removing nodes"""
+        """Test adding and removing nodes."""
         node1 = DummyNode("node1")
         node2 = DummyNode("node2")
         graph = Graph([node1])
@@ -184,7 +195,7 @@ class TestGraph:
         assert graph.nodes[0] == node2
 
     def test_step_size_validation(self):
-        """Test step size validation and computation"""
+        """Test step size validation and computation."""
         node1 = DummyNode("node1", step_size=0.1)
         node2 = DummyNode("node2", step_size=0.2)
         node3 = DummyNode("node3", step_size=0.3)
@@ -193,7 +204,7 @@ class TestGraph:
         assert graph.step_size == 0.1  # Should take smallest step size
 
     def test_continuous_discrete_mix(self):
-        """Test handling of continuous and discrete nodes"""
+        """Test handling of continuous and discrete nodes."""
         cont_node = DummyNode("continuous", step_size=0.1, is_continuous=True)
         disc_node = DummyNode("discrete", step_size=0.2, is_continuous=False)
 
@@ -207,7 +218,7 @@ class TestGraph:
         assert np.allclose(disc_node.dummy_var.value, [1.0])
 
     def test_clone_node(self):
-        """Test node cloning functionality"""
+        """Test node cloning functionality."""
         original = DummyNode("original")
         graph = Graph([original])
 
@@ -218,7 +229,7 @@ class TestGraph:
         assert np.allclose(cloned.dummy_var.value, [0.0])
 
     def test_multiple_step_repeats(self):
-        """Test n_step_repeats functionality"""
+        """Test n_step_repeats functionality."""
         node = DummyNode("node")
         graph = Graph([node], n_step_repeats=3)
 
@@ -481,8 +492,10 @@ class TestGraph:
 
 
 class TestGraphDependencies:
+    """Test graph dependencies."""
+
     def test_dependency_resolution(self):
-        """Test basic dependency resolution"""
+        """Test basic dependency resolution."""
         provider = ProvidingNode("provider", "value")
         consumer = DependentNode("consumer", [f"{provider.external_name}.value"])
         graph = Graph([provider, consumer])
@@ -499,7 +512,7 @@ class TestGraphDependencies:
         assert np.allclose(consumer.out.value, [1.1])  # Should match provider's value
 
     def test_circular_dependencies(self):
-        """Test detection of circular dependencies"""
+        """Test detection of circular dependencies."""
         node1 = DependentNode("node1", ["node2.out"])
         node2 = DependentNode("node2", ["node1.out"])
         graph = Graph([node1, node2])
@@ -514,7 +527,7 @@ class TestGraphDependencies:
             node1.resolve(list(node2.variables))
 
     def test_subgraph_detection(self):
-        """Test detection of independent subgraphs"""
+        """Test detection of independent subgraphs."""
         # First subgraph
         provider1 = ProvidingNode("provider1", "value1")
         consumer1 = DependentNode("consumer1", [f"{provider1.external_name}.value1"])
@@ -541,7 +554,7 @@ class TestGraphDependencies:
                 assert "consumer2" in subgraph_nodes
 
     def test_complex_dependency_chain(self):
-        """Test resolution of complex dependency chains"""
+        """Test resolution of complex dependency chains."""
         node1 = ProvidingNode("node1", "value1")
         node2 = DependentNode(
             "node2", [f"{node1.external_name}.value1"]
@@ -578,7 +591,7 @@ class TestGraphDependencies:
         assert np.allclose(node4.out.value, [2.2])  # Sum of node2 and node3 values
 
     def test_extract_subgraph(self):
-        """Test extraction of subgraph with dependencies"""
+        """Test extraction of subgraph with dependencies."""
         provider = ProvidingNode("provider", "value")
         middle = DependentNode("middle", [f"{provider.external_name}.value"])
         end = DependentNode("end", [f"{middle.external_name}.out"])
@@ -603,7 +616,7 @@ class TestGraphDependencies:
         assert np.allclose(end_node.out.value, [1.1])  # Should get the propagated value
 
     def test_parallel_subgraphs(self):
-        """Test parallel execution paths in graph"""
+        """Test parallel execution paths in graph."""
         start = ProvidingNode("start", "value")
 
         # Path 1
@@ -628,3 +641,95 @@ class TestGraphDependencies:
         assert np.allclose(path1_2.out.value, [1.1])
         assert np.allclose(path2_2.out.value, [1.1])
         assert np.allclose(end.out.value, [2.2])  # Sum of both paths
+
+    def test_cyclic_graph_resolution(self):
+        """Test cyclic graph resolution with two nodes referencing each other."""
+
+        class CyclicNode(Node):
+            def __init__(
+                self, var_name: str, input_names: List[str], is_root: bool = False
+            ) -> None:
+                super().__init__(
+                    inputs=input_names,
+                    is_root=is_root,
+                    step_size=0.01,
+                    is_continuous=False,
+                )
+                self.a = self.define_variable(
+                    var_name, value=np.array([1.0]), metadata={"shape": (1,)}
+                )
+
+            def step(self) -> None:
+                self.a.value = np.array([float(self.a.value[0] + 1)])
+
+        node_1 = CyclicNode("n1", input_names=["n_2.n1"], is_root=True)
+        node_2 = CyclicNode("n1", input_names=["n_1.n1"])
+        graph = Graph([node_1, node_2], debug=True)
+
+        # Test that graph is properly initialized
+        assert len(graph.nodes) == 2
+        assert graph.step_size == 0.01
+
+        # Test that cyclic dependencies are properly resolved
+        graph.step()
+        assert np.allclose(node_1.a.value, [2.0])
+        assert np.allclose(node_2.a.value, [2.0])
+
+        graph.step()
+        assert np.allclose(node_1.a.value, [3.0])
+        assert np.allclose(node_2.a.value, [3.0])
+
+    def test_nested_graph_resolution(self):
+        """Test resolution of deeply nested graphs with node insertion."""
+
+        class N(Node):
+            def __init__(
+                self, var_name: str, input_names: List[str], is_root: bool = False
+            ) -> None:
+                super().__init__(
+                    inputs=input_names,
+                    is_root=is_root,
+                    step_size=0.01,
+                    is_continuous=False,
+                )
+                self.a = self.define_variable(
+                    var_name, value=np.array([1.0]), metadata={"shape": (1,)}
+                )
+
+            def step(self) -> None:
+                self.a.value = np.array([float(self.a.value[0] + 1)])
+
+        # Create first cyclic graph
+        node_1 = N("n1", input_names=["n_2.n2"], is_root=True)
+        node_2 = N("n2", input_names=["n_1.n1"])
+        graph_1 = Graph([node_1, node_2], debug=True)
+        graph_1.resolve(graph_1.variables)
+
+        # Create node that depends on graph_1
+        node_3 = N("n3", input_names=["n_1.n1"])
+
+        graph_2 = Graph([node_3, graph_1], debug=True)
+        graph_2.resolve(graph_2.variables)
+
+        graph_2_copy = copy.deepcopy(graph_2)
+        graph_2_copy.resolve(graph_2_copy.variables)
+
+        graph_big = Graph([graph_2_copy, graph_2], debug=True)
+        graph_big.resolve(graph_big.variables)
+
+        node_kek = N("kek", input_names=["n_5.n2"], is_root=True)
+        graph_big.insert_node(node_kek)
+        graph_big.resolve(graph_big.variables)
+        assert graph_big.resolve_status == "success"
+        # Test execution
+        graph_big.step()
+        assert np.allclose(node_kek.a.value, [2.0])
+        assert np.allclose(node_1.a.value, [2.0])
+        assert np.allclose(node_2.a.value, [2.0])
+        assert np.allclose(node_3.a.value, [2.0])
+
+        graph_big.step()
+        assert np.allclose(node_kek.a.value, [3.0])
+        assert np.allclose(node_1.a.value, [3.0])
+        assert np.allclose(node_2.a.value, [3.0])
+        assert np.allclose(node_3.a.value, [3.0])
