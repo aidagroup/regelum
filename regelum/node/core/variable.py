@@ -25,6 +25,7 @@ from typing import Optional, Any, Dict
 
 import casadi as cs
 import numpy as np
+import pandas as pd
 import torch
 
 from regelum.node.interfaces.base import IVariable
@@ -84,7 +85,7 @@ class Variable(IVariable):
         val = self.metadata["current_value"]
         return (
             val
-            if isinstance(val, (np.ndarray, torch.Tensor, cs.DM, float, int, bool))
+            if isinstance(val, (np.ndarray, torch.Tensor, cs.DM, float, int, bool, pd.DataFrame))
             or val is None
             else None
         )
