@@ -80,15 +80,10 @@ class Variable(IVariable):
             self.metadata["initial_value"] = deepcopy(self.metadata["current_value"])
 
     @property
-    def value(self) -> Optional[Value]:
+    def value(self) -> Any:
         """Get the current value."""
         val = self.metadata["current_value"]
-        return (
-            val
-            if isinstance(val, (np.ndarray, torch.Tensor, cs.DM, float, int, bool, pd.DataFrame))
-            or val is None
-            else None
-        )
+        return val
 
     @value.setter
     def value(self, val: Optional[Value]) -> None:
