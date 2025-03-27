@@ -1,4 +1,5 @@
 site_name: Regelum
+site_url: https://regelum.aidynamic.group/
 site_description: Modular framework for pipeline construction
 site_author: AIDA Group
 docs_dir: ./docs/src
