@@ -1,21 +1,12 @@
-[tool.poetry]
-name = "regelum"
-version = "0.1.0"
-description = ""
-authors = ["Georgiy Malaniya <pwlsd.gm@gmail.com>"]
-license = "MIT"
-readme = "README.md"
-packages = [
-    { include = "regelum", from = "." },
-    { include = "regelum/**/*.py" },
-]
-
 [project]
 name = "regelum"
 version = "0.1.0"
-description = ""
+description = "Regelum is a flexibly configurable framework for computational graph construction and execution."
 authors = [
-    {name = "Georgiy Malaniya", email = "pwlsd.gm@gmail.com"}
+    {name = "Georgiy Malaniya", email = "pwlsd.gm@gmail.com"},
+    {name = "Anton Bolychev", email = "bolychev.anton@gmail.com"},
+    {name = "Grigoriy Yaremenko", email = "yaremenko8@gmail.com"},
+    {name = "Pavel Osinenko", email = "p.osinenko@yandex.ru"}
 ]
 requires-python = ">=3.12"
 readme = "README.md"
