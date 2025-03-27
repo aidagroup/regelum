@@ -44,11 +44,7 @@ class ThreeWheeledRobotRenderer(PyGameRenderer):
     """
 
     def _render_animation_dashboard(self) -> None:
-        """Render robot animation in the left dashboard.
-
-        Args:
-            state: Robot state [x, y, angle, ...].
-        """
+        """Render robot animation in the left dashboard."""
         pygame.draw.rect(
             self.screen,
             (200, 200, 200),

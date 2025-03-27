@@ -3,6 +3,7 @@
 import numpy as np
 from regelum.utils import rg
 from regelum.node.classic_control.envs.continuous import Pendulum
+from typing import Callable
 
 
 class PendulumWithMotor(Pendulum):
@@ -42,7 +43,7 @@ class PendulumWithMotor(Pendulum):
         self,
         control_signal_name: str,
         initial_state: np.ndarray | None = None,
-        state_reset_modifier=None,
+        state_reset_modifier: Callable | None = None,
         motor_params: dict | None = None,
     ):
         """Initialize pendulum with motor.

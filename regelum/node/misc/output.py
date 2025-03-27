@@ -46,7 +46,7 @@ class Output(Node):
     """
 
     def __init__(
-        self, observing_variable: Variable, name: Optional[str] = None, suffix=""
+        self, observing_variable: Variable, name: Optional[str] = None, suffix: str = ""
     ):
         """Initialize output node.
 

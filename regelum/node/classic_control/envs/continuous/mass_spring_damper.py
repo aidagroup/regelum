@@ -3,6 +3,7 @@
 import numpy as np
 from regelum.utils import rg
 from regelum.node.base import Node
+from typing import Callable
 
 
 class MassSpringDamper(Node):
@@ -33,7 +34,7 @@ class MassSpringDamper(Node):
         self,
         control_signal_name: str,
         initial_state: np.ndarray | None = None,
-        state_reset_modifier=None,
+        state_reset_modifier: Callable | None = None,
         params: dict | None = None,
     ):
         """Initialize mass-spring-damper system.

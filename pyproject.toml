@@ -10,36 +10,50 @@ packages = [
     { include = "regelum/**/*.py" },
 ]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-casadi = "^3.6.7"
-torch = "^2.4.1"
-pandas = "^2.2.3"
-omegaconf = "^2.3.0"
-scipy = "^1.14.1"
-matplotlib = "^3.9.2"
-loguru = "^0.7.3"
-dask = {extras = ["complete"], version = "^2024.12.1"}
-graphviz = "^0.20.3"
+[project]
+name = "regelum"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Georgiy Malaniya", email = "pwlsd.gm@gmail.com"}
+]
+requires-python = ">=3.12"
+readme = "README.md"
+license = {text = "MIT"}
+dependencies = [
+    "opencv-python>=4.11.0.86",
+    "pygame>=2.6.1",
+    "casadi>=3.6.7",
+    "torch>=2.4.1",
+    "pandas>=2.2.3",
+    "omegaconf>=2.3.0",
+    "scipy>=1.14.1",
+    "matplotlib>=3.9.2",
+    "loguru>=0.7.3",
+    "dask[complete]>=2024.12.1",
+    "graphviz>=0.20.3",
+]
 
-# Dev dependencies as optional
-pytest = {version = "^8.3.4", optional = true}
-pytest-cov = {version = "^4.1.0", optional = true}
-pre-commit = {version = "^3.6.0", optional = true}
-mkdocs-material = {version = "^9.5.47", optional = true}
-mkdocs-autorefs = {version = "^1.2.0", optional = true}
-mkdocs-macros-plugin = {version = "^1.0.5", optional = true}
-mkdocs-gen-files = {version = "^0.5.0", optional = true}
-mkdocs-literate-nav = {version = "^0.6.1", optional = true}
-mkdocs-section-index = {version = "^0.3.8", optional = true}
-mkdocs-jupyter = {version = "^0.25.1", optional = true}
-black = {version = "^24.3.0", optional = true}
-ruff = {version = "^0.3.0", optional = true}
-mypy = {version = "^1.8.0", optional = true}
-pylint = {version = "^3.0.3", optional = true}
-types-PyYAML = {version = "^6.0.12", optional = true}
-types-setuptools = {version = "^75.6.0.20241223", optional = true}
-types-requests = {version = "^2.32.0.20241016", optional = true}
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-cov>=4.1.0",
+    "pre-commit>=3.6.0",
+    "mkdocs-material>=9.5.47",
+    "mkdocs-autorefs>=1.2.0",
+    "mkdocs-macros-plugin>=1.0.5",
+    "mkdocs-gen-files>=0.5.0",
+    "mkdocs-literate-nav>=0.6.1",
+    "mkdocs-section-index>=0.3.8",
+    "mkdocs-jupyter>=0.25.1",
+    "black>=24.3.0",
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+    "pylint>=3.0.3",
+    "types-PyYAML>=6.0.12",
+    "types-setuptools>=75.6.0.20241223",
+    "types-requests>=2.32.0.20241016",
+]
 
 
 [tool.poetry.extras]
@@ -66,6 +80,12 @@ dev = [
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "mkdocstrings>=0.29.0",
+    "mkdocstrings-python>=1.16.8",
+]
 
 [tool.pytest.ini_options]
 addopts = "--cov=regelum --cov-report=term-missing"

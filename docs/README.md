@@ -1,99 +1,91 @@
+# Regelum Documentation
 
-# Documentation Guide
+This directory contains the documentation for the Regelum framework.
 
-This repository uses MkDocs with Material theme for documentation. The setup includes special handling for Jupyter notebooks, LaTeX math rendering, and custom styling.
+## Building the Documentation
 
-## Structure
+### Using Docker
 
-```
-docs/
-├── src/                   # Source markdown and notebook files
-│   ├── _internal/         # Internal assets
-│   │   └── javascripts/   # Custom JavaScript (e.g., MathJax config)
-│   ├── stylesheets/       # Custom CSS
-│   └── learn/             # Tutorial notebooks
-├── overrides/             # Theme customization for rendering
-└── README.md              # This file
-```
+The easiest way to build and serve the documentation is using Docker and the provided `docker-compose.yml` file.
 
-## Features
+#### Serving Documentation Locally (Development)
 
-### 1. Jupyter Notebooks
-- Notebooks in `src/` are automatically rendered as documentation pages
-- Requirements cells handling:
-  - First two cells must have the `requirements` tag
-  - These cells will be hidden in the rendered documentation
-  - First cell typically contains LaTeX preamble
-  - Second cell contains package installation commands
-- Interactive options:
-  - Each notebook page includes a Google Colab badge automatically
-  - Users can download notebooks to run locally
-
-### 2. Math Rendering
-- Uses MathJax for LaTeX math rendering
-- Supports both inline (`$...$`) and display math (`$$...$$`)
-- Comprehensive LaTeX preamble with predefined commands:
-  - Automatically injected via `overrides/main.html` template
-  - Includes extensive mathematical notation (vectors, sets, operators)
-  - Common abbreviations and control theory symbols
-  - Consistent styling across all documentation pages
-- Custom MathJax configuration in `_internal/javascripts/mathjax.js` (do not edit)
-
-## Configuration
-
-Key configuration files:
-
-1. [`mkdocs.yaml`](../mkdocs.yaml): Main configuration file
-   - Site structure and navigation
-   - Theme settings
-   - Extensions and plugins
-   - Custom assets
-
-2. [`src/stylesheets/jupyter-code-wrapper.css`](./src/stylesheets/jupyter-code-wrapper.css): Jupyter notebook styling
-   - Hides input/output prompts
-   - Custom code block styling
-
-3. [`overrides/main.html`](./overrides/main.html): Custom theme template
-   - LaTeX preamble injection
-   - Interactive notebook badges for opening in Google Colab. The badges are automatically added to each notebook ipynb.
-
-## Adding Content
-
-### Markdown Files
-1. Add `.md` files to `src/`
-2. Update `nav` section in `mkdocs.yaml`
-
-### Jupyter Notebooks
-1. Create notebook in `src/`
-2. Add required tags to first two cells:
-   ```python
-   # Cell 1: LaTeX preamble (with "requirements" tag)
-   $$
-   % LaTeX definitions
-   $$
-
-   # Cell 2: Package installation (with "requirements" tag)
-   !pip install required-packages
-   ```
-3. Add to navigation in `mkdocs.yaml`
-
-## Building Documentation
+To serve the documentation locally with hot-reloading:
 
 ```bash
-pip install -e ".[dev]"
-mkdocs serve --port 8000 # Serve documentation locally on port 8000
+cd docs
+docker compose up mkdocs
 ```
 
-## Plugins
+This will start a development server at [http://localhost:8000](http://localhost:8000).
 
-- `literate-nav`: Auto-generated navigation
-- `autorefs`: Automatic reference linking
-- `macros`: Template variables and macros
-- `section-index`: Section index pages
-- `mkdocs-jupyter`: Jupyter notebook integration
+#### Building Documentation
 
-## Notes
+To build the documentation as static files:
 
-- Ensure all notebooks are properly tagged to hide requirement cells
-- Keep LaTeX preamble consistent across notebooks
-- Check Colab compatibility for interactive notebooks
+```bash
+cd docs
+docker compose up mkdocs-build
+```
+
+The built documentation will be available in the `site` directory.
+
+### Using pip/uv
+
+If you prefer not to use Docker, you can build the documentation using pip or uv directly:
+
+#### Setup (First Time)
+
+```bash
+# Using pip
+pip install mkdocs mkdocs-material mkdocs-jupyter mdx-include pymdown-extensions
+pip install mkdocs-literate-nav mkdocs-section-index mkdocs-autorefs mkdocs-macros-plugin
+pip install mkdocs-gen-files mkdocstrings mkdocstrings-python
+
+# Or using uv
+uv pip install mkdocs mkdocs-material mkdocs-jupyter mdx-include pymdown-extensions
+uv pip install mkdocs-literate-nav mkdocs-section-index mkdocs-autorefs mkdocs-macros-plugin
+uv pip install mkdocs-gen-files mkdocstrings mkdocstrings-python
+```
+
+#### Serving Documentation Locally
+
+```bash
+cd /path/to/regelum
+mkdocs serve
+```
+
+#### Building Documentation
+
+```bash
+cd /path/to/regelum
+mkdocs build
+```
+
+## Documentation Structure
+
+- `src/learn/`: Contains the tutorials and guides
+  - `pendulum_pd_tutorial.md`: Getting started tutorial with PD controller
+  - `basic_concepts.md`: Introduction to basic concepts
+  - `advanced_graph.md`: Deep dive into the Graph system
+  - `advanced_node.md`: Deep dive into the Node system
+  - `energy_based_control.md`: Tutorial on energy-based control
+  - `how_it_works.md`: Overview of how Regelum works
+  
+- `mkdocs.yml`: MkDocs configuration file
+- `docker-compose.yml`: Docker configuration for building docs
+
+## MkDocs Plugins
+
+The documentation uses several MkDocs plugins:
+
+- `literate-nav`: Auto-generated navigation from directory structure
+- `section-index`: Support for section index pages
+- `autorefs`: Automatic reference linking within the documentation
+- `macros`: Support for template variables and macros
+- `mkdocs-jupyter`: Integration for Jupyter notebooks
+- `mdx-include`: Include markdown files within other markdown files
+- `pymdown-extensions`: Various Markdown extensions for enhanced formatting
+- `gen-files`: Dynamically generate documentation files
+- `mkdocstrings`: API documentation generation from docstrings
+- `mkdocstrings-python`: Python handler for mkdocstrings

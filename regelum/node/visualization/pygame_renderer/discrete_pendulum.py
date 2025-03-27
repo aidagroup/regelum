@@ -30,11 +30,11 @@ class DiscretePendulumRenderer(PyGameRenderer):
 
     def __init__(
         self,
-        *args,
+        *args: object,
         n_angles: int = 16,
         n_velocities: int = 16,
         max_velocity: float = 8.0,
-        **kwargs,
+        **kwargs: object,
     ):
         """Initialize discrete pendulum renderer.
 

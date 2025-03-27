@@ -27,7 +27,9 @@ class ChainRenderer(PyGameRenderer):
     - Right (optional): Reward evolution
     """
 
-    def __init__(self, *args, length: int = 10, goal: int = 9, **kwargs):
+    def __init__(
+        self, *args: object, length: int = 10, goal: int = 9, **kwargs: object
+    ):
         """Initialize chain renderer.
 
         Args:

@@ -43,6 +43,7 @@ nav:
   - Home: index.md
   # - Test: test.ipynb
   - Learn: learn/
+  - Reference API: reference/
   # - Demo: demonstration.ipynb
 
 
@@ -74,10 +75,14 @@ extra:
       link: https://github.com/aidagroup/regelum
 
 plugins:
-  - literate-nav
+  - literate-nav:
+      nav_file: SUMMARY.md
   - autorefs
   - macros
   - section-index
+  - gen-files:
+      scripts:
+      - docs/scripts/gen_ref_pages.py
   - mkdocs-jupyter:
       include_source: True
       include_requirejs: true
@@ -86,3 +91,25 @@ plugins:
       remove_tag_config:
         remove_cell_tags:
           - "requirements"
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_options:
+              ignore_init_summary: true
+            members_order: source
+            docstring_section_style: list
+            filters: [""]
+            heading_level: 1
+            inherited_members: false
+            merge_init_into_class: true
+            separate_signature: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_signature_annotations: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: true
+            summary: true
+            docstring_style: google
+          paths: [regelum]

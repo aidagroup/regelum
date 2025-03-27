@@ -31,11 +31,11 @@ class GridWorldRenderer(PyGameRenderer):
 
     def __init__(
         self,
-        *args,
+        *args: object,
         grid_size: Tuple[int, int] = (5, 5),
         obstacles: List[Tuple[int, int]] = None,
         goal: Tuple[int, int] = (4, 4),
-        **kwargs,
+        **kwargs: object,
     ):
         """Initialize grid world renderer.
 
