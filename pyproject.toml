@@ -1,0 +1,14 @@
+[project]
+name = "regelum"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Anton Bolychev", email = "bolychev.anthon@yandex.ru" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
