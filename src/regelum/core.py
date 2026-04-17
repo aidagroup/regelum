@@ -43,10 +43,10 @@ class ReactiveSystem:
     def reset(self) -> None:
         self._state = dict(self._initial_state)
 
-    def step(self) -> None:
+    def step(self) -> State:
         if self._step is not None:
             self._state = self._step(dict(self._state))
-            return
+            return self.snapshot()
 
         state = dict(self._state)
         active_nodes = self._nodes
@@ -55,10 +55,13 @@ class ReactiveSystem:
         for node in active_nodes:
             state.update(node.run(dict(state)))
         self._state = state
+        return self.snapshot()
 
-    def run(self, steps: int = 1) -> None:
+    def run(self, steps: int = 1) -> list[State]:
+        snapshots: list[State] = []
         for _ in range(steps):
-            self.step()
+            snapshots.append(self.step())
+        return snapshots
 
     def snapshot(self) -> State:
         return dict(self._state)
