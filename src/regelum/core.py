@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -18,17 +19,26 @@ class Node:
         raise NotImplementedError
 
 
+@dataclass(frozen=True)
+class Phase:
+    name: str
+    nodes: tuple[Node, ...]
+
+
 class ReactiveSystem:
     def __init__(
         self,
         initial_state: State | None = None,
         step: Step | None = None,
         nodes: Iterable[Node] = (),
+        phases: Iterable[Phase] = (),
     ) -> None:
         self._initial_state = dict(initial_state or {})
         self._state = dict(self._initial_state)
         self._step = step
         self._nodes = tuple(nodes)
+        self._phases = tuple(phases)
+        self._phase_index = 0
 
     def reset(self) -> None:
         self._state = dict(self._initial_state)
@@ -39,7 +49,10 @@ class ReactiveSystem:
             return
 
         state = dict(self._state)
-        for node in self._nodes:
+        active_nodes = self._nodes
+        if self._phases:
+            active_nodes = self._phases[self._phase_index].nodes
+        for node in active_nodes:
             state.update(node.run(dict(state)))
         self._state = state
 
