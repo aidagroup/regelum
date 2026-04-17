@@ -8,6 +8,16 @@ State = dict[str, Any]
 Step = Callable[[State], State]
 
 
+class Node:
+    name: str
+
+    def __init__(self, name: str | None = None) -> None:
+        self.name = name or self.__class__.__name__
+
+    def run(self, state: State) -> State:
+        raise NotImplementedError
+
+
 class ReactiveSystem:
     def __init__(self, initial_state: State, step: Step) -> None:
         self._initial_state = dict(initial_state)
