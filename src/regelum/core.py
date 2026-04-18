@@ -11,9 +11,21 @@ Step = Callable[[State], State]
 
 class Node:
     name: str
+    inputs: tuple[str, ...] = ()
+    outputs: tuple[str, ...] = ()
 
     def __init__(self, name: str | None = None) -> None:
         self.name = name or self.__class__.__name__
+
+    def read_inputs(self, state: State) -> State:
+        if not self.inputs:
+            return dict(state)
+        return {name: state[name] for name in self.inputs}
+
+    def write_outputs(self, values: State) -> State:
+        if not self.outputs:
+            return dict(values)
+        return {name: values[name] for name in self.outputs}
 
     def run(self, state: State) -> State:
         raise NotImplementedError
@@ -53,7 +65,8 @@ class ReactiveSystem:
         if self._phases:
             active_nodes = self._phases[self._phase_index].nodes
         for node in active_nodes:
-            state.update(node.run(dict(state)))
+            values = node.run(node.read_inputs(state))
+            state.update(node.write_outputs(values))
         self._state = state
         return self.snapshot()
 
