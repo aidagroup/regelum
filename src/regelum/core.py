@@ -9,6 +9,15 @@ State = dict[str, Any]
 Step = Callable[[State], State]
 
 
+class IOView:
+    def __init__(self, values: State | None = None, **kwargs: Any) -> None:
+        for key, value in dict(values or {}) | kwargs.items():
+            setattr(self, key, value)
+
+    def as_dict(self) -> State:
+        return dict(vars(self))
+
+
 class Node:
     name: str
     inputs: tuple[str, ...] = ()
@@ -17,17 +26,19 @@ class Node:
     def __init__(self, name: str | None = None) -> None:
         self.name = name or self.__class__.__name__
 
-    def read_inputs(self, state: State) -> State:
+    def read_inputs(self, state: State) -> IOView:
         if not self.inputs:
-            return dict(state)
-        return {name: state[name] for name in self.inputs}
+            return IOView(state)
+        return IOView({name: state[name] for name in self.inputs})
 
     def write_outputs(self, values: State) -> State:
+        if isinstance(values, IOView):
+            values = values.as_dict()
         if not self.outputs:
             return dict(values)
         return {name: values[name] for name in self.outputs}
 
-    def run(self, state: State) -> State:
+    def run(self, state: IOView) -> State | IOView:
         raise NotImplementedError
 
 
