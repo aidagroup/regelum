@@ -4,6 +4,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
+import z3
+
 
 State = dict[str, Any]
 Step = Callable[[State], State]
@@ -13,6 +15,9 @@ Predicate = Callable[[State], bool]
 
 class Expr:
     def evaluate(self, state: State) -> Any:
+        raise NotImplementedError
+
+    def to_z3(self, ctx: Z3Context) -> Any:
         raise NotImplementedError
 
     def __and__(self, other: Any) -> Expr:
@@ -38,6 +43,9 @@ class ConstExpr(Expr):
     def evaluate(self, state: State) -> Any:
         return self.value
 
+    def to_z3(self, ctx: Z3Context) -> Any:
+        return self.value
+
 
 @dataclass(frozen=True)
 class VarExpr(Expr):
@@ -45,6 +53,9 @@ class VarExpr(Expr):
 
     def evaluate(self, state: State) -> Any:
         return state[self.path]
+
+    def to_z3(self, ctx: Z3Context) -> Any:
+        return ctx.variable(self.path)
 
 
 def V(path: SourceRef) -> Expr:
@@ -59,6 +70,11 @@ class UnaryExpr(Expr):
     def evaluate(self, state: State) -> Any:
         if self.op == "not":
             return not bool(self.operand.evaluate(state))
+        raise ValueError(f"Unknown unary operator: {self.op}")
+
+    def to_z3(self, ctx: Z3Context) -> Any:
+        if self.op == "not":
+            return z3.Not(self.operand.to_z3(ctx))
         raise ValueError(f"Unknown unary operator: {self.op}")
 
 
@@ -81,11 +97,37 @@ class BinaryExpr(Expr):
             return left != right
         raise ValueError(f"Unknown binary operator: {self.op}")
 
+    def to_z3(self, ctx: Z3Context) -> Any:
+        left = self.left.to_z3(ctx)
+        right = self.right.to_z3(ctx)
+        if self.op == "and":
+            return z3.And(left, right)
+        if self.op == "or":
+            return z3.Or(left, right)
+        if self.op == "eq":
+            return left == right
+        if self.op == "ne":
+            return left != right
+        raise ValueError(f"Unknown binary operator: {self.op}")
+
 
 def _as_expr(value: Any) -> Expr:
     if isinstance(value, Expr):
         return value
     return ConstExpr(value)
+
+
+class Z3Context:
+    def __init__(self, bindings: dict[str, Any] | None = None) -> None:
+        self.bindings = dict(bindings or {})
+        self.variables: dict[str, Any] = {}
+
+    def variable(self, path: str) -> Any:
+        if path in self.bindings:
+            return self.bindings[path]
+        if path not in self.variables:
+            self.variables[path] = z3.Real(path)
+        return self.variables[path]
 
 
 class InputValues:
