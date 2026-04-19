@@ -15,6 +15,21 @@ class Expr:
     def evaluate(self, state: State) -> Any:
         raise NotImplementedError
 
+    def __and__(self, other: Any) -> Expr:
+        return BinaryExpr("and", self, _as_expr(other))
+
+    def __or__(self, other: Any) -> Expr:
+        return BinaryExpr("or", self, _as_expr(other))
+
+    def __invert__(self) -> Expr:
+        return UnaryExpr("not", self)
+
+    def __eq__(self, other: object) -> Expr:  # type: ignore[override]
+        return BinaryExpr("eq", self, _as_expr(other))
+
+    def __ne__(self, other: object) -> Expr:  # type: ignore[override]
+        return BinaryExpr("ne", self, _as_expr(other))
+
 
 @dataclass(frozen=True)
 class ConstExpr(Expr):
@@ -34,6 +49,43 @@ class VarExpr(Expr):
 
 def V(path: SourceRef) -> Expr:
     return VarExpr(path)
+
+
+@dataclass(frozen=True)
+class UnaryExpr(Expr):
+    op: str
+    operand: Expr
+
+    def evaluate(self, state: State) -> Any:
+        if self.op == "not":
+            return not bool(self.operand.evaluate(state))
+        raise ValueError(f"Unknown unary operator: {self.op}")
+
+
+@dataclass(frozen=True)
+class BinaryExpr(Expr):
+    op: str
+    left: Expr
+    right: Expr
+
+    def evaluate(self, state: State) -> Any:
+        left = self.left.evaluate(state)
+        right = self.right.evaluate(state)
+        if self.op == "and":
+            return bool(left) and bool(right)
+        if self.op == "or":
+            return bool(left) or bool(right)
+        if self.op == "eq":
+            return left == right
+        if self.op == "ne":
+            return left != right
+        raise ValueError(f"Unknown binary operator: {self.op}")
+
+
+def _as_expr(value: Any) -> Expr:
+    if isinstance(value, Expr):
+        return value
+    return ConstExpr(value)
 
 
 class InputValues:
