@@ -7,6 +7,7 @@ from typing import Any
 
 State = dict[str, Any]
 Step = Callable[[State], State]
+SourceRef = str
 
 
 class InputValues:
@@ -26,6 +27,7 @@ class Node:
     name: str
     inputs: tuple[str, ...] = ()
     outputs: tuple[str, ...] = ()
+    input_sources: dict[str, SourceRef] = {}
 
     def __init__(self, name: str | None = None) -> None:
         self.name = name or self.__class__.__name__
@@ -33,7 +35,11 @@ class Node:
     def read_inputs(self, state: State) -> InputValues:
         if not self.inputs:
             return InputValues(state)
-        return InputValues({name: state[name] for name in self.inputs})
+        values: State = {}
+        for name in self.inputs:
+            source = self.input_sources.get(name, name)
+            values[name] = state[source]
+        return InputValues(values)
 
     def write_outputs(self, values: State) -> State:
         if isinstance(values, OutputValues):
