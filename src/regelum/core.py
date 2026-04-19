@@ -8,6 +8,32 @@ from typing import Any
 State = dict[str, Any]
 Step = Callable[[State], State]
 SourceRef = str
+Predicate = Callable[[State], bool]
+
+
+class Expr:
+    def evaluate(self, state: State) -> Any:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class ConstExpr(Expr):
+    value: Any
+
+    def evaluate(self, state: State) -> Any:
+        return self.value
+
+
+@dataclass(frozen=True)
+class VarExpr(Expr):
+    path: SourceRef
+
+    def evaluate(self, state: State) -> Any:
+        return state[self.path]
+
+
+def V(path: SourceRef) -> Expr:
+    return VarExpr(path)
 
 
 class InputValues:
