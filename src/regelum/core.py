@@ -146,11 +146,17 @@ class OutputValues(InputValues):
     pass
 
 
+@dataclass(frozen=True)
+class OutputPort:
+    name: str
+
+
 class Node:
     name: str
     inputs: tuple[str, ...] = ()
     outputs: tuple[str, ...] = ()
     input_sources: dict[str, SourceRef] = {}
+    output_ports: dict[str, OutputPort] = {}
 
     def __init__(self, name: str | None = None) -> None:
         self.name = name or self.__class__.__name__
@@ -167,6 +173,11 @@ class Node:
     def write_outputs(self, values: State) -> State:
         if isinstance(values, OutputValues):
             values = values.as_dict()
+        if self.output_ports:
+            return {
+                name: values[port.name]
+                for name, port in self.output_ports.items()
+            }
         if not self.outputs:
             return dict(values)
         return {name: values[name] for name in self.outputs}
