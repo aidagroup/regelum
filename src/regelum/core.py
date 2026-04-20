@@ -272,3 +272,23 @@ def when(guard: Guard, target: str | TerminateTarget) -> Transition:
 
 def otherwise(target: str | TerminateTarget) -> Transition:
     return Transition(target=target, guard=always)
+
+
+def If(guard: Guard, target: str | TerminateTarget) -> Transition:
+    return when(guard, target)
+
+
+def ElseIf(guard: Guard, target: str | TerminateTarget) -> Transition:
+    return when(guard, target)
+
+
+def Elif(guard: Guard, target: str | TerminateTarget) -> Transition:
+    return ElseIf(guard, target)
+
+
+def Else(target: str | TerminateTarget) -> Transition:
+    return otherwise(target)
+
+
+def Goto(target: str | TerminateTarget) -> Transition:
+    return otherwise(target)
