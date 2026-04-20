@@ -130,6 +130,9 @@ class Z3Context:
         return self.variables[path]
 
 
+Guard = Predicate | Expr
+
+
 class InputValues:
     def __init__(self, values: State | None = None, **kwargs: Any) -> None:
         for key, value in dict(values or {}) | kwargs.items():
@@ -176,6 +179,8 @@ class Node:
 class Phase:
     name: str
     nodes: tuple[Node, ...]
+    transitions: tuple[Transition, ...] = ()
+    is_initial: bool = False
 
 
 class ReactiveSystem:
@@ -191,7 +196,10 @@ class ReactiveSystem:
         self._step = step
         self._nodes = tuple(nodes)
         self._phases = tuple(phases)
-        self._phase_index = 0
+        self._phase_index = next(
+            (index for index, phase in enumerate(self._phases) if phase.is_initial),
+            0,
+        )
 
     def reset(self) -> None:
         self._state = dict(self._initial_state)
@@ -209,6 +217,7 @@ class ReactiveSystem:
             values = node.run(node.read_inputs(state))
             state.update(node.write_outputs(values))
         self._state = state
+        self._advance_phase()
         return self.snapshot()
 
     def run(self, steps: int = 1) -> list[State]:
@@ -219,3 +228,47 @@ class ReactiveSystem:
 
     def snapshot(self) -> State:
         return dict(self._state)
+
+    def _advance_phase(self) -> None:
+        if not self._phases:
+            return
+        phase = self._phases[self._phase_index]
+        for transition in phase.transitions:
+            if transition.enabled(self._state):
+                if transition.target is terminate:
+                    return
+                self._phase_index = self._phase_names()[transition.target]
+                return
+
+    def _phase_names(self) -> dict[str, int]:
+        return {phase.name: index for index, phase in enumerate(self._phases)}
+
+
+@dataclass(frozen=True)
+class Transition:
+    target: str | TerminateTarget
+    guard: Guard
+
+    def enabled(self, state: State) -> bool:
+        if isinstance(self.guard, Expr):
+            return bool(self.guard.evaluate(state))
+        return bool(self.guard(state))
+
+
+class TerminateTarget:
+    pass
+
+
+terminate = TerminateTarget()
+
+
+def always(_: State) -> bool:
+    return True
+
+
+def when(guard: Guard, target: str | TerminateTarget) -> Transition:
+    return Transition(target=target, guard=guard)
+
+
+def otherwise(target: str | TerminateTarget) -> Transition:
+    return Transition(target=target, guard=always)
