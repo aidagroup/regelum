@@ -151,17 +151,31 @@ class OutputPort:
     name: str
 
 
+@dataclass(frozen=True)
+class InputPort:
+    name: str
+    source: SourceRef
+
+
 class Node:
     name: str
     inputs: tuple[str, ...] = ()
     outputs: tuple[str, ...] = ()
     input_sources: dict[str, SourceRef] = {}
+    input_ports: dict[str, InputPort] = {}
     output_ports: dict[str, OutputPort] = {}
 
     def __init__(self, name: str | None = None) -> None:
         self.name = name or self.__class__.__name__
 
     def read_inputs(self, state: State) -> InputValues:
+        if self.input_ports:
+            return InputValues(
+                {
+                    name: state[port.source]
+                    for name, port in self.input_ports.items()
+                }
+            )
         if not self.inputs:
             return InputValues(state)
         values: State = {}
