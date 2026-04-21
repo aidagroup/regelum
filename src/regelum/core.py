@@ -153,8 +153,8 @@ class OutputPort:
 
 @dataclass(frozen=True)
 class InputPort:
-    name: str
-    source: SourceRef
+    name: str | None = None
+    source: SourceRef | None = None
 
 
 @dataclass(frozen=True)
@@ -197,6 +197,10 @@ def connect(
 
 def Output(name: str | None = None) -> OutputPort:
     return OutputPort(name=name)
+
+
+def Input(source: SourceRef | None = None, name: str | None = None) -> InputPort:
+    return InputPort(name=name, source=source)
 
 
 class Node:
