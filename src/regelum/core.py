@@ -148,7 +148,7 @@ class OutputValues(InputValues):
 
 @dataclass(frozen=True)
 class OutputPort:
-    name: str
+    name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -193,6 +193,10 @@ def connect(
     if not isinstance(bound_target, BoundInputPort):
         raise TypeError("connect() target must be an input port.")
     return Connection(source=bound_source, target=bound_target)
+
+
+def Output(name: str | None = None) -> OutputPort:
+    return OutputPort(name=name)
 
 
 class Node:
