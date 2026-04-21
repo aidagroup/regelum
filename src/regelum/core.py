@@ -157,6 +157,44 @@ class InputPort:
     source: SourceRef
 
 
+@dataclass(frozen=True)
+class BoundOutputPort:
+    node: Node
+    port_name: str
+
+
+@dataclass(frozen=True)
+class BoundInputPort:
+    node: Node
+    port_name: str
+
+
+@dataclass(frozen=True)
+class Connection:
+    source: BoundOutputPort
+    target: BoundInputPort
+
+
+def port(reference: tuple[Node, str]) -> BoundOutputPort | BoundInputPort:
+    node, name = reference
+    if name in node.output_ports or name in node.outputs:
+        return BoundOutputPort(node=node, port_name=name)
+    return BoundInputPort(node=node, port_name=name)
+
+
+def connect(
+    source: BoundOutputPort | tuple[Node, str],
+    target: BoundInputPort | tuple[Node, str],
+) -> Connection:
+    bound_source = source if isinstance(source, BoundOutputPort) else port(source)
+    bound_target = target if isinstance(target, BoundInputPort) else port(target)
+    if not isinstance(bound_source, BoundOutputPort):
+        raise TypeError("connect() source must be an output port.")
+    if not isinstance(bound_target, BoundInputPort):
+        raise TypeError("connect() target must be an input port.")
+    return Connection(source=bound_source, target=bound_target)
+
+
 class Node:
     name: str
     inputs: tuple[str, ...] = ()
