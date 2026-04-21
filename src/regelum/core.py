@@ -146,6 +146,14 @@ class OutputValues(InputValues):
     pass
 
 
+class NodeInputs:
+    pass
+
+
+class NodeOutputs:
+    pass
+
+
 @dataclass(frozen=True)
 class OutputPort:
     name: str | None = None
