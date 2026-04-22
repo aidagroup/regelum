@@ -13,6 +13,10 @@ SourceRef = str
 Predicate = Callable[[State], bool]
 
 
+def _normalize_source_path(path: str) -> str:
+    return path.replace("::", ".").replace("/", ".").strip(". ")
+
+
 class Expr:
     def evaluate(self, state: State) -> Any:
         raise NotImplementedError
@@ -52,14 +56,14 @@ class VarExpr(Expr):
     path: SourceRef
 
     def evaluate(self, state: State) -> Any:
-        return state[self.path]
+        return state[_normalize_source_path(self.path)]
 
     def to_z3(self, ctx: Z3Context) -> Any:
-        return ctx.variable(self.path)
+        return ctx.variable(_normalize_source_path(self.path))
 
 
 def V(path: SourceRef) -> Expr:
-    return VarExpr(path)
+    return VarExpr(_normalize_source_path(path))
 
 
 @dataclass(frozen=True)
@@ -262,7 +266,7 @@ class Node:
         if self.input_ports:
             return InputValues(
                 {
-                    name: state[port.source]
+                    name: state[_normalize_source_path(port.source or name)]
                     for name, port in self.input_ports.items()
                 }
             )
@@ -271,7 +275,7 @@ class Node:
         values: State = {}
         for name in self.inputs:
             source = self.input_sources.get(name, name)
-            values[name] = state[source]
+            values[name] = state[_normalize_source_path(source)]
         return InputValues(values)
 
     def write_outputs(self, values: State) -> State:
