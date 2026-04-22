@@ -154,6 +154,10 @@ class NodeOutputs:
     pass
 
 
+def _namespace_annotations(namespace: type[Any]) -> dict[str, Any]:
+    return dict(getattr(namespace, "__annotations__", {}))
+
+
 @dataclass(frozen=True)
 class OutputPort:
     name: str | None = None
@@ -218,6 +222,38 @@ class Node:
     input_sources: dict[str, SourceRef] = {}
     input_ports: dict[str, InputPort] = {}
     output_ports: dict[str, OutputPort] = {}
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        input_namespace = getattr(cls, "Inputs", None)
+        output_namespace = getattr(cls, "Outputs", None)
+
+        declared_inputs: dict[str, InputPort] = {}
+        if isinstance(input_namespace, type):
+            for name in _namespace_annotations(input_namespace):
+                value = getattr(input_namespace, name, Input())
+                if not isinstance(value, InputPort):
+                    value = Input()
+                declared_inputs[name] = InputPort(name=name, source=value.source or name)
+
+        declared_outputs: dict[str, OutputPort] = {}
+        if isinstance(output_namespace, type):
+            for name in _namespace_annotations(output_namespace):
+                value = getattr(output_namespace, name, Output())
+                if not isinstance(value, OutputPort):
+                    value = Output()
+                declared_outputs[name] = OutputPort(name=name)
+
+        if declared_inputs:
+            cls.input_ports = declared_inputs
+            cls.inputs = tuple(declared_inputs)
+            cls.input_sources = {
+                name: port.source or name for name, port in declared_inputs.items()
+            }
+
+        if declared_outputs:
+            cls.output_ports = declared_outputs
+            cls.outputs = tuple(declared_outputs)
 
     def __init__(self, name: str | None = None) -> None:
         self.name = name or self.__class__.__name__
