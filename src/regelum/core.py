@@ -139,7 +139,7 @@ Guard = Predicate | Expr
 
 class InputValues:
     def __init__(self, values: State | None = None, **kwargs: Any) -> None:
-        for key, value in dict(values or {}) | kwargs.items():
+        for key, value in (dict(values or {}) | kwargs).items():
             setattr(self, key, value)
 
     def as_dict(self) -> State:
