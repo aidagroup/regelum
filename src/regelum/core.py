@@ -337,8 +337,8 @@ class ReactiveSystem:
         self._initial_state = dict(initial_state or {})
         self._state = dict(self._initial_state)
         self._step = step
-        self._nodes = tuple(nodes)
         self._phases = tuple(phases)
+        self._nodes = tuple(nodes) or _nodes_from_phases(self._phases)
         self._phase_index = next(
             (index for index, phase in enumerate(self._phases) if phase.is_initial),
             0,
@@ -435,3 +435,10 @@ def Else(target: str | TerminateTarget) -> Transition:
 
 def Goto(target: str | TerminateTarget) -> Transition:
     return otherwise(target)
+
+
+def _nodes_from_phases(phases: tuple[Phase, ...]) -> tuple[Node, ...]:
+    nodes: list[Node] = []
+    for phase in phases:
+        nodes.extend(phase.nodes)
+    return tuple(nodes)
