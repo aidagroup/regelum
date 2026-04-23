@@ -33,6 +33,11 @@ class Controller(Node):
         return {"torque": -inputs.theta}
 
 
+class SugarController(Node):
+    def run(self, theta: float = Input(source=lambda: "theta")):
+        return {"torque": theta * 2.0}
+
+
 def test_phase_execution_uses_declared_ports() -> None:
     system = ReactiveSystem(
         initial_state={"theta": 0.0},
@@ -52,3 +57,9 @@ def test_phase_execution_uses_declared_ports() -> None:
 def test_source_paths_are_normalized() -> None:
     expr = V("Plant/theta")
     assert expr.evaluate({"Plant.theta": 3.0}) == 3.0
+
+
+def test_inputs_can_be_declared_in_run_signature() -> None:
+    system = ReactiveSystem(nodes=(SugarController(),), initial_state={"theta": 1.5})
+    snapshot = system.step()
+    assert snapshot["torque"] == 3.0

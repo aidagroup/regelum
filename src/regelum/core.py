@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+import inspect
 from typing import Any
 
 import z3
@@ -10,11 +11,18 @@ import z3
 State = dict[str, Any]
 Step = Callable[[State], State]
 SourceRef = str
+LazySourceRef = SourceRef | Callable[[], SourceRef]
 Predicate = Callable[[State], bool]
 
 
 def _normalize_source_path(path: str) -> str:
     return path.replace("::", ".").replace("/", ".").strip(". ")
+
+
+def _resolve_source(source: LazySourceRef) -> SourceRef:
+    if callable(source):
+        return _resolve_source(source())
+    return _normalize_source_path(source)
 
 
 class Expr:
@@ -56,14 +64,14 @@ class VarExpr(Expr):
     path: SourceRef
 
     def evaluate(self, state: State) -> Any:
-        return state[_normalize_source_path(self.path)]
+        return state[_resolve_source(self.path)]
 
     def to_z3(self, ctx: Z3Context) -> Any:
-        return ctx.variable(_normalize_source_path(self.path))
+        return ctx.variable(_resolve_source(self.path))
 
 
 def V(path: SourceRef) -> Expr:
-    return VarExpr(_normalize_source_path(path))
+    return VarExpr(_resolve_source(path))
 
 
 @dataclass(frozen=True)
@@ -170,7 +178,7 @@ class OutputPort:
 @dataclass(frozen=True)
 class InputPort:
     name: str | None = None
-    source: SourceRef | None = None
+    source: LazySourceRef | None = None
 
 
 @dataclass(frozen=True)
@@ -215,7 +223,7 @@ def Output(name: str | None = None) -> OutputPort:
     return OutputPort(name=name)
 
 
-def Input(source: SourceRef | None = None, name: str | None = None) -> InputPort:
+def Input(source: LazySourceRef | None = None, name: str | None = None) -> InputPort:
     return InputPort(name=name, source=source)
 
 
@@ -226,6 +234,7 @@ class Node:
     input_sources: dict[str, SourceRef] = {}
     input_ports: dict[str, InputPort] = {}
     output_ports: dict[str, OutputPort] = {}
+    run_uses_parameter_ports: bool = False
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
@@ -239,6 +248,16 @@ class Node:
                 if not isinstance(value, InputPort):
                     value = Input()
                 declared_inputs[name] = InputPort(name=name, source=value.source or name)
+            cls.run_uses_parameter_ports = False
+        elif "run" in cls.__dict__:
+            signature = inspect.signature(cls.__dict__["run"])
+            for name, parameter in signature.parameters.items():
+                if name == "self":
+                    continue
+                default = parameter.default
+                if isinstance(default, InputPort):
+                    declared_inputs[name] = InputPort(name=name, source=default.source or name)
+            cls.run_uses_parameter_ports = bool(declared_inputs)
 
         declared_outputs: dict[str, OutputPort] = {}
         if isinstance(output_namespace, type):
@@ -266,7 +285,7 @@ class Node:
         if self.input_ports:
             return InputValues(
                 {
-                    name: state[_normalize_source_path(port.source or name)]
+                    name: state[_resolve_source(port.source or name)]
                     for name, port in self.input_ports.items()
                 }
             )
@@ -275,7 +294,7 @@ class Node:
         values: State = {}
         for name in self.inputs:
             source = self.input_sources.get(name, name)
-            values[name] = state[_normalize_source_path(source)]
+            values[name] = state[_resolve_source(source)]
         return InputValues(values)
 
     def write_outputs(self, values: State) -> State:
@@ -292,6 +311,11 @@ class Node:
 
     def run(self, state: InputValues) -> State | OutputValues:
         raise NotImplementedError
+
+    def invoke(self, inputs: InputValues) -> State | OutputValues:
+        if self.run_uses_parameter_ports:
+            return self.run(**inputs.as_dict())
+        return self.run(inputs)
 
 
 @dataclass(frozen=True)
@@ -333,7 +357,7 @@ class ReactiveSystem:
         if self._phases:
             active_nodes = self._phases[self._phase_index].nodes
         for node in active_nodes:
-            values = node.run(node.read_inputs(state))
+            values = node.invoke(node.read_inputs(state))
             state.update(node.write_outputs(values))
         self._state = state
         self._advance_phase()
