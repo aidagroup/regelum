@@ -17,14 +17,14 @@ class Plant(Node):
     class Outputs(NodeOutputs):
         theta: float = Output()
 
-    def run(self, inputs):
-        theta = getattr(inputs, "theta", 0.0) + 1.0
+    def run(self, theta: float = Input(source="Plant.theta")):
+        theta = theta + 1.0
         return {"theta": theta}
 
 
 class Controller(Node):
     class Inputs(NodeInputs):
-        theta: float = Input(source="theta")
+        theta: float = Input(source="Plant.theta")
 
     class Outputs(NodeOutputs):
         torque: float = Output()
@@ -40,18 +40,18 @@ class SugarController(Node):
 
 def test_phase_execution_uses_declared_ports() -> None:
     system = ReactiveSystem(
-        initial_state={"theta": 0.0},
         phases=(
             Phase("plant", nodes=(Plant(),), transitions=(Goto("control"),), is_initial=True),
             Phase("control", nodes=(Controller(),), transitions=(Goto("plant"),)),
         ),
+        initial_state={"Plant.theta": 0.0},
     )
 
     step_1 = system.step()
-    assert step_1["theta"] == 1.0
+    assert step_1["Plant.theta"] == 1.0
 
     step_2 = system.step()
-    assert step_2["torque"] == -1.0
+    assert step_2["Controller.torque"] == -1.0
 
 
 def test_source_paths_are_normalized() -> None:
@@ -62,4 +62,4 @@ def test_source_paths_are_normalized() -> None:
 def test_inputs_can_be_declared_in_run_signature() -> None:
     system = ReactiveSystem(nodes=(SugarController(),), initial_state={"theta": 1.5})
     snapshot = system.step()
-    assert snapshot["torque"] == 3.0
+    assert snapshot["SugarController.torque"] == 3.0

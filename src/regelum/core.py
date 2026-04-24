@@ -302,12 +302,12 @@ class Node:
             values = values.as_dict()
         if self.output_ports:
             return {
-                name: values[port.name]
+                _output_path(self, name): values[port.name]
                 for name, port in self.output_ports.items()
             }
         if not self.outputs:
-            return dict(values)
-        return {name: values[name] for name in self.outputs}
+            return {_output_path(self, name): value for name, value in values.items()}
+        return {_output_path(self, name): values[name] for name in self.outputs}
 
     def run(self, state: InputValues) -> State | OutputValues:
         raise NotImplementedError
@@ -339,6 +339,7 @@ class ReactiveSystem:
         self._step = step
         self._phases = tuple(phases)
         self._nodes = tuple(nodes) or compile_nodes(self._phases)
+        self._connections = _connection_map(self._nodes)
         self._phase_index = next(
             (index for index, phase in enumerate(self._phases) if phase.is_initial),
             0,
@@ -457,3 +458,15 @@ def _deduplicate_node_names(nodes: list[Node]) -> None:
         seen[node.name] = count
         if count > 1:
             node.name = f"{node.name}_{count}"
+
+
+def _output_path(node: Node, output_name: str) -> str:
+    return f"{node.name}.{output_name}"
+
+
+def _connection_map(nodes: Iterable[Node]) -> dict[str, str]:
+    connections: dict[str, str] = {}
+    for node in nodes:
+        for input_name, port in node.input_ports.items():
+            connections[f"{node.name}.{input_name}"] = _resolve_source(port.source or input_name)
+    return connections
