@@ -360,7 +360,8 @@ class ReactiveSystem:
         state = dict(self._state)
         active_nodes = self._nodes
         if self._phases:
-            active_nodes = self._phases[self._phase_index].nodes
+            phase = self._phases[self._phase_index]
+            active_nodes = tuple(_topological_order(phase.nodes, self._phase_edges[phase.name]))
         for node in active_nodes:
             values = node.invoke(node.read_inputs(state))
             state.update(node.write_outputs(values))
@@ -486,3 +487,29 @@ def _phase_dependency_edges(phase: Phase) -> list[tuple[str, str]]:
             if producer in node_names and producer != node.name:
                 edges.append((producer, node.name))
     return edges
+
+
+def _topological_order(
+    nodes: Iterable[Node], edges: list[tuple[str, str]]
+) -> list[Node]:
+    ordered_nodes = list(nodes)
+    by_name = {node.name: node for node in ordered_nodes}
+    incoming: dict[str, set[str]] = {node.name: set() for node in ordered_nodes}
+    outgoing: dict[str, set[str]] = {node.name: set() for node in ordered_nodes}
+    for source, target in edges:
+        incoming[target].add(source)
+        outgoing[source].add(target)
+
+    ready = [name for name, deps in incoming.items() if not deps]
+    result: list[Node] = []
+    while ready:
+        name = ready.pop(0)
+        result.append(by_name[name])
+        for target in sorted(outgoing[name]):
+            incoming[target].discard(name)
+            if not incoming[target] and by_name[target] not in result:
+                ready.append(target)
+
+    if len(result) != len(ordered_nodes):
+        return ordered_nodes
+    return result

@@ -69,3 +69,16 @@ def test_inputs_can_be_declared_in_run_signature() -> None:
 def test_phase_dependency_edges_follow_source_bindings() -> None:
     phase = Phase("control", nodes=(Plant(), Controller()))
     assert _phase_dependency_edges(phase) == [("Plant", "Controller")]
+
+
+def test_phase_execution_respects_topological_order() -> None:
+    system = ReactiveSystem(
+        phases=(
+            Phase("tick", nodes=(Controller(), Plant()), is_initial=True),
+        ),
+        initial_state={"Plant.theta": 0.0},
+    )
+
+    snapshot = system.step()
+    assert snapshot["Plant.theta"] == 1.0
+    assert snapshot["Controller.torque"] == -1.0
