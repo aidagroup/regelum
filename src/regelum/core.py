@@ -340,6 +340,10 @@ class ReactiveSystem:
         self._phases = tuple(phases)
         self._nodes = tuple(nodes) or compile_nodes(self._phases)
         self._connections = _connection_map(self._nodes)
+        self._phase_edges = {
+            phase.name: _phase_dependency_edges(phase)
+            for phase in self._phases
+        }
         self._phase_index = next(
             (index for index, phase in enumerate(self._phases) if phase.is_initial),
             0,
@@ -470,3 +474,15 @@ def _connection_map(nodes: Iterable[Node]) -> dict[str, str]:
         for input_name, port in node.input_ports.items():
             connections[f"{node.name}.{input_name}"] = _resolve_source(port.source or input_name)
     return connections
+
+
+def _phase_dependency_edges(phase: Phase) -> list[tuple[str, str]]:
+    node_names = {node.name for node in phase.nodes}
+    edges: list[tuple[str, str]] = []
+    for node in phase.nodes:
+        for port in node.input_ports.values():
+            source = _resolve_source(port.source or "")
+            producer = source.split(".", 1)[0]
+            if producer in node_names and producer != node.name:
+                edges.append((producer, node.name))
+    return edges

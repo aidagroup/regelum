@@ -10,6 +10,7 @@ from regelum.core import (
     Phase,
     ReactiveSystem,
     V,
+    _phase_dependency_edges,
 )
 
 
@@ -63,3 +64,8 @@ def test_inputs_can_be_declared_in_run_signature() -> None:
     system = ReactiveSystem(nodes=(SugarController(),), initial_state={"theta": 1.5})
     snapshot = system.step()
     assert snapshot["SugarController.torque"] == 3.0
+
+
+def test_phase_dependency_edges_follow_source_bindings() -> None:
+    phase = Phase("control", nodes=(Plant(), Controller()))
+    assert _phase_dependency_edges(phase) == [("Plant", "Controller")]
