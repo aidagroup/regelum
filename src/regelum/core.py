@@ -445,4 +445,15 @@ def _nodes_from_phases(phases: tuple[Phase, ...]) -> tuple[Node, ...]:
 
 
 def compile_nodes(phases: tuple[Phase, ...]) -> tuple[Node, ...]:
-    return _nodes_from_phases(phases)
+    nodes = list(_nodes_from_phases(phases))
+    _deduplicate_node_names(nodes)
+    return tuple(nodes)
+
+
+def _deduplicate_node_names(nodes: list[Node]) -> None:
+    seen: dict[str, int] = {}
+    for node in nodes:
+        count = seen.get(node.name, 0) + 1
+        seen[node.name] = count
+        if count > 1:
+            node.name = f"{node.name}_{count}"
