@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from regelum.core import (
+    CompileError,
     Goto,
     Input,
     Node,
@@ -88,3 +89,18 @@ def test_compile_report_defaults_to_ok() -> None:
     system = ReactiveSystem(phases=(Phase("tick", nodes=(Plant(),), is_initial=True),))
     assert system.compile_report.ok is True
     assert system.compile_report.format() == ("ok",)
+
+
+def test_strict_mode_raises_compile_error() -> None:
+    try:
+        ReactiveSystem()
+    except CompileError as error:
+        assert error.report.ok is False
+        assert error.report.format() == ("error: system has no nodes",)
+    else:
+        raise AssertionError("CompileError was not raised")
+
+
+def test_non_strict_mode_exposes_report() -> None:
+    system = ReactiveSystem(strict=False)
+    assert system.compile_report.ok is False

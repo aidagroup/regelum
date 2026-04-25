@@ -354,6 +354,12 @@ class CompileReport:
         return tuple(lines)
 
 
+class CompileError(Exception):
+    def __init__(self, report: CompileReport) -> None:
+        self.report = report
+        super().__init__("\n".join(report.format()))
+
+
 class ReactiveSystem:
     def __init__(
         self,
@@ -361,6 +367,7 @@ class ReactiveSystem:
         step: Step | None = None,
         nodes: Iterable[Node] = (),
         phases: Iterable[Phase] = (),
+        strict: bool = True,
     ) -> None:
         self._initial_state = dict(initial_state or {})
         self._state = dict(self._initial_state)
@@ -372,7 +379,12 @@ class ReactiveSystem:
             phase.name: _phase_dependency_edges(phase)
             for phase in self._phases
         }
-        self.compile_report = CompileReport()
+        issues: list[CompileIssue] = []
+        if not self._nodes:
+            issues.append(CompileIssue("system has no nodes"))
+        self.compile_report = CompileReport(issues=tuple(issues))
+        if strict and not self.compile_report.ok:
+            raise CompileError(self.compile_report)
         self._phase_index = next(
             (index for index, phase in enumerate(self._phases) if phase.is_initial),
             0,
