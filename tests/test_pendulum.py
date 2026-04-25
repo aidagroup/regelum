@@ -82,3 +82,9 @@ def test_phase_execution_respects_topological_order() -> None:
     snapshot = system.step()
     assert snapshot["Plant.theta"] == 1.0
     assert snapshot["Controller.torque"] == -1.0
+
+
+def test_compile_report_defaults_to_ok() -> None:
+    system = ReactiveSystem(phases=(Phase("tick", nodes=(Plant(),), is_initial=True),))
+    assert system.compile_report.ok is True
+    assert system.compile_report.format() == ("ok",)

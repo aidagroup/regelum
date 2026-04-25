@@ -326,6 +326,34 @@ class Phase:
     is_initial: bool = False
 
 
+@dataclass(frozen=True)
+class CompileIssue:
+    message: str
+    phase: str | None = None
+
+
+@dataclass(frozen=True)
+class CompileReport:
+    issues: tuple[CompileIssue, ...] = ()
+    warnings: tuple[CompileIssue, ...] = ()
+
+    @property
+    def ok(self) -> bool:
+        return not self.issues
+
+    def format(self) -> tuple[str, ...]:
+        lines: list[str] = []
+        for issue in self.issues:
+            prefix = f"{issue.phase}: " if issue.phase else ""
+            lines.append(f"error: {prefix}{issue.message}")
+        for warning in self.warnings:
+            prefix = f"{warning.phase}: " if warning.phase else ""
+            lines.append(f"warning: {prefix}{warning.message}")
+        if not lines:
+            return ("ok",)
+        return tuple(lines)
+
+
 class ReactiveSystem:
     def __init__(
         self,
@@ -344,6 +372,7 @@ class ReactiveSystem:
             phase.name: _phase_dependency_edges(phase)
             for phase in self._phases
         }
+        self.compile_report = CompileReport()
         self._phase_index = next(
             (index for index, phase in enumerate(self._phases) if phase.is_initial),
             0,
