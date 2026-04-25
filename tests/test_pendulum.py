@@ -40,6 +40,14 @@ class SugarController(Node):
         return {"torque": theta * 2.0}
 
 
+class Counter(Node):
+    class Outputs(NodeOutputs):
+        count: int = Output(initial=1)
+
+    def run(self, count: int = Input(source="Counter.count")):
+        return {"count": count + 1}
+
+
 def test_phase_execution_uses_declared_ports() -> None:
     system = ReactiveSystem(
         phases=(
@@ -104,3 +112,9 @@ def test_strict_mode_raises_compile_error() -> None:
 def test_non_strict_mode_exposes_report() -> None:
     system = ReactiveSystem(strict=False)
     assert system.compile_report.ok is False
+
+
+def test_output_initial_values_seed_runtime_state() -> None:
+    system = ReactiveSystem(phases=(Phase("tick", nodes=(Counter(),), is_initial=True),))
+    assert system.snapshot()["Counter.count"] == 1
+    assert system.step()["Counter.count"] == 2

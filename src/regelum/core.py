@@ -13,6 +13,7 @@ Step = Callable[[State], State]
 SourceRef = str
 LazySourceRef = SourceRef | Callable[[], SourceRef]
 Predicate = Callable[[State], bool]
+_MISSING = object()
 
 
 def _normalize_source_path(path: str) -> str:
@@ -173,6 +174,7 @@ def _namespace_annotations(namespace: type[Any]) -> dict[str, Any]:
 @dataclass(frozen=True)
 class OutputPort:
     name: str | None = None
+    initial: Any = _MISSING
 
 
 @dataclass(frozen=True)
@@ -219,8 +221,8 @@ def connect(
     return Connection(source=bound_source, target=bound_target)
 
 
-def Output(name: str | None = None) -> OutputPort:
-    return OutputPort(name=name)
+def Output(name: str | None = None, initial: Any = _MISSING) -> OutputPort:
+    return OutputPort(name=name, initial=initial)
 
 
 def Input(source: LazySourceRef | None = None, name: str | None = None) -> InputPort:
@@ -265,7 +267,7 @@ class Node:
                 value = getattr(output_namespace, name, Output())
                 if not isinstance(value, OutputPort):
                     value = Output()
-                declared_outputs[name] = OutputPort(name=name)
+                declared_outputs[name] = OutputPort(name=name, initial=value.initial)
 
         if declared_inputs:
             cls.input_ports = declared_inputs
@@ -369,8 +371,8 @@ class ReactiveSystem:
         phases: Iterable[Phase] = (),
         strict: bool = True,
     ) -> None:
-        self._initial_state = dict(initial_state or {})
-        self._state = dict(self._initial_state)
+        self._initial_overrides = dict(initial_state or {})
+        self._state: State = {}
         self._step = step
         self._phases = tuple(phases)
         self._nodes = tuple(nodes) or compile_nodes(self._phases)
@@ -379,6 +381,8 @@ class ReactiveSystem:
             phase.name: _phase_dependency_edges(phase)
             for phase in self._phases
         }
+        self._initial_state = _build_initial_state(self._nodes, self._initial_overrides)
+        self._state = dict(self._initial_state)
         issues: list[CompileIssue] = []
         if not self._nodes:
             issues.append(CompileIssue("system has no nodes"))
@@ -528,6 +532,26 @@ def _phase_dependency_edges(phase: Phase) -> list[tuple[str, str]]:
             if producer in node_names and producer != node.name:
                 edges.append((producer, node.name))
     return edges
+
+
+def _call_initial_value(initial: Any, node: Node) -> Any:
+    if not callable(initial):
+        return initial
+    signature = inspect.signature(initial)
+    if not signature.parameters:
+        return initial()
+    return initial(node)
+
+
+def _build_initial_state(nodes: Iterable[Node], overrides: State) -> State:
+    state: State = {}
+    for node in nodes:
+        for name, port in node.output_ports.items():
+            if port.initial is _MISSING:
+                continue
+            state[_output_path(node, name)] = _call_initial_value(port.initial, node)
+    state.update(overrides)
+    return state
 
 
 def _topological_order(
