@@ -402,6 +402,7 @@ class PhasedReactiveSystem:
         )
 
     def reset(self) -> None:
+        self._initial_state = _build_initial_state(self._nodes, self._initial_overrides)
         self._state = dict(self._initial_state)
 
     def step(self) -> State:

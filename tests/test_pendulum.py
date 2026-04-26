@@ -48,6 +48,14 @@ class Counter(Node):
         return {"count": count + 1}
 
 
+class HistoryNode(Node):
+    class Outputs(NodeOutputs):
+        items: list[int] = Output(initial=lambda: [])
+
+    def run(self, items: list[int] = Input(source="HistoryNode.items")):
+        return {"items": [*items, 1]}
+
+
 def test_phase_execution_uses_declared_ports() -> None:
     system = PhasedReactiveSystem(
         phases=(
@@ -118,3 +126,10 @@ def test_output_initial_values_seed_runtime_state() -> None:
     system = PhasedReactiveSystem(phases=(Phase("tick", nodes=(Counter(),), is_initial=True),))
     assert system.snapshot()["Counter.count"] == 1
     assert system.step()["Counter.count"] == 2
+
+
+def test_reset_rebuilds_callable_initial_state() -> None:
+    system = PhasedReactiveSystem(phases=(Phase("tick", nodes=(HistoryNode(),), is_initial=True),))
+    assert system.step()["HistoryNode.items"] == [1]
+    system.reset()
+    assert system.snapshot()["HistoryNode.items"] == []
