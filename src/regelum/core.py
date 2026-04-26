@@ -416,8 +416,7 @@ class PhasedReactiveSystem:
             phase = self._phases[self._phase_index]
             active_nodes = tuple(_topological_order(phase.nodes, self._phase_edges[phase.name]))
         for node in active_nodes:
-            values = node.invoke(node.read_inputs(state))
-            state.update(node.write_outputs(values))
+            state.update(_run_node(node, state))
         self._state = state
         self._advance_phase()
         return self.snapshot()
@@ -586,6 +585,11 @@ def _topological_order(
     if len(result) != len(ordered_nodes):
         return ordered_nodes
     return result
+
+
+def _run_node(node: Node, state: State) -> State:
+    values = node.invoke(node.read_inputs(state))
+    return node.write_outputs(values)
 
 
 ReactiveSystem = PhasedReactiveSystem
