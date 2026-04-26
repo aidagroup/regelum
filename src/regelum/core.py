@@ -390,6 +390,7 @@ class PhasedReactiveSystem:
         }
         self._initial_state = _build_initial_state(self._nodes, self._initial_overrides)
         self._state = dict(self._initial_state)
+        self._history: list[StepRecord] = []
         issues: list[CompileIssue] = []
         if not self._nodes:
             issues.append(CompileIssue("system has no nodes"))
@@ -404,6 +405,7 @@ class PhasedReactiveSystem:
     def reset(self) -> None:
         self._initial_state = _build_initial_state(self._nodes, self._initial_overrides)
         self._state = dict(self._initial_state)
+        self._history.clear()
 
     def step(self) -> State:
         if self._step is not None:
@@ -412,11 +414,16 @@ class PhasedReactiveSystem:
 
         state = dict(self._state)
         active_nodes = self._nodes
+        phase_name = "runtime"
         if self._phases:
             phase = self._phases[self._phase_index]
+            phase_name = phase.name
             active_nodes = tuple(_topological_order(phase.nodes, self._phase_edges[phase.name]))
         for node in active_nodes:
             state.update(_run_node(node, state))
+            self._history.append(
+                StepRecord(phase=phase_name, node=node.name, snapshot=dict(state))
+            )
         self._state = state
         self._advance_phase()
         return self.snapshot()
@@ -429,6 +436,10 @@ class PhasedReactiveSystem:
 
     def snapshot(self) -> State:
         return dict(self._state)
+
+    @property
+    def history(self) -> tuple[StepRecord, ...]:
+        return tuple(self._history)
 
     def _advance_phase(self) -> None:
         if not self._phases:

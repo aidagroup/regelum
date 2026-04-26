@@ -133,3 +133,12 @@ def test_reset_rebuilds_callable_initial_state() -> None:
     assert system.step()["HistoryNode.items"] == [1]
     system.reset()
     assert system.snapshot()["HistoryNode.items"] == []
+
+
+def test_run_accumulates_history_records() -> None:
+    system = PhasedReactiveSystem(
+        phases=(Phase("tick", nodes=(Counter(),), is_initial=True),),
+    )
+    system.run(steps=2)
+    assert [record.phase for record in system.history] == ["tick", "tick"]
+    assert [record.node for record in system.history] == ["Counter", "Counter"]
