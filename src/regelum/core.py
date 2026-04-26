@@ -362,7 +362,14 @@ class CompileError(Exception):
         super().__init__("\n".join(report.format()))
 
 
-class ReactiveSystem:
+@dataclass(frozen=True)
+class StepRecord:
+    phase: str
+    node: str
+    snapshot: State
+
+
+class PhasedReactiveSystem:
     def __init__(
         self,
         initial_state: State | None = None,
@@ -578,3 +585,6 @@ def _topological_order(
     if len(result) != len(ordered_nodes):
         return ordered_nodes
     return result
+
+
+ReactiveSystem = PhasedReactiveSystem

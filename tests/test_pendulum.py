@@ -9,7 +9,7 @@ from regelum.core import (
     NodeOutputs,
     Output,
     Phase,
-    ReactiveSystem,
+    PhasedReactiveSystem,
     V,
     _phase_dependency_edges,
 )
@@ -49,7 +49,7 @@ class Counter(Node):
 
 
 def test_phase_execution_uses_declared_ports() -> None:
-    system = ReactiveSystem(
+    system = PhasedReactiveSystem(
         phases=(
             Phase("plant", nodes=(Plant(),), transitions=(Goto("control"),), is_initial=True),
             Phase("control", nodes=(Controller(),), transitions=(Goto("plant"),)),
@@ -70,7 +70,7 @@ def test_source_paths_are_normalized() -> None:
 
 
 def test_inputs_can_be_declared_in_run_signature() -> None:
-    system = ReactiveSystem(nodes=(SugarController(),), initial_state={"theta": 1.5})
+    system = PhasedReactiveSystem(nodes=(SugarController(),), initial_state={"theta": 1.5})
     snapshot = system.step()
     assert snapshot["SugarController.torque"] == 3.0
 
@@ -81,7 +81,7 @@ def test_phase_dependency_edges_follow_source_bindings() -> None:
 
 
 def test_phase_execution_respects_topological_order() -> None:
-    system = ReactiveSystem(
+    system = PhasedReactiveSystem(
         phases=(
             Phase("tick", nodes=(Controller(), Plant()), is_initial=True),
         ),
@@ -94,14 +94,14 @@ def test_phase_execution_respects_topological_order() -> None:
 
 
 def test_compile_report_defaults_to_ok() -> None:
-    system = ReactiveSystem(phases=(Phase("tick", nodes=(Plant(),), is_initial=True),))
+    system = PhasedReactiveSystem(phases=(Phase("tick", nodes=(Plant(),), is_initial=True),))
     assert system.compile_report.ok is True
     assert system.compile_report.format() == ("ok",)
 
 
 def test_strict_mode_raises_compile_error() -> None:
     try:
-        ReactiveSystem()
+        PhasedReactiveSystem()
     except CompileError as error:
         assert error.report.ok is False
         assert error.report.format() == ("error: system has no nodes",)
@@ -110,11 +110,11 @@ def test_strict_mode_raises_compile_error() -> None:
 
 
 def test_non_strict_mode_exposes_report() -> None:
-    system = ReactiveSystem(strict=False)
+    system = PhasedReactiveSystem(strict=False)
     assert system.compile_report.ok is False
 
 
 def test_output_initial_values_seed_runtime_state() -> None:
-    system = ReactiveSystem(phases=(Phase("tick", nodes=(Counter(),), is_initial=True),))
+    system = PhasedReactiveSystem(phases=(Phase("tick", nodes=(Counter(),), is_initial=True),))
     assert system.snapshot()["Counter.count"] == 1
     assert system.step()["Counter.count"] == 2
