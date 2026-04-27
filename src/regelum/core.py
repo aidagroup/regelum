@@ -402,8 +402,11 @@ class PhasedReactiveSystem:
             0,
         )
 
-    def reset(self) -> None:
-        self._initial_state = _build_initial_state(self._nodes, self._initial_overrides)
+    def reset(self, initial_state: State | None = None) -> None:
+        overrides = dict(self._initial_overrides)
+        if initial_state is not None:
+            overrides.update(initial_state)
+        self._initial_state = _build_initial_state(self._nodes, overrides)
         self._state = dict(self._initial_state)
         self._history.clear()
 

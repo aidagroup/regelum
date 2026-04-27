@@ -142,3 +142,11 @@ def test_run_accumulates_history_records() -> None:
     system.run(steps=2)
     assert [record.phase for record in system.history] == ["tick", "tick"]
     assert [record.node for record in system.history] == ["Counter", "Counter"]
+
+
+def test_reset_can_override_initial_state() -> None:
+    system = PhasedReactiveSystem(
+        phases=(Phase("tick", nodes=(Counter(),), is_initial=True),),
+    )
+    system.reset(initial_state={"Counter.count": 10})
+    assert system.snapshot()["Counter.count"] == 10
