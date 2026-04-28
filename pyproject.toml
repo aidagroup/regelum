@@ -7,8 +7,30 @@ authors = [
     { name = "Anton Bolychev", email = "bolychev.anthon@yandex.ru" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "z3-solver>=4.16.0.0",
+]
+
+[project.scripts]
+regelum-pendulum = "regelum.examples.pendulum:main"
+regelum-instance-connect = "regelum.examples.instance_connect:main"
+regelum-json-enrichment = "regelum.examples.json_enrichment:main"
+regelum-dubuisson2019 = "regelum.examples.dubuisson2019_water_treatment:main"
+regelum-video-player = "regelum.examples.video_player:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/regelum", "examples"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.409",
+    "pytest>=9.0.3",
+]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.6.0",
+]
