@@ -1,0 +1,74 @@
+site_name: regelum
+site_description: Typed node and phase runtime for reactive systems.
+site_url: https://aidagroup.github.io/regelum/
+repo_url: https://github.com/aidagroup/regelum
+repo_name: aidagroup/regelum
+
+watch:
+  - docs
+  - mkdocs.yml
+  - examples
+  - src/regelum
+  - logo
+  - README.md
+
+theme:
+  name: material
+  logo: assets/logo_mark_black_transparent.png
+  favicon: assets/logo_mark_black_transparent.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: white
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.instant
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Concepts:
+      - Overview: concepts/index.md
+      - Nodes: concepts/nodes.md
+      - Ports: concepts/ports.md
+      - Connections: concepts/connections.md
+      - State and Initialization: concepts/state.md
+      - Phases: concepts/phases.md
+      - Transitions: concepts/transitions.md
+      - Compilation: concepts/compilation.md
+      - Runtime: concepts/runtime.md
+  - API Sketch: api.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - .
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+extra_css:
+  - stylesheets/extra.css
