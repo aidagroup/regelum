@@ -519,7 +519,7 @@ class _BoundPortNamespace:
             port = self._ports[name]
         except KeyError as exc:
             raise AttributeError(name) from exc
-        return self._bound_type(self._node, port)  # type: ignore[misc]
+        return self._bound_type(self._node, port)
 
     def __call__(self, **values: Any) -> Any:
         return self._nested_cls(**values)

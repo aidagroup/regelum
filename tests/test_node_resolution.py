@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 
 from regelum import (
@@ -301,7 +303,7 @@ def test_phase_nodes_accept_instances_only() -> None:
     with pytest.raises(TypeError, match="Phase.nodes accepts node instances only"):
         Phase(
             "bad",
-            nodes=(Source,),  # pyright: ignore[reportArgumentType]
+            nodes=(cast(Node, Source),),
             transitions=(Goto(terminate),),
             is_initial=True,
         )
