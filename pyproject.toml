@@ -28,7 +28,6 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "prek>=0.3.11",
-    "pyright>=1.1.409",
     "pytest>=9.0.3",
     "ruff>=0.15.12",
 ]
@@ -36,3 +35,17 @@ docs = [
     "mkdocs>=1.6.1",
     "mkdocs-material>=9.6.0",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[tool.ty.terminal]
+error-on-warning = true
+
+[tool.ty.environment]
+python-version = "3.13"
