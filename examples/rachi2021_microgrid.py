@@ -55,9 +55,7 @@ class MicrogridMeasurements(Node):
 
 class InstantTripDecision(Node):
     class Inputs(NodeInputs):
-        current_above_inst: bool = Input(
-            source=MicrogridMeasurements.Outputs.current_above_inst
-        )
+        current_above_inst: bool = Input(source=MicrogridMeasurements.Outputs.current_above_inst)
 
     class Outputs(NodeOutputs):
         instant_trip: bool = Output(initial=False)
@@ -113,12 +111,8 @@ class BreakerActuator(Node):
         instant_trip: bool = Input(source=InstantTripDecision.Outputs.instant_trip)
         current_flag: bool = Input(source=FaultFlagLatch.Outputs.current_flag)
         voltage_flag: bool = Input(source=FaultFlagLatch.Outputs.voltage_flag)
-        current_delay_elapsed: bool = Input(
-            source=ProtectionTimers.Outputs.current_delay_elapsed
-        )
-        voltage_delay_elapsed: bool = Input(
-            source=ProtectionTimers.Outputs.voltage_delay_elapsed
-        )
+        current_delay_elapsed: bool = Input(source=ProtectionTimers.Outputs.current_delay_elapsed)
+        voltage_delay_elapsed: bool = Input(source=ProtectionTimers.Outputs.voltage_delay_elapsed)
         breaker_open: bool = Input(source="BreakerActuator.Outputs.breaker_open")
 
     class Outputs(NodeOutputs):
@@ -127,8 +121,7 @@ class BreakerActuator(Node):
 
     def run(self, inputs: Inputs) -> Outputs:
         delayed_trip = inputs.current_flag and (
-            inputs.current_delay_elapsed
-            or (inputs.voltage_flag and inputs.voltage_delay_elapsed)
+            inputs.current_delay_elapsed or (inputs.voltage_flag and inputs.voltage_delay_elapsed)
         )
         tripped = inputs.instant_trip or delayed_trip
         return self.Outputs(

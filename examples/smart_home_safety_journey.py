@@ -41,7 +41,6 @@ from regelum import (
     terminate,
 )
 
-
 # ────────────────────────────────────────────────────────────────────
 # Domain encodings (small finite domains so C2* checks have teeth)
 # ────────────────────────────────────────────────────────────────────
@@ -432,7 +431,12 @@ def build_v2() -> PhasedReactiveSystem:
     smoke, heat, leak, temp = SmokeSensor(), HeatSensor(), LeakSensor(), TempSensor()
     fire, leak_classifier = FireClassifier(), LeakClassifier()
     risk, arbiter = RiskScorer(), PriorityArbiter()
-    sprinkler_cmd, valve_cmd, alarm_cmd, notif_cmd = SprinklerCmd(), ValveCmd(), AlarmCmd(), NotifCmd()
+    sprinkler_cmd, valve_cmd, alarm_cmd, notif_cmd = (
+        SprinklerCmd(),
+        ValveCmd(),
+        AlarmCmd(),
+        NotifCmd(),
+    )
     sprinkler_verify, valve_verify, alarm_verify, notif_verify = (
         SprinklerVerify(),
         ValveVerify(),
@@ -480,7 +484,12 @@ def build_v3() -> PhasedReactiveSystem:
     smoke, heat, leak, temp = SmokeSensor(), HeatSensor(), LeakSensor(), TempSensor()
     fire, leak_classifier = FireClassifier(), LeakClassifier()
     risk, arbiter = RiskScorer(), PriorityArbiter()
-    sprinkler_cmd, valve_cmd, alarm_cmd, notif_cmd = SprinklerCmd(), ValveCmd(), AlarmCmd(), NotifCmd()
+    sprinkler_cmd, valve_cmd, alarm_cmd, notif_cmd = (
+        SprinklerCmd(),
+        ValveCmd(),
+        AlarmCmd(),
+        NotifCmd(),
+    )
     counter = AttemptCounter()
     sprinkler_verify, valve_verify, alarm_verify, notif_verify = (
         SprinklerVerify(),
@@ -537,7 +546,12 @@ def build_v4(max_attempts: int = 3) -> PhasedReactiveSystem:
     smoke, heat, leak, temp = SmokeSensor(), HeatSensor(), LeakSensor(), TempSensor()
     fire, leak_classifier = FireClassifier(), LeakClassifier()
     risk, arbiter = RiskScorer(), PriorityArbiter()
-    sprinkler_cmd, valve_cmd, alarm_cmd, notif_cmd = SprinklerCmd(), ValveCmd(), AlarmCmd(), NotifCmd()
+    sprinkler_cmd, valve_cmd, alarm_cmd, notif_cmd = (
+        SprinklerCmd(),
+        ValveCmd(),
+        AlarmCmd(),
+        NotifCmd(),
+    )
     sprinkler_verify, valve_verify, alarm_verify, notif_verify = (
         SprinklerVerify(),
         ValveVerify(),
@@ -600,8 +614,7 @@ def _print_compile_attempt(
             print(f"  - [{issue.location}]")
             print(f"      {issue.message}")
         return None
-    print(f"compile OK -- {len(system.phases)} phases, "
-          f"{len(system.nodes)} nodes")
+    print(f"compile OK -- {len(system.phases)} phases, {len(system.nodes)} nodes")
     return system
 
 
@@ -612,9 +625,7 @@ def main() -> None:
     _print_compile_attempt("v1: naive (C1 trap)", build_v1)
     _print_compile_attempt("v2: retry loop (C2* trap)", build_v2)
     _print_compile_attempt("v3: counter-bounded retry (C2* trap)", build_v3)
-    system = _print_compile_attempt(
-        "v4: unrolled retry chain", build_v4, max_attempts=3
-    )
+    system = _print_compile_attempt("v4: unrolled retry chain", build_v4, max_attempts=3)
 
     if system is None:
         return

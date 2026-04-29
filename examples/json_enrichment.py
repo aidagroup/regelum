@@ -15,7 +15,6 @@ from regelum import (
     terminate,
 )
 
-
 JsonDoc = dict[str, Any]
 
 

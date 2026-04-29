@@ -14,7 +14,6 @@ from regelum import (
     terminate,
 )
 
-
 S0, S1, S2, S3, S4, S5, S6, S7 = range(8)
 LS0, LS1, LS2 = range(3)
 SS0, SS1, SS2 = range(3)
@@ -153,7 +152,13 @@ class FireDetectionSystem(Node):
         heat_unit_ok = inputs.heat_detector_ok and inputs.heat_battery_ok
 
         if smoke_unit_ok and heat_unit_ok:
-            state = S2 if inputs.smoke_detected and inputs.high_temperature else S1 if inputs.smoke_detected else S0
+            state = (
+                S2
+                if inputs.smoke_detected and inputs.high_temperature
+                else S1
+                if inputs.smoke_detected
+                else S0
+            )
         elif smoke_unit_ok:
             state = S4 if inputs.smoke_detected else S3
         elif heat_unit_ok:
@@ -204,11 +209,17 @@ class ConflictResolver(Node):
         fds_state: int = Input(source=FireDetectionSystem.Outputs.fds_state)
         lds_state: int = Input(source=LeakDetectionSystem.Outputs.lds_state)
         sprinkler_requested: bool = Input(source=FireDetectionSystem.Outputs.sprinkler_requested)
-        valve_close_requested: bool = Input(source=LeakDetectionSystem.Outputs.valve_close_requested)
+        valve_close_requested: bool = Input(
+            source=LeakDetectionSystem.Outputs.valve_close_requested
+        )
         fds_notify_user: bool = Input(source=FireDetectionSystem.Outputs.fds_notify_user)
-        fds_urgent_notify_user: bool = Input(source=FireDetectionSystem.Outputs.fds_urgent_notify_user)
+        fds_urgent_notify_user: bool = Input(
+            source=FireDetectionSystem.Outputs.fds_urgent_notify_user
+        )
         lds_notify_user: bool = Input(source=LeakDetectionSystem.Outputs.lds_notify_user)
-        lds_urgent_notify_user: bool = Input(source=LeakDetectionSystem.Outputs.lds_urgent_notify_user)
+        lds_urgent_notify_user: bool = Input(
+            source=LeakDetectionSystem.Outputs.lds_urgent_notify_user
+        )
 
     class Outputs(NodeOutputs):
         system_substate: int = Output(initial=SS0, domain=range(3))
@@ -247,9 +258,13 @@ class ConflictResolver(Node):
 class ActionDispatcher(Node):
     class Inputs(NodeInputs):
         final_sprinkler_on: bool = Input(source=ConflictResolver.Outputs.final_sprinkler_on)
-        final_water_valve_closed: bool = Input(source=ConflictResolver.Outputs.final_water_valve_closed)
+        final_water_valve_closed: bool = Input(
+            source=ConflictResolver.Outputs.final_water_valve_closed
+        )
         final_notify_user: bool = Input(source=ConflictResolver.Outputs.final_notify_user)
-        final_urgent_notify_user: bool = Input(source=ConflictResolver.Outputs.final_urgent_notify_user)
+        final_urgent_notify_user: bool = Input(
+            source=ConflictResolver.Outputs.final_urgent_notify_user
+        )
 
     class Outputs(NodeOutputs):
         sprinkler_on: bool = Output(initial=False)
@@ -321,7 +336,12 @@ def build_system(
     logger = SafetyLogger()
     return PhasedReactiveSystem(
         phases=[
-            Phase("collect-evidence", nodes=(evidence_node,), transitions=(Goto("classify-fire"),), is_initial=True),
+            Phase(
+                "collect-evidence",
+                nodes=(evidence_node,),
+                transitions=(Goto("classify-fire"),),
+                is_initial=True,
+            ),
             Phase("classify-fire", nodes=(fire,), transitions=(Goto("classify-leak"),)),
             Phase("classify-leak", nodes=(leak,), transitions=(Goto("resolve-conflicts"),)),
             Phase("resolve-conflicts", nodes=(conflict,), transitions=(Goto("dispatch-actions"),)),

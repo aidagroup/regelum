@@ -30,7 +30,6 @@ from regelum import (
     terminate,
 )
 
-
 TICK_DT_SECONDS = 1.0
 BITRATE_LADDER_KBPS = (240, 480, 720, 1080, 2160)
 TOP_BITRATE_KBPS = BITRATE_LADDER_KBPS[-1]
@@ -85,9 +84,7 @@ class QualityPolicy(Node):
     """
 
     class Inputs(NodeInputs):
-        buffer_seconds: float = Input(
-            source=lambda: MediaSession.Outputs.buffer_seconds
-        )
+        buffer_seconds: float = Input(source=lambda: MediaSession.Outputs.buffer_seconds)
         bitrate_kbps: int = Input(source=lambda: BitrateController.Outputs.value)
         bandwidth_kbps: float = Input(source=Network.Outputs.bandwidth_kbps)
 
@@ -138,9 +135,7 @@ class Decoder(Node):
 
     def run(self, inputs: Inputs) -> Outputs:
         bitrate = max(inputs.bitrate_kbps, 1)
-        return self.Outputs(
-            fetched_seconds=inputs.bandwidth_kbps / bitrate * TICK_DT_SECONDS
-        )
+        return self.Outputs(fetched_seconds=inputs.bandwidth_kbps / bitrate * TICK_DT_SECONDS)
 
 
 class MediaSession(Node):
@@ -167,9 +162,7 @@ class Logger(Node):
         tick: int = Input(source=Clock.Outputs.tick)
         bandwidth_kbps: float = Input(source=Network.Outputs.bandwidth_kbps)
         bitrate_kbps: int = Input(source=lambda: BitrateController.Outputs.value)
-        buffer_seconds: float = Input(
-            source=lambda: MediaSession.Outputs.buffer_seconds
-        )
+        buffer_seconds: float = Input(source=lambda: MediaSession.Outputs.buffer_seconds)
         stalling: bool = Input(source=QualityPolicy.Outputs.stalling)
         history: list["Logger.Sample"] = Input(source=lambda: Logger.Outputs.history)
 
@@ -233,8 +226,7 @@ def main() -> None:
     print(
         "phase schedules: "
         + " | ".join(
-            f"{name}={schedule}"
-            for name, schedule in system.compile_report.phase_schedules.items()
+            f"{name}={schedule}" for name, schedule in system.compile_report.phase_schedules.items()
         )
     )
     print()

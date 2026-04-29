@@ -127,10 +127,7 @@ def main() -> None:
         records = system.step()
         trace = " -> ".join(record.phase for record in records) + " -> stop"
         snap = system.snapshot()
-        print(
-            f"  tick {tick_index}: {trace:<32}"
-            f"  x={snap['XWriter.x']}  y={snap['YWriter.y']}"
-        )
+        print(f"  tick {tick_index}: {trace:<32}  x={snap['XWriter.x']}  y={snap['YWriter.y']}")
 
 
 if __name__ == "__main__":

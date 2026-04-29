@@ -1,5 +1,5 @@
+from regelum import Input, Node, NodeInputs, NodeOutputs, Output
 from regelum.examples.pendulum import PDController, PendulumPlant
-from regelum import Node, NodeInputs, NodeOutputs, Input, Output
 
 
 def check_inputs(inputs: PDController.Inputs) -> None:

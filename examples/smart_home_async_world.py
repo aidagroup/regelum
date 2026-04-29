@@ -51,7 +51,6 @@ from .smart_home_safety_journey import (
     TempSensor,
 )
 
-
 # ────────────────────────────────────────────────────────────────────
 # Trichotomised evidence domain
 # ────────────────────────────────────────────────────────────────────
@@ -129,11 +128,7 @@ class SmokeGate(Node):
         smoke_ev: int = Output(initial=EV_NEGATIVE, domain=EV_DOMAIN)
 
     def run(self, inputs: Inputs) -> Outputs:
-        healthy = (
-            inputs.smoke_health_ok
-            and inputs.sensor_bus_fresh
-            and inputs.power_stable
-        )
+        healthy = inputs.smoke_health_ok and inputs.sensor_bus_fresh and inputs.power_stable
         return self.Outputs(smoke_ev=_gate_evidence(inputs.smoke_present, healthy))
 
 
@@ -148,11 +143,7 @@ class HeatGate(Node):
         heat_ev: int = Output(initial=EV_NEGATIVE, domain=EV_DOMAIN)
 
     def run(self, inputs: Inputs) -> Outputs:
-        healthy = (
-            inputs.heat_health_ok
-            and inputs.sensor_bus_fresh
-            and inputs.power_stable
-        )
+        healthy = inputs.heat_health_ok and inputs.sensor_bus_fresh and inputs.power_stable
         return self.Outputs(heat_ev=_gate_evidence(inputs.heat_present, healthy))
 
 
@@ -167,11 +158,7 @@ class LeakGate(Node):
         leak_ev: int = Output(initial=EV_NEGATIVE, domain=EV_DOMAIN)
 
     def run(self, inputs: Inputs) -> Outputs:
-        healthy = (
-            inputs.leak_health_ok
-            and inputs.sensor_bus_fresh
-            and inputs.power_stable
-        )
+        healthy = inputs.leak_health_ok and inputs.sensor_bus_fresh and inputs.power_stable
         return self.Outputs(leak_ev=_gate_evidence(inputs.leak_present, healthy))
 
 
@@ -186,11 +173,7 @@ class TempGate(Node):
         temp_ev: int = Output(initial=EV_NEGATIVE, domain=EV_DOMAIN)
 
     def run(self, inputs: Inputs) -> Outputs:
-        healthy = (
-            inputs.temp_health_ok
-            and inputs.sensor_bus_fresh
-            and inputs.power_stable
-        )
+        healthy = inputs.temp_health_ok and inputs.sensor_bus_fresh and inputs.power_stable
         return self.Outputs(temp_ev=_gate_evidence(inputs.temperature_high, healthy))
 
 
@@ -622,15 +605,34 @@ def build_async_world_with_cycle() -> PhasedReactiveSystem:
     Compiler rejects with C2* showing that under a permanent network
     outage the retry never terminates."""
     nodes = [
-        SensorBusOracle(), ActuatorNetOracle(), CloudOracle(), PowerOracle(),
-        SmokeSensor(), HeatSensor(), LeakSensor(), TempSensor(),
-        SmokeGate(), HeatGate(), LeakGate(), TempGate(),
-        AsyncFireClassifier(), AsyncLeakClassifier(),
-        AsyncRiskScorer(), AsyncPriorityArbiter(),
-        SprinklerCmdAsync(), ValveCmdAsync(), AlarmCmdAsync(), NotifCmdAsync(),
-        SprinklerAckOracle(), ValveAckOracle(), AlarmAckOracle(), NotifAckOracle(),
-        SprinklerVerifyAsync(), ValveVerifyAsync(),
-        AlarmVerifyAsync(), NotifVerifyAsync(),
+        SensorBusOracle(),
+        ActuatorNetOracle(),
+        CloudOracle(),
+        PowerOracle(),
+        SmokeSensor(),
+        HeatSensor(),
+        LeakSensor(),
+        TempSensor(),
+        SmokeGate(),
+        HeatGate(),
+        LeakGate(),
+        TempGate(),
+        AsyncFireClassifier(),
+        AsyncLeakClassifier(),
+        AsyncRiskScorer(),
+        AsyncPriorityArbiter(),
+        SprinklerCmdAsync(),
+        ValveCmdAsync(),
+        AlarmCmdAsync(),
+        NotifCmdAsync(),
+        SprinklerAckOracle(),
+        ValveAckOracle(),
+        AlarmAckOracle(),
+        NotifAckOracle(),
+        SprinklerVerifyAsync(),
+        ValveVerifyAsync(),
+        AlarmVerifyAsync(),
+        NotifVerifyAsync(),
     ]
     (
         sensor_bus,
@@ -697,9 +699,14 @@ def build_async_world_with_cycle() -> PhasedReactiveSystem:
         Phase(
             "verify",
             nodes=(
-                sprinkler_ack, valve_ack, alarm_ack, notif_ack,
-                sprinkler_verify, valve_verify,
-                alarm_verify, notif_verify,
+                sprinkler_ack,
+                valve_ack,
+                alarm_ack,
+                notif_ack,
+                sprinkler_verify,
+                valve_verify,
+                alarm_verify,
+                notif_verify,
             ),
             transitions=(
                 If(ALL_ACKED, terminate, name="ok"),

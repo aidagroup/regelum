@@ -48,8 +48,7 @@ def build_ok_system() -> PhasedReactiveSystem:
                 nodes=(diagnostics,),
                 transitions=(
                     If(
-                        V("Diagnostics.fault")
-                        & ~V("Diagnostics.operator_override"),
+                        V("Diagnostics.fault") & ~V("Diagnostics.operator_override"),
                         "shutdown",
                         name="hard-fault",
                     ),

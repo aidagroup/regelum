@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
-from collections.abc import Callable
-from collections.abc import Mapping
+import inspect
+import sys
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-import inspect
 from itertools import product
-import sys
 from typing import (
     Annotated,
     Any,
     Generic,
     Literal,
     Protocol,
-    TypeVar,
     TypeGuard,
+    TypeVar,
     cast,
     dataclass_transform,
     get_args,
@@ -25,7 +23,6 @@ from typing import (
 )
 
 import z3
-
 
 T = TypeVar("T")
 StateSnapshot = dict[str, Any]
@@ -370,10 +367,7 @@ def connect(
     output: Any,
 ) -> Connection:
     if not isinstance(input_port, BoundInputPort):
-        raise TypeError(
-            "connect(...) expects an input port on the left side; "
-            f"got {input_port!r}."
-        )
+        raise TypeError(f"connect(...) expects an input port on the left side; got {input_port!r}.")
     if not isinstance(output, (BoundOutputPort, OutputPort, str)):
         raise TypeError(
             "connect(...) expects an output port or output reference on the right side; "
@@ -426,6 +420,7 @@ class InputPort(Generic[T]):
     def __repr__(self) -> str:
         return self.path
 
+
 def Output(
     *,
     initial: InitialValue = _MISSING,
@@ -462,9 +457,7 @@ def _call_initial_value(initial: Callable[..., Any], node: Node) -> Any:
         return initial()
     if len(required_positionals) == 1:
         return initial(node)
-    raise TypeError(
-        "Output initial callable must accept zero arguments or one node argument."
-    )
+    raise TypeError("Output initial callable must accept zero arguments or one node argument.")
 
 
 def _accepts_keyword(callable_: Callable[..., Any], keyword: str) -> bool:
@@ -475,13 +468,9 @@ def _accepts_keyword(callable_: Callable[..., Any], keyword: str) -> bool:
     for parameter in signature.parameters.values():
         if parameter.kind == inspect.Parameter.VAR_KEYWORD:
             return True
-        if (
-            parameter.name == keyword
-            and parameter.kind
-            in (
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                inspect.Parameter.KEYWORD_ONLY,
-            )
+        if parameter.name == keyword and parameter.kind in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
         ):
             return True
     return False
@@ -672,11 +661,7 @@ def _collect_ports(
 ) -> dict[str, Any]:
     if nested_cls is None:
         return {}
-    return {
-        name: value
-        for name, value in vars(nested_cls).items()
-        if isinstance(value, port_type)
-    }
+    return {name: value for name, value in vars(nested_cls).items() if isinstance(value, port_type)}
 
 
 def _collect_run_input_ports(node_cls: type[Node]) -> dict[str, InputPort[Any]]:
@@ -765,8 +750,7 @@ class Phase:
             if not isinstance(node, Node):
                 got = getattr(node, "__name__", repr(node))
                 raise TypeError(
-                    "Phase.nodes accepts node instances only; "
-                    f"got {got} in phase {self.name!r}."
+                    f"Phase.nodes accepts node instances only; got {got} in phase {self.name!r}."
                 )
 
 
@@ -854,9 +838,7 @@ class CompileReport:
     issues: tuple[CompileIssue, ...]
     warnings: tuple[CompileIssue, ...] = ()
     phase_schedules: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    phase_dependency_edges: dict[str, tuple[tuple[str, str], ...]] = field(
-        default_factory=dict
-    )
+    phase_dependency_edges: dict[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
     outputs_without_initial: tuple[str, ...] = ()
     required_initial_outputs: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
@@ -905,9 +887,7 @@ def _format_issue_list(issues: tuple[CompileIssue, ...]) -> tuple[str, ...]:
 class CompileError(Exception):
     def __init__(self, report: CompileReport) -> None:
         self.report = report
-        messages = "; ".join(
-            f"{issue.location}: {issue.message}" for issue in report.issues
-        )
+        messages = "; ".join(f"{issue.location}: {issue.message}" for issue in report.issues)
         super().__init__(f"PRS compile failed: {messages}")
 
 
@@ -935,9 +915,7 @@ def compile_nodes(
     class_output_paths = _class_output_paths(node_tuple)
     inputs: dict[str, str] = {}
 
-    duplicate_outputs = {
-        path for path in output_set if output_paths.count(path) > 1
-    }
+    duplicate_outputs = {path for path in output_set if output_paths.count(path) > 1}
     for path in sorted(duplicate_outputs):
         issues.append(
             CompileIssue(
@@ -1002,9 +980,7 @@ def compile_nodes(
             inputs[location] = source
             candidates = class_output_paths.get(source, ())
             is_class_level_output_ref = isinstance(resolved_source_ref, OutputPort)
-            if len(candidates) > 1 and (
-                is_class_level_output_ref or source not in output_set
-            ):
+            if len(candidates) > 1 and (is_class_level_output_ref or source not in output_set):
                 issues.append(
                     CompileIssue(
                         location=location,
@@ -1031,6 +1007,7 @@ def compile_nodes(
         warnings=(),
         outputs_without_initial=outputs_without_initial,
     )
+
 
 class PhasedReactiveSystem:
     def __init__(
@@ -1115,9 +1092,7 @@ class PhasedReactiveSystem:
         while phase_name is not None:
             phase_steps += 1
             if phase_steps > self.max_phase_steps:
-                raise RuntimeError(
-                    f"Tick exceeded max_phase_steps={self.max_phase_steps}."
-                )
+                raise RuntimeError(f"Tick exceeded max_phase_steps={self.max_phase_steps}.")
             phase = self._phases_by_name[phase_name]
             for node_id in self._phase_schedules[phase.name]:
                 node = self._nodes_by_id[node_id]
@@ -1155,9 +1130,7 @@ class PhasedReactiveSystem:
             self._connection_map,
         )
         incomplete_source_locations = {
-            issue.location
-            for issue in completeness_issues
-            if " reads " in issue.message
+            issue.location for issue in completeness_issues if " reads " in issue.message
         }
         issues = [
             issue
@@ -1174,9 +1147,7 @@ class PhasedReactiveSystem:
         phase_schedules: dict[str, tuple[str, ...]] = {}
         phase_dependency_edges: dict[str, tuple[tuple[str, str], ...]] = {}
 
-        for phase_name in sorted(
-            name for name in phase_name_set if phase_names.count(name) > 1
-        ):
+        for phase_name in sorted(name for name in phase_name_set if phase_names.count(name) > 1):
             issues.append(
                 CompileIssue(
                     location=phase_name,
@@ -1202,8 +1173,7 @@ class PhasedReactiveSystem:
                 CompileIssue(
                     location=self.initial_phase,
                     message=(
-                        "initial_phase must match the phase marked "
-                        f"initial ({initial_phases[0]!r})"
+                        f"initial_phase must match the phase marked initial ({initial_phases[0]!r})"
                     ),
                 )
             )
@@ -1255,16 +1225,11 @@ class PhasedReactiveSystem:
             phase_dependency_edges[phase.name] = tuple(dependency_edges)
             schedule = _topological_order(phase_node_ids, dependency_edges)
             if schedule is None:
-                edge_text = ", ".join(
-                    f"{source}->{target}" for source, target in dependency_edges
-                )
+                edge_text = ", ".join(f"{source}->{target}" for source, target in dependency_edges)
                 issues.append(
                     CompileIssue(
                         location=phase.name,
-                        message=(
-                            "C1 violation: phase dependency graph is cyclic"
-                            f" ({edge_text})"
-                        ),
+                        message=(f"C1 violation: phase dependency graph is cyclic ({edge_text})"),
                     )
                 )
                 phase_schedules[phase.name] = phase_node_ids
@@ -1281,8 +1246,7 @@ class PhasedReactiveSystem:
                 {
                     path: readers
                     for path, readers in required_initial_outputs.items()
-                    if path in outputs_without_initial
-                    and path not in initial_state_outputs
+                    if path in outputs_without_initial and path not in initial_state_outputs
                 }
             )
         )
@@ -1307,15 +1271,13 @@ class PhasedReactiveSystem:
         phase_by_name = {phase.name: phase for phase in self.phases}
         node_outputs = {
             node.node_id: tuple(
-                _node_output_path(node, output)
-                for output in node.__class__._outputs.values()
+                _node_output_path(node, output) for output in node.__class__._outputs.values()
             )
             for node in self.nodes
         }
         node_inputs = {
             node.node_id: tuple(
-                _node_input_path(node, input_port)
-                for input_port in node.__class__._inputs.values()
+                _node_input_path(node, input_port) for input_port in node.__class__._inputs.values()
             )
             for node in self.nodes
         }
@@ -1346,8 +1308,7 @@ class PhasedReactiveSystem:
                     stack.append((target, frozenset(written)))
 
         return {
-            source_path: tuple(sorted(readers))
-            for source_path, readers in sorted(issues.items())
+            source_path: tuple(sorted(readers)) for source_path, readers in sorted(issues.items())
         }
 
     def _infer_initial_phase(self) -> str:
@@ -1465,10 +1426,7 @@ def _required_initial_issues(
     return [
         CompileIssue(
             location=source_path,
-            message=(
-                "output initial value is required before first read"
-                f" by {readers}"
-            ),
+            message=(f"output initial value is required before first read by {readers}"),
         )
         for source_path, readers in required_initial_outputs.items()
     ]
@@ -1681,7 +1639,9 @@ def _guard_after_previous_failed(predicate: Guard, previous: tuple[Guard, ...]) 
         return _all_previous_exprs_failed(cast(tuple[Expr, ...], previous)) & predicate
 
     def guard(state: StateSnapshot) -> bool:
-        return all(not _evaluate_guard(previous_guard, state) for previous_guard in previous) and _evaluate_guard(predicate, state)
+        return all(
+            not _evaluate_guard(previous_guard, state) for previous_guard in previous
+        ) and _evaluate_guard(predicate, state)
 
     return guard
 
@@ -1716,7 +1676,7 @@ def _check_phase_guard_references(
             continue
         for variable in sorted(transition.predicate.variables):
             try:
-                path = _resolve_guard_variable_path(
+                _resolve_guard_variable_path(
                     variable,
                     outputs_by_path,
                     class_output_paths,
@@ -1770,18 +1730,11 @@ def _run_requires_inputs(node: Node) -> bool:
 def _connection_map(
     connections: Iterable[Connection],
 ) -> dict[str, OutputSource[Any]]:
-    return {
-        connection.input.path: connection.source
-        for connection in connections
-    }
+    return {connection.input.path: connection.source for connection in connections}
 
 
 def _node_connections(nodes: Iterable[Node]) -> tuple[Connection, ...]:
-    return tuple(
-        connection
-        for node in nodes
-        for connection in node._connections.values()
-    )
+    return tuple(connection for node in nodes for connection in node._connections.values())
 
 
 def _nodes_from_phases(phases: tuple[Phase, ...]) -> tuple[Node, ...]:
@@ -1812,10 +1765,7 @@ def _class_output_paths(nodes: tuple[Node, ...]) -> dict[str, tuple[str, ...]]:
     for node in nodes:
         for output in node.__class__._outputs.values():
             paths.setdefault(output.path, []).append(_node_output_path(node, output))
-    return {
-        path: tuple(candidates)
-        for path, candidates in paths.items()
-    }
+    return {path: tuple(candidates) for path, candidates in paths.items()}
 
 
 def _deduplicate_implicit_node_names(nodes: tuple[Node, ...]) -> None:
@@ -2056,8 +2006,7 @@ def _check_c2star_for_cycle(
 
     solver = z3.Solver()
     state = {
-        path: _z3_variable_for_type(output_types[path], f"initial::{path}")
-        for path in guard_vars
+        path: _z3_variable_for_type(output_types[path], f"initial::{path}") for path in guard_vars
     }
     all_bindings = dict(state)
     initial_ctx = Z3Context(output_types, domains=domains, bindings=state)
@@ -2218,10 +2167,7 @@ def _check_c3_for_phase_with_z3(
     domains = _finite_domains_by_path(nodes)
     ctx = Z3Context(output_types, domains=domains)
     try:
-        predicates = [
-            cast(Expr, transition.predicate).to_z3(ctx)
-            for transition in transitions
-        ]
+        predicates = [cast(Expr, transition.predicate).to_z3(ctx) for transition in transitions]
     except Exception as exc:
         return [
             CompileIssue(
@@ -2232,13 +2178,10 @@ def _check_c3_for_phase_with_z3(
 
     issues: list[CompileIssue] = []
     guard_vars = frozenset().union(
-        *[
-            cast(Expr, transition.predicate).variables
-            for transition in transitions
-        ]
+        *[cast(Expr, transition.predicate).variables for transition in transitions]
     )
     for left_index, left in enumerate(predicates):
-        for right_index, right in enumerate(predicates[left_index + 1:], left_index + 1):
+        for right_index, right in enumerate(predicates[left_index + 1 :], left_index + 1):
             solver = z3.Solver()
             solver.add(*ctx.domain_constraints(guard_vars))
             solver.add(left)
@@ -2358,7 +2301,4 @@ def _state_samples(
 
     keys = [key for key, _ in entries]
     domains = [domain for _, domain in entries]
-    return [
-        dict(zip(keys, values, strict=True))
-        for values in product(*domains)
-    ]
+    return [dict(zip(keys, values, strict=True)) for values in product(*domains)]

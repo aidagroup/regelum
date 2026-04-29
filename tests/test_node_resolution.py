@@ -184,8 +184,7 @@ def test_class_level_input_ref_is_ambiguous_with_two_instances_in_one_phase() ->
         _single_phase_system(Source(), Source(), Sink())
 
     assert any(
-        "ambiguous input source 'Source.value'" in message
-        and "use instance connection" in message
+        "ambiguous input source 'Source.value'" in message and "use instance connection" in message
         for message in _messages(exc_info.value)
     )
 
@@ -269,8 +268,7 @@ def test_instance_bound_input_ref_to_node_outside_phases_is_incomplete_graph() -
         for issue in system.compile_report.issues
     )
     assert not any(
-        issue.location == "UnconnectedSink.value"
-        and "unknown input source" in issue.message
+        issue.location == "UnconnectedSink.value" and "unknown input source" in issue.message
         for issue in system.compile_report.issues
     )
 
@@ -279,8 +277,7 @@ def test_input_closure_is_not_auto_completed_from_missing_producers() -> None:
     system = _single_phase_system(LinkC(), strict=False)
 
     assert any(
-        issue.location == "LinkC.value"
-        and "unknown input source 'LinkB.value'" in issue.message
+        issue.location == "LinkC.value" and "unknown input source 'LinkB.value'" in issue.message
         for issue in system.compile_report.issues
     )
     assert tuple(system.compile_report.nodes) == ("LinkC",)
@@ -290,13 +287,10 @@ def test_input_closure_checks_second_hop_when_intermediate_node_is_covered() -> 
     system = _single_phase_system(LinkB(), LinkC(), strict=False)
 
     assert any(
-        issue.location == "LinkB.value"
-        and "unknown input source 'LinkA.value'" in issue.message
+        issue.location == "LinkB.value" and "unknown input source 'LinkA.value'" in issue.message
         for issue in system.compile_report.issues
     )
-    assert not any(
-        issue.location == "LinkC.value" for issue in system.compile_report.issues
-    )
+    assert not any(issue.location == "LinkC.value" for issue in system.compile_report.issues)
 
 
 def test_phase_nodes_accept_instances_only() -> None:
@@ -326,8 +320,7 @@ def test_duplicate_explicit_names_are_rejected() -> None:
         _single_phase_system(Source(name="source"), Source(name="source"))
 
     assert any(
-        issue.location == "source"
-        and issue.message == "node name is declared more than once"
+        issue.location == "source" and issue.message == "node name is declared more than once"
         for issue in exc_info.value.report.issues
     )
 
@@ -408,8 +401,7 @@ def test_instance_guard_source_outside_all_phases_is_incomplete_graph() -> None:
         for issue in system.compile_report.issues
     )
     assert not any(
-        issue.location == "work.ready"
-        and "unknown guard variable" in issue.message
+        issue.location == "work.ready" and "unknown guard variable" in issue.message
         for issue in system.compile_report.issues
     )
 
@@ -585,10 +577,7 @@ def test_complex_guard_expression_collects_all_instance_sources() -> None:
                 nodes=(flag_a, flag_b, flag_c),
                 transitions=(
                     If(
-                        (
-                            V(flag_a.Outputs.ready)
-                            & ~V(flag_b.Outputs.blocked)
-                        )
+                        (V(flag_a.Outputs.ready) & ~V(flag_b.Outputs.blocked))
                         | (V(flag_c.Outputs.level) > 3),
                         terminate,
                         name="complex",
@@ -615,10 +604,7 @@ def test_complex_guard_expression_reports_missing_instance_source() -> None:
                 nodes=(flag_a, flag_c),
                 transitions=(
                     If(
-                        (
-                            V(flag_a.Outputs.ready)
-                            & ~V(flag_b.Outputs.blocked)
-                        )
+                        (V(flag_a.Outputs.ready) & ~V(flag_b.Outputs.blocked))
                         | (V(flag_c.Outputs.level) > 3),
                         terminate,
                         name="complex",
@@ -732,12 +718,8 @@ def test_python_lambda_guard_does_not_participate_in_source_graph() -> None:
         strict=False,
     )
 
-    assert not any(
-        "external_flag" in issue.message for issue in system.compile_report.issues
-    )
-    assert not any(
-        "external_flag" in issue.message for issue in system.compile_report.warnings
-    )
+    assert not any("external_flag" in issue.message for issue in system.compile_report.issues)
+    assert not any("external_flag" in issue.message for issue in system.compile_report.warnings)
     assert flag.node_id == "external_flag"
 
 
@@ -828,8 +810,7 @@ def test_elif_requires_open_if_chain_like_elseif() -> None:
         )
 
     assert any(
-        issue.location == "bad.elseif"
-        and issue.message == "ElseIf must follow If or ElseIf"
+        issue.location == "bad.elseif" and issue.message == "ElseIf must follow If or ElseIf"
         for issue in exc_info.value.report.issues
     )
 
@@ -852,8 +833,7 @@ def test_elif_after_else_is_compile_error_like_elseif() -> None:
         )
 
     assert any(
-        issue.location == "bad.elseif"
-        and issue.message == "ElseIf must follow If or ElseIf"
+        issue.location == "bad.elseif" and issue.message == "ElseIf must follow If or ElseIf"
         for issue in exc_info.value.report.issues
     )
 
@@ -1001,13 +981,14 @@ def test_complex_phase_graph_reports_all_missing_instance_guard_and_input_source
         for issue in system.compile_report.issues
     )
     assert not any(
-        "unknown input source" in issue.message
-        or "unknown guard variable" in issue.message
+        "unknown input source" in issue.message or "unknown guard variable" in issue.message
         for issue in system.compile_report.issues
     )
 
 
-def test_class_level_guard_is_ambiguous_even_when_duplicate_instances_live_in_different_branches() -> None:
+def test_class_level_guard_is_ambiguous_even_when_duplicate_instances_live_in_different_branches() -> (
+    None
+):
     class Mode(Node):
         class Outputs(NodeOutputs):
             ready: bool = Output(initial=True)
@@ -1137,7 +1118,6 @@ def test_nested_elseif_chains_collect_sources_from_every_chain_segment() -> None
         for issue in system.compile_report.issues
     )
     assert any(
-        issue.location == "route.missing"
-        and issue.message.startswith("transition follows Else")
+        issue.location == "route.missing" and issue.message.startswith("transition follows Else")
         for issue in system.compile_report.warnings
     )

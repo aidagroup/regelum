@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from math import sin
 from typing import cast
+
 from regelum import (
     Goto,
     Input,
@@ -46,9 +47,7 @@ class PendulumPlant(Node):
         omega: float = Input(source=lambda: PendulumPlant.Outputs.omega),
         time: float = Input(source=lambda: PendulumPlant.Outputs.time),
     ) -> Outputs:
-        acceleration = (
-            torque - self.gravity / self.length * sin(theta) - self.damping * omega
-        )
+        acceleration = torque - self.gravity / self.length * sin(theta) - self.damping * omega
         omega_next = omega + self.dt * acceleration
         theta_next = theta + self.dt * omega_next
         time_next = time + self.dt
@@ -56,9 +55,7 @@ class PendulumPlant(Node):
 
 
 class PDController(Node):
-    def __init__(
-        self, kp: float = 12.0, kd: float = 3.0, torque_limit: float = 10.0
-    ) -> None:
+    def __init__(self, kp: float = 12.0, kd: float = 3.0, torque_limit: float = 10.0) -> None:
         self.kp = kp
         self.kd = kd
         self.torque_limit = torque_limit
@@ -78,9 +75,7 @@ class PDController(Node):
 
 class Logger(Node):
     class Outputs(NodeOutputs):
-        samples: list[tuple[float, float, float, float]] = Output(
-            initial=lambda: list()
-        )
+        samples: list[tuple[float, float, float, float]] = Output(initial=lambda: list())
 
     def run(
         self,

@@ -38,17 +38,13 @@ class MicrogridSampler(Node):
 class StateEstimator(Node):
     class Inputs(NodeInputs):
         bus_voltage_low: bool = Input(source=MicrogridSampler.Outputs.bus_voltage_low)
-        branch_current_high: bool = Input(
-            source=MicrogridSampler.Outputs.branch_current_high
-        )
+        branch_current_high: bool = Input(source=MicrogridSampler.Outputs.branch_current_high)
 
     class Outputs(NodeOutputs):
         fault_detected: bool = Output(initial=False)
 
     def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
-            fault_detected=inputs.bus_voltage_low or inputs.branch_current_high
-        )
+        return self.Outputs(fault_detected=inputs.bus_voltage_low or inputs.branch_current_high)
 
 
 class NominalPolicy(Node):
@@ -101,9 +97,7 @@ class ControlApplier(Node):
 
     def run(self, inputs: Inputs) -> Outputs:
         use_fallback = (
-            not inputs.nominal_safe
-            and inputs.recovery_attempted
-            and inputs.fallback_safe
+            not inputs.nominal_safe and inputs.recovery_attempted and inputs.fallback_safe
         )
         return self.Outputs(
             applied_current_reference=(

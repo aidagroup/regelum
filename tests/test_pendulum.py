@@ -22,13 +22,20 @@ from regelum import (
     terminate,
 )
 from regelum.examples.c1_violation import build_system as build_c1_violation_system
+from regelum.examples.c2star_split_writes import (
+    build_system as build_c2star_split_writes_system,
+)
 from regelum.examples.c3_violation import build_system as build_c3_violation_system
 from regelum.examples.complex_c3_partition import (
     build_bad_overlap_system,
+)
+from regelum.examples.complex_c3_partition import (
     build_ok_system as build_c3_ok_system,
 )
 from regelum.examples.complex_safety_loop import (
     build_bad_c1_system,
+)
+from regelum.examples.complex_safety_loop import (
     build_ok_system as build_complex_ok_system,
 )
 from regelum.examples.mohanty2023_smart_home import (
@@ -38,22 +45,27 @@ from regelum.examples.mohanty2023_smart_home import (
     build_fig4_system,
 )
 from regelum.examples.pendulum import build_system
-from regelum.examples.c2star_split_writes import (
-    build_system as build_c2star_split_writes_system,
-)
 from regelum.examples.safe_recovery_pipeline import (
     build_system as build_safe_recovery_system,
-)
-from regelum.examples.smart_home_safety_journey import (
-    ACT_FIRE_OVER_LEAK,
-    build_v1 as build_smart_home_v1,
-    build_v2 as build_smart_home_v2,
-    build_v3 as build_smart_home_v3,
-    build_v4 as build_smart_home_v4,
 )
 from regelum.examples.smart_home_async_world import (
     build_async_world,
     build_async_world_with_cycle,
+)
+from regelum.examples.smart_home_safety_journey import (
+    ACT_FIRE_OVER_LEAK,
+)
+from regelum.examples.smart_home_safety_journey import (
+    build_v1 as build_smart_home_v1,
+)
+from regelum.examples.smart_home_safety_journey import (
+    build_v2 as build_smart_home_v2,
+)
+from regelum.examples.smart_home_safety_journey import (
+    build_v3 as build_smart_home_v3,
+)
+from regelum.examples.smart_home_safety_journey import (
+    build_v4 as build_smart_home_v4,
 )
 
 
@@ -171,9 +183,7 @@ def test_compile_rejects_missing_output_initial_value_before_first_read() -> Non
     assert not exc_info.value.report.ok
     assert exc_info.value.report.issues[0].location == "Source.value"
     assert exc_info.value.report.outputs_without_initial == ("Source.value",)
-    assert exc_info.value.report.required_initial_outputs == {
-        "Source.value": ("Source.previous",)
-    }
+    assert exc_info.value.report.required_initial_outputs == {"Source.value": ("Source.previous",)}
     assert (
         exc_info.value.report.issues[0].message
         == "output initial value is required before first read by ('Source.previous',)"
@@ -284,9 +294,7 @@ def test_initial_state_can_supply_required_output_without_output_initial() -> No
     )
 
     assert system.compile_report.ok
-    assert system.compile_report.required_initial_outputs == {
-        "Source.value": ("Source.previous",)
-    }
+    assert system.compile_report.required_initial_outputs == {"Source.value": ("Source.previous",)}
     assert system.snapshot()["Source.value"] == 10
 
     system.step()
@@ -1266,8 +1274,7 @@ def test_explicit_duplicate_node_names_are_rejected() -> None:
         _tick_system([Source(name="source"), Source(name="source")])
 
     assert any(
-        issue.location == "source"
-        and issue.message == "node name is declared more than once"
+        issue.location == "source" and issue.message == "node name is declared more than once"
         for issue in exc_info.value.report.issues
     )
 
@@ -1643,8 +1650,7 @@ def test_elseif_after_else_is_compile_error() -> None:
         )
 
     assert any(
-        issue.location == "bad.elseif"
-        and issue.message == "ElseIf must follow If or ElseIf"
+        issue.location == "bad.elseif" and issue.message == "ElseIf must follow If or ElseIf"
         for issue in exc_info.value.report.issues
     )
 
@@ -1672,8 +1678,7 @@ def test_second_else_is_compile_error() -> None:
         )
 
     assert any(
-        issue.location == "bad.second-else"
-        and issue.message == "Else must follow If or ElseIf"
+        issue.location == "bad.second-else" and issue.message == "Else must follow If or ElseIf"
         for issue in exc_info.value.report.issues
     )
 
@@ -1730,8 +1735,7 @@ def test_if_after_else_is_reported_as_warning() -> None:
     assert system.compile_report.ok
     assert not system.compile_report.issues
     assert any(
-        issue.location == "select.b"
-        and issue.message.startswith("transition follows Else")
+        issue.location == "select.b" and issue.message.startswith("transition follows Else")
         for issue in system.compile_report.warnings
     )
 
@@ -1763,8 +1767,7 @@ def test_if_after_else_starts_new_chain_that_can_have_else() -> None:
 
     assert system.compile_report.ok
     assert any(
-        issue.location == "select.b"
-        and issue.message.startswith("transition follows Else")
+        issue.location == "select.b" and issue.message.startswith("transition follows Else")
         for issue in system.compile_report.warnings
     )
 
@@ -1825,8 +1828,7 @@ def test_complex_bad_system_fails_c1() -> None:
         build_bad_c1_system()
 
     assert any(
-        issue.location == "bad-coupled-control"
-        and issue.message.startswith("C1 violation")
+        issue.location == "bad-coupled-control" and issue.message.startswith("C1 violation")
         for issue in exc_info.value.report.issues
     )
 
@@ -1998,8 +2000,7 @@ def test_smart_home_v3_counter_does_not_save_c2star() -> None:
     with pytest.raises(CompileError) as exc_info:
         build_smart_home_v3()
     assert any(
-        "C2*" in issue.message
-        and "AttemptCounter.attempts" in issue.message
+        "C2*" in issue.message and "AttemptCounter.attempts" in issue.message
         for issue in exc_info.value.report.issues
     )
 

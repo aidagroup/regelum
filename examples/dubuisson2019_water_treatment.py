@@ -107,9 +107,7 @@ class PowerFlowSupervisor(Node):
         soc_percent: float = Input(source=lambda: Battery.Outputs.soc_percent),
         wind_power_kw: float = Input(source=WindTurbinePMSG.Outputs.generated_power_kw),
         load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
-        diesel_enabled: bool = Input(
-            source=lambda: PowerFlowSupervisor.Outputs.diesel_enabled
-        ),
+        diesel_enabled: bool = Input(source=lambda: PowerFlowSupervisor.Outputs.diesel_enabled),
     ) -> Outputs:
         dump_load_enabled = soc_percent >= 99.8 and wind_power_kw > load_power_kw
         if diesel_enabled:
@@ -144,9 +142,7 @@ class DieselGenerator(Node):
 
     def run(
         self,
-        diesel_enabled: bool = Input(
-            source=PowerFlowSupervisor.Outputs.diesel_enabled
-        ),
+        diesel_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.diesel_enabled),
         speed_rpm: float = Input(source=lambda: DieselGenerator.Outputs.speed_rpm),
     ) -> Outputs:
         target_speed = 1800.0 if diesel_enabled else 0.0
@@ -167,9 +163,7 @@ class PowerBalance(Node):
         diesel_power_kw: float = Input(source=DieselGenerator.Outputs.generated_power_kw),
         load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
         soc_percent: float = Input(source=lambda: Battery.Outputs.soc_percent),
-        dump_load_enabled: bool = Input(
-            source=PowerFlowSupervisor.Outputs.dump_load_enabled
-        ),
+        dump_load_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.dump_load_enabled),
     ) -> Outputs:
         surplus = wind_power_kw + diesel_power_kw - load_power_kw
         dump_load_power = max(0.0, surplus) if dump_load_enabled else 0.0
@@ -208,9 +202,7 @@ class Battery(Node):
         battery_power_kw: float = Input(source=PowerBalance.Outputs.battery_power_kw),
         soc_percent: float = Input(source=lambda: Battery.Outputs.soc_percent),
     ) -> Outputs:
-        delta_soc = 100.0 * battery_power_kw * self.dt / (
-            3600.0 * self.effective_capacity_kwh
-        )
+        delta_soc = 100.0 * battery_power_kw * self.dt / (3600.0 * self.effective_capacity_kwh)
         soc_next = _clamp(soc_percent + delta_soc, 0.0, 100.0)
         current = 1000.0 * battery_power_kw / self.nominal_voltage_v
         return self.Outputs(soc_percent=soc_next, current_a=current)
@@ -269,9 +261,7 @@ class MicrogridLogger(Node):
         dc_bus_voltage_v: float = Input(source=DcBus.Outputs.voltage_v),
         pcc_voltage_v: float = Input(source=PccRegulator.Outputs.voltage_v),
         frequency_hz: float = Input(source=PccRegulator.Outputs.frequency_hz),
-        diesel_enabled: bool = Input(
-            source=PowerFlowSupervisor.Outputs.diesel_enabled
-        ),
+        diesel_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.diesel_enabled),
         samples: list[dict[str, float | str | bool]] = Input(
             source=lambda: MicrogridLogger.Outputs.samples
         ),
@@ -313,14 +303,12 @@ def build_system(*, dt: float = 0.1) -> PhasedReactiveSystem:
                 nodes=(supervisor,),
                 transitions=(
                     If(
-                        V(PowerFlowSupervisor.Outputs.mode)
-                        == MicrogridMode.WT_CHARGING,
+                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.WT_CHARGING,
                         "wt_charging_source",
                         name="wt_charging",
                     ),
                     ElseIf(
-                        V(PowerFlowSupervisor.Outputs.mode)
-                        == MicrogridMode.WT_BATTERY_DISCHARGING,
+                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.WT_BATTERY_DISCHARGING,
                         "wt_battery_discharging_source",
                         name="wt_battery_discharging",
                     ),
@@ -330,8 +318,7 @@ def build_system(*, dt: float = 0.1) -> PhasedReactiveSystem:
                         name="dg_charging",
                     ),
                     ElseIf(
-                        V(PowerFlowSupervisor.Outputs.mode)
-                        == MicrogridMode.DG_WT_FAST_CHARGING,
+                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.DG_WT_FAST_CHARGING,
                         "dg_wt_fast_charging_source",
                         name="dg_wt_fast_charging",
                     ),
