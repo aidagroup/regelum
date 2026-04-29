@@ -3,26 +3,34 @@
 </style>
 
 <p class="hero-logo">
-  <img
-    class="hero-logo-light"
-    src="assets/logo_big_transparent.png"
-    alt="regelum"
-  >
-  <img
-    class="hero-logo-dark"
-    src="assets/logo_big_white_transparent.png"
-    alt="regelum"
-  >
+  <img src="assets/logo_big.png" alt="regelum">
 </p>
 
-`regelum` is a small prototype runtime for typed node systems,
-explicit data-flow links, and phase-based reactive execution.
+<p>
+  <a href="https://github.com/aidagroup/regelum">
+    <img alt="repo" src="https://img.shields.io/badge/github-aidagroup%2Fregelum-181717?logo=github&logoColor=white">
+  </a>
+  <img alt="docs" src="https://img.shields.io/badge/docs-mkdocs%20material-526CFE?logo=materialformkdocs&logoColor=white">
+  <img alt="tests" src="https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white">
+  <img alt="uv" src="https://img.shields.io/badge/managed%20with-uv-6A5ACD">
+</p>
 
-The framework is designed around three surface ideas:
+`regelum` is a framework for modeling **Phased Reactive Systems**:
+systems that execute one tick at a time, activate different groups of nodes in
+different phases, and move between phases with explicit transitions.
 
-- nodes declare typed input and output ports;
+The framework is built around four surface ideas:
+
+- nodes declare typed inputs and outputs;
 - phases define which node instances are active together;
-- transitions describe phase switching with symbolic guards.
+- transitions decide how one phase hands control to the next;
+- compilation resolves links, schedules nodes, and catches mistakes early.
+
+Install from PyPI with `uv`:
+
+```bash
+uv add regelum
+```
 
 ```python
 import regelum as rg
@@ -63,6 +71,19 @@ system = rg.PhasedReactiveSystem(
     ],
 )
 ```
+
+## Local development
+
+Set up the repository, install hooks, and run the full local gate:
+
+```bash
+uv sync --all-groups
+uv run prek install --hook-type pre-commit --hook-type pre-push
+uv run prek run --all-files
+```
+
+The `pre-push` hook runs `pytest`, so a normal `git push` exercises the test
+suite automatically.
 
 ## Local docs
 
