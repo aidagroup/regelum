@@ -99,3 +99,21 @@ uv run regelum-pendulum
 uv run regelum-video-player
 uv run regelum-instance-connect
 ```
+
+## Release Process
+
+Create a GitHub Release with a tag such as `v0.2.0`.
+
+The publish workflow will:
+
+1. build the package with `uv build`
+2. derive version `0.2.0` from the git tag via `hatch-vcs`
+3. publish the artifacts to PyPI with `uv publish`
+
+After installation, users can verify the packaged version:
+
+```python
+import regelum
+
+print(regelum.__version__)
+```

@@ -57,3 +57,19 @@ Build the documentation in strict mode:
 ```bash
 uv run --group docs mkdocs build --strict
 ```
+
+## Release Process
+
+Create a GitHub Release with a tag such as `v0.2.0`.
+
+When the release is published, GitHub Actions will build the package, `hatch-vcs`
+will derive version `0.2.0` from the tag, and `uv publish` will upload the
+artifacts to PyPI.
+
+After installation, verify the packaged version:
+
+```python
+import regelum
+
+print(regelum.__version__)
+```

@@ -1,12 +1,12 @@
 [project]
 name = "regelum"
-version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [
     { name = "Anton Bolychev", email = "bolychev.anthon@yandex.ru" }
 ]
 requires-python = ">=3.13"
+dynamic = ["version"]
 dependencies = [
     "z3-solver>=4.16.0.0",
 ]
@@ -21,8 +21,14 @@ regelum-video-player = "regelum.examples.video_player:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/regelum", "examples"]
 
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/regelum/_version.py"
+
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
