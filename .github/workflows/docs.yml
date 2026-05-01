@@ -6,20 +6,22 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: docs-release
   cancel-in-progress: false
 
 jobs:
-  build:
+  publish-versioned-docs:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -31,46 +33,54 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
       - name: Install dependencies
         run: uv sync --locked --group docs
 
-      - name: Build docs
-        run: uv run --group docs mkdocs build --strict
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: site
+      - name: Fetch gh-pages if present
+        run: git fetch origin gh-pages --depth=1 || true
 
-      - name: Upload docs artifact for external deploy
+      - name: Publish versioned docs with mike
+        run: |
+          set -eu
+          DOCS_VERSION="${RELEASE_TAG#v}"
+          uv run --group docs mike deploy \
+            --branch gh-pages \
+            --remote origin \
+            --push \
+            --update-aliases \
+            --alias-type copy \
+            "$DOCS_VERSION" latest
+          uv run --group docs mike set-default \
+            --branch gh-pages \
+            --remote origin \
+            --push \
+            latest
+
+      - name: Export gh-pages site artifact
+        run: |
+          rm -rf site-versioned
+          git worktree add site-versioned gh-pages
+
+      - name: Upload versioned docs artifact
         uses: actions/upload-artifact@v4
         with:
-          name: site
-          path: site
-
-  deploy-gh-pages:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          name: site-versioned
+          path: site-versioned
 
   deploy-regelum-aidynamic-group:
-    needs: build
+    needs: publish-versioned-docs
     runs-on: ubuntu-latest
     steps:
-      - name: Download docs artifact
+      - name: Download versioned docs artifact
         uses: actions/download-artifact@v4
         with:
-          name: site
-          path: site
+          name: site-versioned
+          path: site-versioned
 
       - name: Install rsync and sshpass
         run: |
@@ -97,4 +107,6 @@ jobs:
 
           sshpass -e rsync -az --delete \
             -e "ssh -o StrictHostKeyChecking=no" \
-            site/ "${SSH_REMOTE_USER}@${SSH_REMOTE}:${SSH_REMOTE_PATH}/"
+            --exclude '.git' \
+            --exclude '.git/' \
+            site-versioned/ "${SSH_REMOTE_USER}@${SSH_REMOTE}:${SSH_REMOTE_PATH}/"

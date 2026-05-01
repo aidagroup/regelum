@@ -1,8 +1,10 @@
 site_name: regelum
 site_description: Typed node and phase runtime for reactive systems.
-site_url: https://aidagroup.github.io/regelum/
+site_url: https://regelum.aidynamic.group/
 repo_url: https://github.com/aidagroup/regelum
 repo_name: aidagroup/regelum
+remote_name: origin
+remote_branch: gh-pages
 
 watch:
   - docs
@@ -17,20 +19,24 @@ theme:
   logo: assets/logo_mark_black_transparent.png
   favicon: assets/logo_mark_black_transparent.png
   palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: white
       accent: amber
       toggle:
-        icon: material/weather-night
+        icon: material/weather-sunny
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: black
       accent: amber
       toggle:
-        icon: material/weather-sunny
-        name: Switch to light mode
+        icon: material/weather-night
+        name: Switch to system preference
   features:
     - navigation.sections
     - navigation.instant
@@ -38,6 +44,18 @@ theme:
     - search.highlight
     - search.suggest
     - content.code.copy
+
+plugins:
+  - search
+  - mike:
+      alias_type: copy
+      canonical_version: latest
+
+extra:
+  version:
+    provider: mike
+    default: latest
+    alias: true
 
 nav:
   - Home: index.md
