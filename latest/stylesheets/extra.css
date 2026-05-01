@@ -1,0 +1,54 @@
+:root {
+  --regelum-ink: #111318;
+}
+
+[data-md-color-primary="white"],
+[data-md-color-scheme="slate"][data-md-color-primary="black"] {
+  --md-typeset-a-color: #ffc105;
+}
+
+[data-md-color-accent="amber"] {
+  --md-accent-fg-color: #ffd144;
+  --md-accent-fg-color--transparent: #ffd1441a;
+}
+
+.md-header {
+  border-bottom: 1px solid rgba(125, 125, 125, 0.18);
+  box-shadow: var(--md-shadow-z1);
+}
+
+.md-tabs {
+  border-bottom: 1px solid rgba(125, 125, 125, 0.14);
+  box-shadow: none;
+}
+
+.md-header__button.md-logo img {
+  content: url("../assets/logo_mark_black_transparent.png");
+}
+
+[data-md-color-scheme="slate"] .md-header__button.md-logo img {
+  content: url("../assets/logo_mark_white_transparent.png");
+}
+
+.hero-logo {
+  margin: 1.5rem 0 2rem;
+  text-align: center;
+}
+
+.hero-logo img {
+  display: inline-block;
+  max-width: min(30rem, 100%);
+  width: 100%;
+}
+
+.hero-logo-dark {
+  display: none !important;
+}
+
+[data-md-color-scheme="slate"] .hero-logo-light {
+  display: none !important;
+}
+
+[data-md-color-scheme="slate"] .hero-logo-dark {
+  display: inline-block !important;
+}
