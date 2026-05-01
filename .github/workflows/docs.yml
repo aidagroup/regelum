@@ -45,6 +45,12 @@ jobs:
         with:
           path: site
 
+      - name: Upload docs artifact for external deploy
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -55,3 +61,40 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  deploy-external:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download docs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+
+      - name: Install rsync and sshpass
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync sshpass
+
+      - name: Sync docs to external host
+        env:
+          SSH_REMOTE: ${{ secrets.SSH_REMOTE }}
+          SSH_REMOTE_USER: ${{ secrets.SSH_REMOTE_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_REMOTE_PATH: /var/www/u2139308/data/www/regelum.aidynamic.group
+        run: |
+          set -eu
+
+          : "${SSH_REMOTE:?Missing SSH_REMOTE secret}"
+          : "${SSH_REMOTE_USER:?Missing SSH_REMOTE_USER secret}"
+          : "${SSH_PASSWORD:?Missing SSH_PASSWORD secret}"
+
+          export SSHPASS="$SSH_PASSWORD"
+          sshpass -e ssh -o StrictHostKeyChecking=no \
+            "${SSH_REMOTE_USER}@${SSH_REMOTE}" \
+            "mkdir -p '${SSH_REMOTE_PATH}'"
+
+          sshpass -e rsync -az --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            site/ "${SSH_REMOTE_USER}@${SSH_REMOTE}:${SSH_REMOTE_PATH}/"
