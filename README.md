@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="logo/logo_big.png" alt="regelum" width="360">
+  <img
+    src="https://raw.githubusercontent.com/aidagroup/regelum/main/logo/logo_big.png"
+    alt="regelum"
+    width="360"
+  >
 </p>
 
 <p align="center">
