@@ -51,7 +51,7 @@ jobs:
           name: site
           path: site
 
-  deploy:
+  deploy-gh-pages:
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -62,7 +62,7 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-  deploy-external:
+  deploy-regelum-aidynamic-group:
     needs: build
     runs-on: ubuntu-latest
     steps:
