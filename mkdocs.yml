@@ -52,6 +52,7 @@ nav:
       - Transitions: concepts/transitions.md
       - Compilation: concepts/compilation.md
       - Runtime: concepts/runtime.md
+  - Authors: authors.md
   - API Sketch: api.md
 
 markdown_extensions:
