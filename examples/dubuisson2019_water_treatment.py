@@ -312,6 +312,7 @@ class PccRegulator(Node):
     def __init__(
         self,
         *,
+        nominal_voltage_v: float = 460.0,
         nominal_frequency_hz: float = 60.095,
         dc_frequency_gain_hz_per_v: float = 0.012,
         unserved_frequency_gain_hz_per_kw: float = 0.002,
@@ -322,6 +323,7 @@ class PccRegulator(Node):
         transient_decay: float = 0.72,
         response: float = 0.18,
     ) -> None:
+        self.nominal_voltage_v = nominal_voltage_v
         self.nominal_frequency_hz = nominal_frequency_hz
         self.dc_frequency_gain_hz_per_v = dc_frequency_gain_hz_per_v
         self.unserved_frequency_gain_hz_per_kw = unserved_frequency_gain_hz_per_kw
@@ -373,7 +375,9 @@ class PccRegulator(Node):
             + load_step_v
         )
         voltage_transient_next = self.transient_decay * voltage_transient_v + step_v
-        voltage_target = 460.0 + 0.25 * (dc_bus_voltage_v - 350.0) + voltage_transient_next
+        voltage_target = (
+            self.nominal_voltage_v + 0.25 * (dc_bus_voltage_v - 350.0) + voltage_transient_next
+        )
         frequency_target = (
             self.nominal_frequency_hz
             + self.dc_frequency_gain_hz_per_v * (dc_bus_voltage_v - 348.0)
@@ -485,6 +489,7 @@ def build_system(
     nominal_frequency_hz: float = 60.095,
     dc_frequency_gain_hz_per_v: float = 0.012,
     unserved_frequency_gain_hz_per_kw: float = 0.002,
+    pcc_nominal_voltage_v: float = 460.0,
     pcc_load_step_gain_v_per_kw: float = -1.30,
     pcc_wt_load_drop_gain_v_per_kw: float = 1.00,
     pcc_diesel_step_gain_v_per_kw: float = 0.45,
@@ -530,6 +535,7 @@ def build_system(
     )
     regulation_nodes = (
         PccRegulator(
+            nominal_voltage_v=pcc_nominal_voltage_v,
             nominal_frequency_hz=nominal_frequency_hz,
             dc_frequency_gain_hz_per_v=dc_frequency_gain_hz_per_v,
             unserved_frequency_gain_hz_per_kw=unserved_frequency_gain_hz_per_kw,
@@ -872,6 +878,7 @@ def _run_trace(
     nominal_frequency_hz: float = 60.095,
     dc_frequency_gain_hz_per_v: float = 0.012,
     unserved_frequency_gain_hz_per_kw: float = 0.002,
+    pcc_nominal_voltage_v: float = 460.0,
     pcc_load_step_gain_v_per_kw: float = -1.30,
     pcc_wt_load_drop_gain_v_per_kw: float = 1.00,
     pcc_diesel_step_gain_v_per_kw: float = 0.45,
@@ -902,6 +909,7 @@ def _run_trace(
         nominal_frequency_hz=nominal_frequency_hz,
         dc_frequency_gain_hz_per_v=dc_frequency_gain_hz_per_v,
         unserved_frequency_gain_hz_per_kw=unserved_frequency_gain_hz_per_kw,
+        pcc_nominal_voltage_v=pcc_nominal_voltage_v,
         pcc_load_step_gain_v_per_kw=pcc_load_step_gain_v_per_kw,
         pcc_wt_load_drop_gain_v_per_kw=pcc_wt_load_drop_gain_v_per_kw,
         pcc_diesel_step_gain_v_per_kw=pcc_diesel_step_gain_v_per_kw,
@@ -999,6 +1007,7 @@ def _calibrated_load_wind_trace(
         unserved_frequency_gain_hz_per_kw=params.get(
             "fig9_unserved_frequency_gain_hz_per_kw", 0.002
         ),
+        pcc_nominal_voltage_v=params.get("fig9_pcc_nominal_voltage_v", 460.0),
         pcc_load_step_gain_v_per_kw=params.get("fig9_pcc_load_step_gain_v_per_kw", -1.30),
         pcc_wt_load_drop_gain_v_per_kw=params.get("fig9_pcc_wt_load_drop_gain_v_per_kw", 1.00),
         pcc_diesel_step_gain_v_per_kw=params.get("fig9_pcc_diesel_step_gain_v_per_kw", 0.45),
@@ -1291,6 +1300,7 @@ def _fig9_output_rmse(trace: list[dict[str, float | str | bool]]) -> dict[str, f
     channels: dict[str, Callable[[dict[str, float | str | bool]], float]] = {
         "battery_current_a": lambda sample: float(sample["battery_current_a"]),
         "wind_current_a": lambda sample: float(sample["wind_current_a"]),
+        "load_voltage_magnitude_v": lambda sample: 0.82 * float(sample["pcc_voltage_v"]),
         "soc_percent": lambda sample: float(sample["soc_percent"]),
         "dc_bus_voltage_v": lambda sample: float(sample["dc_bus_voltage_v"]),
         "frequency_hz": lambda sample: float(sample["frequency_hz"]),

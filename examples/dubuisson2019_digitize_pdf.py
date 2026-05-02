@@ -28,6 +28,13 @@ PANELS = (
     Panel("fig9", "soc_percent", (559, 1333, 296, 95), (2.0, 20.0), (69.92, 70.0)),
     Panel("fig9", "frequency_hz", (559, 1474, 296, 95), (2.0, 20.0), (59.5, 60.5)),
     Panel(
+        "fig9",
+        "load_voltage_magnitude_v",
+        (205, 1050, 306, 93),
+        (2.0, 20.0),
+        (340.0, 400.0),
+    ),
+    Panel(
         "fig11",
         "battery_current_a",
         (1378, 840, 285, 76),

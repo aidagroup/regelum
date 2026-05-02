@@ -47,6 +47,7 @@ class CalibrationParams:
     fig9_nominal_frequency_hz: float = 60.095
     fig9_dc_frequency_gain_hz_per_v: float = 0.012
     fig9_unserved_frequency_gain_hz_per_kw: float = 0.002
+    fig9_pcc_nominal_voltage_v: float = 460.0
     fig9_pcc_load_step_gain_v_per_kw: float = -0.25
     fig9_pcc_wt_load_drop_gain_v_per_kw: float = 1.00
     fig9_pcc_diesel_step_gain_v_per_kw: float = 0.70
@@ -80,6 +81,9 @@ class ChannelSpec:
 CHANNEL_SPECS = {
     ("fig9", "battery_current_a"): ChannelSpec("fig9", "battery_current_a", "battery_current_a"),
     ("fig9", "wind_current_a"): ChannelSpec("fig9", "wind_current_a", "wind_current_a"),
+    ("fig9", "load_voltage_magnitude_v"): ChannelSpec(
+        "fig9", "load_voltage_magnitude_v", "pcc_voltage_v", 0.82
+    ),
     ("fig9", "soc_percent"): ChannelSpec("fig9", "soc_percent", "soc_percent"),
     ("fig9", "dc_bus_voltage_v"): ChannelSpec("fig9", "dc_bus_voltage_v", "dc_bus_voltage_v"),
     ("fig9", "frequency_hz"): ChannelSpec("fig9", "frequency_hz", "frequency_hz"),
@@ -182,6 +186,7 @@ def calibrate(
         "fig9_nominal_frequency_hz": 0.01,
         "fig9_dc_frequency_gain_hz_per_v": 0.004,
         "fig9_unserved_frequency_gain_hz_per_kw": 0.001,
+        "fig9_pcc_nominal_voltage_v": 1.0,
         "fig9_pcc_load_step_gain_v_per_kw": 0.05,
         "fig9_pcc_wt_load_drop_gain_v_per_kw": 0.05,
         "fig9_pcc_diesel_step_gain_v_per_kw": 0.05,
@@ -217,6 +222,7 @@ def calibrate(
         "fig9_nominal_frequency_hz": (59.95, 60.15),
         "fig9_dc_frequency_gain_hz_per_v": (-0.04, 0.04),
         "fig9_unserved_frequency_gain_hz_per_kw": (-0.02, 0.02),
+        "fig9_pcc_nominal_voltage_v": (450.0, 470.0),
         "fig9_pcc_load_step_gain_v_per_kw": (-2.0, 2.0),
         "fig9_pcc_wt_load_drop_gain_v_per_kw": (-2.0, 2.0),
         "fig9_pcc_diesel_step_gain_v_per_kw": (-2.0, 2.0),
@@ -293,10 +299,7 @@ def simulate(params: CalibrationParams) -> dict[str, list[dict[str, float | str 
         converter_voltage_v=params.fig9_wind_converter_voltage_v,
         nominal_mppt_efficiency=params.fig9_nominal_mppt_efficiency,
     )
-    fig9_load_profile = _fig9_digitized_load_power_profile_kw(
-        battery_voltage_v=params.fig9_battery_nominal_voltage_v,
-        wind_converter_voltage_v=params.fig9_wind_converter_voltage_v,
-    )
+    fig9_load_profile = _fig9_digitized_load_power_profile_kw(load_voltage_v=460.0)
     fig9 = _run_trace(
         dt=0.02,
         duration_s=18.0,
@@ -322,6 +325,7 @@ def simulate(params: CalibrationParams) -> dict[str, list[dict[str, float | str 
         nominal_frequency_hz=params.fig9_nominal_frequency_hz,
         dc_frequency_gain_hz_per_v=params.fig9_dc_frequency_gain_hz_per_v,
         unserved_frequency_gain_hz_per_kw=params.fig9_unserved_frequency_gain_hz_per_kw,
+        pcc_nominal_voltage_v=params.fig9_pcc_nominal_voltage_v,
         pcc_load_step_gain_v_per_kw=params.fig9_pcc_load_step_gain_v_per_kw,
         pcc_wt_load_drop_gain_v_per_kw=params.fig9_pcc_wt_load_drop_gain_v_per_kw,
         pcc_diesel_step_gain_v_per_kw=params.fig9_pcc_diesel_step_gain_v_per_kw,
@@ -452,6 +456,9 @@ def _template_targets() -> dict[tuple[str, str], list[TargetPoint]]:
             "fig9", "battery_current_a", _fig9_battery_current
         ),
         ("fig9", "wind_current_a"): _template_channel("fig9", "wind_current_a", _fig9_wind_current),
+        ("fig9", "load_voltage_magnitude_v"): _template_channel(
+            "fig9", "load_voltage_magnitude_v", _fig9_load_voltage_magnitude
+        ),
         ("fig9", "soc_percent"): _template_channel("fig9", "soc_percent", _fig9_soc),
         ("fig9", "dc_bus_voltage_v"): _template_channel("fig9", "dc_bus_voltage_v", _fig9_vdc),
         ("fig9", "frequency_hz"): _template_channel("fig9", "frequency_hz", _fig9_frequency),
@@ -653,6 +660,16 @@ def _fig9_wind_current(time_s: float) -> float:
     if time_s < 18.0:
         return 26.0 + 32.0 * (time_s - 16.0)
     return 90.0
+
+
+def _fig9_load_voltage_magnitude(time_s: float) -> float:
+    return (
+        374.5
+        + 1.0 * _decay_pulse(time_s, 7.0, 0.10)
+        - 2.0 * _decay_pulse(time_s, 9.0, 0.10)
+        - 13.0 * _decay_pulse(time_s, 10.7, 0.10)
+        - 7.0 * _decay_pulse(time_s, 18.0, 0.10)
+    )
 
 
 def _fig9_soc(time_s: float) -> float:
