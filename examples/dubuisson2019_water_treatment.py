@@ -315,25 +315,65 @@ class PccRegulator(Node):
         nominal_frequency_hz: float = 60.095,
         dc_frequency_gain_hz_per_v: float = 0.012,
         unserved_frequency_gain_hz_per_kw: float = 0.002,
+        load_step_gain_v_per_kw: float = -1.30,
+        wt_load_drop_gain_v_per_kw: float = 1.00,
+        diesel_step_gain_v_per_kw: float = 0.45,
+        wind_step_gain_v_per_kw: float = 0.04,
+        transient_decay: float = 0.72,
         response: float = 0.18,
     ) -> None:
         self.nominal_frequency_hz = nominal_frequency_hz
         self.dc_frequency_gain_hz_per_v = dc_frequency_gain_hz_per_v
         self.unserved_frequency_gain_hz_per_kw = unserved_frequency_gain_hz_per_kw
+        self.load_step_gain_v_per_kw = load_step_gain_v_per_kw
+        self.wt_load_drop_gain_v_per_kw = wt_load_drop_gain_v_per_kw
+        self.diesel_step_gain_v_per_kw = diesel_step_gain_v_per_kw
+        self.wind_step_gain_v_per_kw = wind_step_gain_v_per_kw
+        self.transient_decay = transient_decay
         self.response = response
 
     class Outputs(NodeOutputs):
         voltage_v: float = Output(initial=460.0)
         frequency_hz: float = Output(initial=60.095)
+        voltage_transient_v: float = Output(initial=0.0)
+        previous_wind_power_kw: float = Output(initial=3.0)
+        previous_diesel_power_kw: float = Output(initial=50.0)
+        previous_load_power_kw: float = Output(initial=42.0)
 
     def run(
         self,
         dc_bus_voltage_v: float = Input(source=DcBus.Outputs.voltage_v),
         unserved_power_kw: float = Input(source=PowerBalance.Outputs.unserved_power_kw),
+        wind_power_kw: float = Input(source=WindTurbinePMSG.Outputs.generated_power_kw),
+        diesel_power_kw: float = Input(source=DieselGenerator.Outputs.generated_power_kw),
+        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
         voltage_v: float = Input(source=lambda: PccRegulator.Outputs.voltage_v),
         frequency_hz: float = Input(source=lambda: PccRegulator.Outputs.frequency_hz),
+        voltage_transient_v: float = Input(source=lambda: PccRegulator.Outputs.voltage_transient_v),
+        previous_wind_power_kw: float = Input(
+            source=lambda: PccRegulator.Outputs.previous_wind_power_kw
+        ),
+        previous_diesel_power_kw: float = Input(
+            source=lambda: PccRegulator.Outputs.previous_diesel_power_kw
+        ),
+        previous_load_power_kw: float = Input(
+            source=lambda: PccRegulator.Outputs.previous_load_power_kw
+        ),
     ) -> Outputs:
-        voltage_target = 460.0 + 0.25 * (dc_bus_voltage_v - 350.0)
+        load_delta_kw = load_power_kw - previous_load_power_kw
+        diesel_delta_kw = diesel_power_kw - previous_diesel_power_kw
+        wind_delta_kw = wind_power_kw - previous_wind_power_kw
+        if load_delta_kw < 0.0 and diesel_power_kw <= 1.0 and previous_diesel_power_kw <= 1.0:
+            load_step_v = self.wt_load_drop_gain_v_per_kw * load_delta_kw
+        else:
+            load_step_v = self.load_step_gain_v_per_kw * load_delta_kw
+        step_v = (
+            self.wind_step_gain_v_per_kw * wind_delta_kw
+            + self.diesel_step_gain_v_per_kw * diesel_delta_kw
+            + load_step_v
+        )
+        voltage_transient_next = self.transient_decay * voltage_transient_v + step_v
+        voltage_target = 460.0 + 0.25 * (dc_bus_voltage_v - 350.0) + voltage_transient_next
         frequency_target = (
             self.nominal_frequency_hz
             + self.dc_frequency_gain_hz_per_v * (dc_bus_voltage_v - 348.0)
@@ -341,7 +381,14 @@ class PccRegulator(Node):
         )
         voltage_next = voltage_v + 0.60 * (voltage_target - voltage_v)
         frequency_next = frequency_hz + self.response * (frequency_target - frequency_hz)
-        return self.Outputs(voltage_v=voltage_next, frequency_hz=frequency_next)
+        return self.Outputs(
+            voltage_v=voltage_next,
+            frequency_hz=frequency_next,
+            voltage_transient_v=voltage_transient_next,
+            previous_wind_power_kw=wind_power_kw,
+            previous_diesel_power_kw=diesel_power_kw,
+            previous_load_power_kw=load_power_kw,
+        )
 
 
 class Inverter(Node):
@@ -438,6 +485,11 @@ def build_system(
     nominal_frequency_hz: float = 60.095,
     dc_frequency_gain_hz_per_v: float = 0.012,
     unserved_frequency_gain_hz_per_kw: float = 0.002,
+    pcc_load_step_gain_v_per_kw: float = -1.30,
+    pcc_wt_load_drop_gain_v_per_kw: float = 1.00,
+    pcc_diesel_step_gain_v_per_kw: float = 0.45,
+    pcc_wind_step_gain_v_per_kw: float = 0.04,
+    pcc_transient_decay: float = 0.72,
     frequency_response: float = 0.18,
     inverter_efficiency: float = 0.97,
     wind_power_profile_kw: Callable[[float], float] | None = None,
@@ -481,6 +533,11 @@ def build_system(
             nominal_frequency_hz=nominal_frequency_hz,
             dc_frequency_gain_hz_per_v=dc_frequency_gain_hz_per_v,
             unserved_frequency_gain_hz_per_kw=unserved_frequency_gain_hz_per_kw,
+            load_step_gain_v_per_kw=pcc_load_step_gain_v_per_kw,
+            wt_load_drop_gain_v_per_kw=pcc_wt_load_drop_gain_v_per_kw,
+            diesel_step_gain_v_per_kw=pcc_diesel_step_gain_v_per_kw,
+            wind_step_gain_v_per_kw=pcc_wind_step_gain_v_per_kw,
+            transient_decay=pcc_transient_decay,
             response=frequency_response,
         ),
         MicrogridLogger(),
@@ -815,6 +872,11 @@ def _run_trace(
     nominal_frequency_hz: float = 60.095,
     dc_frequency_gain_hz_per_v: float = 0.012,
     unserved_frequency_gain_hz_per_kw: float = 0.002,
+    pcc_load_step_gain_v_per_kw: float = -1.30,
+    pcc_wt_load_drop_gain_v_per_kw: float = 1.00,
+    pcc_diesel_step_gain_v_per_kw: float = 0.45,
+    pcc_wind_step_gain_v_per_kw: float = 0.04,
+    pcc_transient_decay: float = 0.72,
     frequency_response: float = 0.18,
     inverter_efficiency: float = 0.97,
 ) -> list[dict[str, float | str | bool]]:
@@ -840,6 +902,11 @@ def _run_trace(
         nominal_frequency_hz=nominal_frequency_hz,
         dc_frequency_gain_hz_per_v=dc_frequency_gain_hz_per_v,
         unserved_frequency_gain_hz_per_kw=unserved_frequency_gain_hz_per_kw,
+        pcc_load_step_gain_v_per_kw=pcc_load_step_gain_v_per_kw,
+        pcc_wt_load_drop_gain_v_per_kw=pcc_wt_load_drop_gain_v_per_kw,
+        pcc_diesel_step_gain_v_per_kw=pcc_diesel_step_gain_v_per_kw,
+        pcc_wind_step_gain_v_per_kw=pcc_wind_step_gain_v_per_kw,
+        pcc_transient_decay=pcc_transient_decay,
         frequency_response=frequency_response,
         inverter_efficiency=inverter_efficiency,
         wind_power_profile_kw=wind_power_profile_kw,
@@ -932,6 +999,11 @@ def _calibrated_load_wind_trace(
         unserved_frequency_gain_hz_per_kw=params.get(
             "fig9_unserved_frequency_gain_hz_per_kw", 0.002
         ),
+        pcc_load_step_gain_v_per_kw=params.get("fig9_pcc_load_step_gain_v_per_kw", -1.30),
+        pcc_wt_load_drop_gain_v_per_kw=params.get("fig9_pcc_wt_load_drop_gain_v_per_kw", 1.00),
+        pcc_diesel_step_gain_v_per_kw=params.get("fig9_pcc_diesel_step_gain_v_per_kw", 0.45),
+        pcc_wind_step_gain_v_per_kw=params.get("fig9_pcc_wind_step_gain_v_per_kw", 0.04),
+        pcc_transient_decay=params.get("fig9_pcc_transient_decay", 0.72),
         frequency_response=params.get("fig9_frequency_response", 0.18),
         inverter_efficiency=params.get("fig9_inverter_efficiency", 0.97),
     )

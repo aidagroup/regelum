@@ -24,6 +24,11 @@
   "fig9_max_discharge_kw": 45.0,
   "fig9_nominal_frequency_hz": 60.095,
   "fig9_nominal_mppt_efficiency": 0.98,
+  "fig9_pcc_diesel_step_gain_v_per_kw": 0.7,
+  "fig9_pcc_load_step_gain_v_per_kw": -0.25,
+  "fig9_pcc_transient_decay": 0.6,
+  "fig9_pcc_wind_step_gain_v_per_kw": 0.02,
+  "fig9_pcc_wt_load_drop_gain_v_per_kw": 1.0,
   "fig9_unserved_frequency_gain_hz_per_kw": 0.002,
   "fig9_wind_converter_voltage_v": 520.0,
   "fig9_wind_scale": 1.0
