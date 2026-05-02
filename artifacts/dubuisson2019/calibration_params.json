@@ -3,7 +3,7 @@
   "fig11_initial_soc_percent": 99.7425,
   "fig11_load_scale": 1.0,
   "fig11_wind_scale": 1.0,
-  "fig9_battery_capacity_kwh": 80.0,
+  "fig9_battery_capacity_kwh": 76.0,
   "fig9_battery_nominal_voltage_v": 250.0,
   "fig9_dc_battery_power_gain_v_per_kw": 0.03,
   "fig9_dc_frequency_gain_hz_per_v": 0.012,

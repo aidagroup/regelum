@@ -622,7 +622,7 @@ def _fig9_digitized_load_power_profile_kw(
     points = _read_target_points(path)
     if not points:
         return _load_profile_kw
-    return lambda time_s: max(0.0, _interp_points(points, time_s))
+    return lambda time_s: max(0.0, _step_points(points, time_s))
 
 
 def _write_fig9_digitized_load_profile(
@@ -665,13 +665,13 @@ def _write_fig9_load_current_input(path: Path) -> None:
         for index in range(181):
             time_s = 2.0 + 0.1 * index
             if time_s < 7.0:
-                current_a = 72.0
+                current_a = 75.0
             elif time_s < 9.0:
-                current_a = 35.0
+                current_a = 40.0
             elif time_s < 18.0:
-                current_a = 72.0
+                current_a = 75.0
             else:
-                current_a = 36.0
+                current_a = 40.0
             writer.writerow(
                 {
                     "figure": "fig9",
@@ -706,6 +706,17 @@ def _interp_points(points: tuple[tuple[float, float], ...], time_s: float) -> fl
             fraction = (time_s - left_time) / (right_time - left_time)
             return left_value + fraction * (right_value - left_value)
     return points[-1][1]
+
+
+def _step_points(points: tuple[tuple[float, float], ...], time_s: float) -> float:
+    if time_s <= points[0][0]:
+        return points[0][1]
+    value = points[0][1]
+    for point_time, point_value in points[1:]:
+        if time_s < point_time:
+            return value
+        value = point_value
+    return value
 
 
 def _prototype_constant_wind_kw(time_s: float) -> float:
