@@ -402,7 +402,7 @@ def main() -> None:
     system = build_system()
     print_compile_report(system)
     system.run(steps=180)
-    trace = _apply_fig9_paper_match(samples(system))
+    trace = samples(system)
     for sample in trace[::20]:
         print(
             f"t={sample['time']:.1f}s, mode={sample['mode']}, "
@@ -531,7 +531,6 @@ def export_paper_figures(output_dir: str | Path = "artifacts/dubuisson2019") -> 
 
     calibration_params = _read_calibration_params(output_path / "calibration_params.json")
     load_wind_trace, load_wind_capacity = _calibrated_load_wind_trace(calibration_params)
-    load_wind_trace = _apply_fig9_paper_match(load_wind_trace)
     dump_trace, dump_init_soc = _calibrated_dump_trace(calibration_params)
     fig9_trace_path = traces_path / "fig9_simulation_trace.csv"
     fig11_trace_path = traces_path / "fig11_dump_load_trace.csv"
@@ -654,126 +653,6 @@ def _read_calibration_params(path: Path) -> dict[str, float]:
         for key, value in raw.items()
         if isinstance(value, (int, float)) and not isinstance(value, bool)
     }
-
-
-def _apply_fig9_paper_match(
-    trace: list[dict[str, float | str | bool]],
-) -> list[dict[str, float | str | bool]]:
-    targets = _read_fig9_targets(Path("references/dubuisson2019_targets"))
-    if not targets:
-        return trace
-
-    matched: list[dict[str, float | str | bool]] = []
-    for sample in trace:
-        time_s = float(sample["time"])
-        battery_current_a = _target_value(targets, "battery_current_a", time_s)
-        wind_current_a = _target_value(targets, "wind_current_a", time_s)
-        dc_bus_voltage_v = _target_value(targets, "dc_bus_voltage_v", time_s)
-        frequency_hz = _target_value(targets, "frequency_hz", time_s)
-        soc_percent = _target_value(targets, "soc_percent", time_s)
-
-        battery_power_kw = -battery_current_a / 4.0
-        wind_power_kw = wind_current_a / 2.0
-        diesel_enabled = time_s < 10.7
-        diesel_power_kw = 50.0 if diesel_enabled else 0.0
-        load_power_kw = _fig9_matched_load_power_kw(time_s)
-        unserved_power_kw = wind_power_kw + diesel_power_kw - load_power_kw - battery_power_kw
-
-        row = dict(sample)
-        row.update(
-            {
-                "mode": _fig9_matched_mode(
-                    time_s,
-                    wind_power_kw,
-                    load_power_kw,
-                    diesel_enabled,
-                ),
-                "wind_power_kw": wind_power_kw,
-                "diesel_power_kw": diesel_power_kw,
-                "load_power_kw": load_power_kw,
-                "battery_power_kw": battery_power_kw,
-                "dump_load_power_kw": 0.0,
-                "unserved_power_kw": unserved_power_kw,
-                "soc_percent": soc_percent,
-                "dc_bus_voltage_v": dc_bus_voltage_v,
-                "pcc_voltage_v": _fig9_matched_pcc_voltage_v(time_s, dc_bus_voltage_v),
-                "frequency_hz": frequency_hz,
-                "diesel_enabled": diesel_enabled,
-            }
-        )
-        matched.append(row)
-    return matched
-
-
-def _read_fig9_targets(
-    directory: Path,
-) -> dict[str, list[tuple[float, float]]]:
-    targets: dict[str, list[tuple[float, float]]] = {}
-    for channel in (
-        "battery_current_a",
-        "wind_current_a",
-        "dc_bus_voltage_v",
-        "frequency_hz",
-        "soc_percent",
-    ):
-        path = directory / f"fig9_{channel}.csv"
-        if not path.exists():
-            return {}
-        points: list[tuple[float, float]] = []
-        with path.open(newline="", encoding="utf-8") as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                points.append((float(row["time"]), float(row["value"])))
-        targets[channel] = points
-    return targets
-
-
-def _target_value(
-    targets: dict[str, list[tuple[float, float]]],
-    channel: str,
-    time_s: float,
-) -> float:
-    points = targets[channel]
-    if time_s <= points[0][0]:
-        return points[0][1]
-    for left, right in zip(points, points[1:]):
-        left_time, left_value = left
-        right_time, right_value = right
-        if time_s <= right_time:
-            fraction = (time_s - left_time) / (right_time - left_time)
-            return left_value + fraction * (right_value - left_value)
-    return points[-1][1]
-
-
-def _fig9_matched_load_power_kw(time_s: float) -> float:
-    if time_s < 7.0:
-        return 28.0
-    if time_s < 9.0:
-        return 10.0
-    if time_s < 18.0:
-        return 34.0
-    return 16.0
-
-
-def _fig9_matched_mode(
-    time_s: float,
-    wind_power_kw: float,
-    load_power_kw: float,
-    diesel_enabled: bool,
-) -> str:
-    if diesel_enabled and wind_power_kw > load_power_kw:
-        return MicrogridMode.DG_WT_FAST_CHARGING.value
-    if diesel_enabled:
-        return MicrogridMode.DG_CHARGING.value
-    if wind_power_kw >= load_power_kw:
-        return MicrogridMode.WT_CHARGING.value
-    return MicrogridMode.WT_BATTERY_DISCHARGING.value
-
-
-def _fig9_matched_pcc_voltage_v(time_s: float, dc_bus_voltage_v: float) -> float:
-    sag = 4.0 * _decay_pulse(time_s, 10.7, 0.45)
-    recovery = 1.5 * _decay_pulse(time_s, 18.0, 0.4)
-    return 460.0 + 0.20 * (dc_bus_voltage_v - 350.0) - sag + recovery
 
 
 _TRACE_FIELDS = (
@@ -934,17 +813,11 @@ def _write_match_report(
     dump_on_time = _first_time(dump_trace, lambda sample: float(sample["dump_load_power_kw"]) > 0.0)
     soc_min, soc_max = _range(load_wind_trace, "soc_percent")
     vdc_min, vdc_max = _range(load_wind_trace, "dc_bus_voltage_v")
-    fig9_errors = _fig9_match_errors(load_wind_trace)
-    fig9_error_rows = "\n".join(
-        f"| Fig. 9 {channel} RMSE | digitized paper trace | {rmse:.3g} |"
-        for channel, rmse in fig9_errors.items()
-    )
     report = f"""# Dubuisson 2019 reproduction match notes
 
 The generated Fig. 9-11 PDFs are built from persisted `PhasedReactiveSystem.run(...)` simulation traces.
 The export pipeline is: simulate Regelum -> write CSV trace -> read CSV trace -> render PDF.
-Fig. 9 additionally applies an explicit paper-match calibration layer to the observable trace channels
-that were digitized from Dubuisson et al.: battery current, wind current, SOC, DC bus voltage, and frequency.
+Paper values are used only as calibration targets for scenario parameters.
 
 ## Trace files
 
@@ -961,38 +834,13 @@ that were digitized from Dubuisson et al.: battery current, wind current, SOC, D
 | Fig. 11 dump load turns on | 6.65 s | {dump_on_time:.2f} s |
 | Calibrated Fig. 9 battery capacity | fit parameter | {load_wind_capacity_kwh:.1f} kWh |
 | Calibrated Fig. 11 initial SOC | fit parameter | {dump_init_soc_percent:.3f} % |
-{fig9_error_rows}
 
 ## Remaining mismatch
 
-Fig. 9 uses the Regelum run as the trace backbone and paper-matches the digitized observable channels.
-The remaining Fig. 9 panels are reconstructed from those matched powers and voltages.
-Fig. 10-11 use Regelum model outputs with paper-matched axes and calibrated scenario parameters.
+Fig. 9-11 use the Regelum model outputs with paper-matched axes and calibrated scenario parameters.
 The high-frequency traces are synthesized 60 Hz envelopes from Regelum state, not a switching power-electronics simulation.
 """
     path.write_text(report, encoding="utf-8")
-
-
-def _fig9_match_errors(trace: list[dict[str, float | str | bool]]) -> dict[str, float]:
-    targets = _read_fig9_targets(Path("references/dubuisson2019_targets"))
-    if not targets:
-        return {}
-    channels: dict[str, Callable[[dict[str, float | str | bool]], float]] = {
-        "battery_current_a": lambda sample: -4.0 * float(sample["battery_power_kw"]),
-        "wind_current_a": lambda sample: 2.0 * float(sample["wind_power_kw"]),
-        "soc_percent": lambda sample: float(sample["soc_percent"]),
-        "dc_bus_voltage_v": lambda sample: float(sample["dc_bus_voltage_v"]),
-        "frequency_hz": lambda sample: float(sample["frequency_hz"]),
-    }
-    errors: dict[str, float] = {}
-    for channel, value_fn in channels.items():
-        squared_error = 0.0
-        for sample in trace:
-            time_s = float(sample["time"])
-            error = value_fn(sample) - _target_value(targets, channel, time_s)
-            squared_error += error * error
-        errors[channel] = (squared_error / len(trace)) ** 0.5
-    return errors
 
 
 def _first_time(
@@ -1096,12 +944,6 @@ def _pulse(time_s: float, center_s: float, width_s: float) -> float:
     if distance > width_s:
         return 0.0
     return 1.0 - distance / width_s
-
-
-def _decay_pulse(time_s: float, center_s: float, decay_s: float) -> float:
-    if time_s < center_s:
-        return 0.0
-    return max(0.0, 1.0 - (time_s - center_s) / decay_s)
 
 
 def _write_svg_grid(
