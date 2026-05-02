@@ -14,6 +14,7 @@
   "fig9_dc_wind_power_gain_v_per_kw": 0.04,
   "fig9_frequency_response": 0.18,
   "fig9_initial_soc_percent": 69.92,
+  "fig9_inverter_efficiency": 0.97,
   "fig9_load_scale": 1.0,
   "fig9_max_charge_kw": 47.0,
   "fig9_max_discharge_kw": 45.0,

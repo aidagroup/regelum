@@ -44,6 +44,7 @@ class CalibrationParams:
     fig9_dc_frequency_gain_hz_per_v: float = 0.012
     fig9_unserved_frequency_gain_hz_per_kw: float = 0.002
     fig9_frequency_response: float = 0.18
+    fig9_inverter_efficiency: float = 0.97
     fig11_initial_soc_percent: float = 99.7425
     fig11_battery_capacity_kwh: float = 10.0
     fig11_wind_scale: float = 1.0
@@ -169,6 +170,7 @@ def calibrate(
         "fig9_dc_frequency_gain_hz_per_v": 0.004,
         "fig9_unserved_frequency_gain_hz_per_kw": 0.001,
         "fig9_frequency_response": 0.04,
+        "fig9_inverter_efficiency": 0.01,
         "fig11_initial_soc_percent": 0.02,
         "fig11_battery_capacity_kwh": 1.5,
         "fig11_wind_scale": 0.04,
@@ -194,6 +196,7 @@ def calibrate(
         "fig9_dc_frequency_gain_hz_per_v": (-0.04, 0.04),
         "fig9_unserved_frequency_gain_hz_per_kw": (-0.02, 0.02),
         "fig9_frequency_response": (0.02, 0.80),
+        "fig9_inverter_efficiency": (0.85, 1.0),
         "fig11_initial_soc_percent": (99.55, 99.99),
         "fig11_battery_capacity_kwh": (4.0, 30.0),
         "fig11_wind_scale": (0.75, 1.25),
@@ -289,6 +292,7 @@ def simulate(params: CalibrationParams) -> dict[str, list[dict[str, float | str 
         dc_frequency_gain_hz_per_v=params.fig9_dc_frequency_gain_hz_per_v,
         unserved_frequency_gain_hz_per_kw=params.fig9_unserved_frequency_gain_hz_per_kw,
         frequency_response=params.fig9_frequency_response,
+        inverter_efficiency=params.fig9_inverter_efficiency,
     )
     fig11 = _run_trace(
         dt=0.005,

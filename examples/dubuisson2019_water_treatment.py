@@ -312,6 +312,29 @@ class PccRegulator(Node):
         return self.Outputs(voltage_v=voltage_next, frequency_hz=frequency_next)
 
 
+class Inverter(Node):
+    def __init__(self, *, efficiency: float = 0.97) -> None:
+        self.efficiency = efficiency
+
+    class Outputs(NodeOutputs):
+        current_peak_a: float = Output(initial=0.0)
+
+    def run(
+        self,
+        battery_power_kw: float = Input(source=PowerBalance.Outputs.battery_power_kw),
+        pcc_voltage_v: float = Input(source=PccRegulator.Outputs.voltage_v),
+    ) -> Outputs:
+        voltage = max(abs(pcc_voltage_v), 1.0)
+        ac_power_kw = (
+            battery_power_kw / self.efficiency
+            if battery_power_kw >= 0.0
+            else battery_power_kw * self.efficiency
+        )
+        current_rms_a = 1000.0 * abs(ac_power_kw) / (sqrt(3.0) * voltage)
+        current_peak_a = (1.0 if ac_power_kw >= 0.0 else -1.0) * sqrt(2.0) * current_rms_a
+        return self.Outputs(current_peak_a=current_peak_a)
+
+
 class MicrogridLogger(Node):
     class Outputs(NodeOutputs):
         samples: list[dict[str, float | str | bool]] = Output(initial=list)
@@ -331,6 +354,7 @@ class MicrogridLogger(Node):
         dc_bus_voltage_v: float = Input(source=DcBus.Outputs.voltage_v),
         pcc_voltage_v: float = Input(source=PccRegulator.Outputs.voltage_v),
         frequency_hz: float = Input(source=PccRegulator.Outputs.frequency_hz),
+        inverter_current_a: float = Input(source=Inverter.Outputs.current_peak_a),
         diesel_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.diesel_enabled),
         samples: list[dict[str, float | str | bool]] = Input(
             source=lambda: MicrogridLogger.Outputs.samples
@@ -350,6 +374,7 @@ class MicrogridLogger(Node):
             "dc_bus_voltage_v": dc_bus_voltage_v,
             "pcc_voltage_v": pcc_voltage_v,
             "frequency_hz": frequency_hz,
+            "inverter_current_a": inverter_current_a,
             "diesel_enabled": diesel_enabled,
         }
         samples.append(sample)
@@ -376,6 +401,7 @@ def build_system(
     dc_frequency_gain_hz_per_v: float = 0.012,
     unserved_frequency_gain_hz_per_kw: float = 0.002,
     frequency_response: float = 0.18,
+    inverter_efficiency: float = 0.97,
     wind_power_profile_kw: Callable[[float], float] | None = None,
     load_profile_kw: Callable[[float], float] | None = None,
 ) -> PhasedReactiveSystem:
@@ -416,6 +442,7 @@ def build_system(
             response=frequency_response,
         ),
         MicrogridLogger(),
+        Inverter(efficiency=inverter_efficiency),
     )
     supervisor = PowerFlowSupervisor()
     return PhasedReactiveSystem(
@@ -717,6 +744,7 @@ def _run_trace(
     dc_frequency_gain_hz_per_v: float = 0.012,
     unserved_frequency_gain_hz_per_kw: float = 0.002,
     frequency_response: float = 0.18,
+    inverter_efficiency: float = 0.97,
 ) -> list[dict[str, float | str | bool]]:
     system = build_system(
         dt=dt,
@@ -737,6 +765,7 @@ def _run_trace(
         dc_frequency_gain_hz_per_v=dc_frequency_gain_hz_per_v,
         unserved_frequency_gain_hz_per_kw=unserved_frequency_gain_hz_per_kw,
         frequency_response=frequency_response,
+        inverter_efficiency=inverter_efficiency,
         wind_power_profile_kw=wind_power_profile_kw,
         load_profile_kw=load_profile_kw,
     )
@@ -825,6 +854,7 @@ def _calibrated_load_wind_trace(
             "fig9_unserved_frequency_gain_hz_per_kw", 0.002
         ),
         frequency_response=params.get("fig9_frequency_response", 0.18),
+        inverter_efficiency=params.get("fig9_inverter_efficiency", 0.97),
     )
     return trace, best_capacity
 
@@ -919,6 +949,7 @@ _TRACE_FIELDS = (
     "dc_bus_voltage_v",
     "pcc_voltage_v",
     "frequency_hz",
+    "inverter_current_a",
     "diesel_enabled",
 )
 
@@ -953,6 +984,7 @@ def _read_trace_csv(path: Path) -> list[dict[str, float | str | bool]]:
                     "dc_bus_voltage_v": float(row["dc_bus_voltage_v"]),
                     "pcc_voltage_v": float(row["pcc_voltage_v"]),
                     "frequency_hz": float(row["frequency_hz"]),
+                    "inverter_current_a": float(row.get("inverter_current_a") or 0.0),
                     "diesel_enabled": row["diesel_enabled"] == "True",
                 }
             )
@@ -990,7 +1022,7 @@ def _write_fig9(path: Path, trace: list[dict[str, float | str | bool]]) -> None:
         ),
         _with_axis(_line_panel("SOC (%)", trace, "soc_percent"), (2.0, 20.0, 69.9, 70.05)),
         _with_axis(
-            _wave_panel("Inverter current (A)", trace, "battery_power_kw", 2.0),
+            _wave_panel("Inverter current (A)", trace, "inverter_current_a", 1.0),
             (2.0, 20.0, -100.0, 100.0),
         ),
         _with_axis(_line_panel("Frequency (Hz)", trace, "frequency_hz"), (2.0, 20.0, 59.5, 60.5)),
@@ -1045,7 +1077,7 @@ def _write_fig11(path: Path, trace: list[dict[str, float | str | bool]]) -> None
         ),
         _with_axis(_line_panel("SOC (%)", trace, "soc_percent"), (4.0, 10.0, 99.97, 100.01)),
         _with_axis(
-            _wave_panel("Inverter current (A)", trace, "battery_power_kw", 2.0),
+            _wave_panel("Inverter current (A)", trace, "inverter_current_a", 1.0),
             (4.0, 10.0, -20.0, 20.0),
         ),
         _with_axis(_line_panel("Frequency (Hz)", trace, "frequency_hz"), (4.0, 10.0, 59.5, 60.5)),
