@@ -39,6 +39,10 @@ class CalibrationParams:
     fig9_dc_wind_power_gain_v_per_kw: float = 0.04
     fig9_dc_load_power_gain_v_per_kw: float = -0.02
     fig9_dc_unserved_power_gain_v_per_kw: float = 1.8
+    fig9_dc_load_step_gain_v_per_kw: float = -0.25
+    fig9_dc_diesel_step_gain_v_per_kw: float = 0.25
+    fig9_dc_wind_step_gain_v_per_kw: float = 0.04
+    fig9_dc_transient_decay: float = 0.88
     fig9_dc_response: float = 0.20
     fig9_nominal_frequency_hz: float = 60.095
     fig9_dc_frequency_gain_hz_per_v: float = 0.012
@@ -165,6 +169,10 @@ def calibrate(
         "fig9_dc_wind_power_gain_v_per_kw": 0.02,
         "fig9_dc_load_power_gain_v_per_kw": 0.02,
         "fig9_dc_unserved_power_gain_v_per_kw": 0.30,
+        "fig9_dc_load_step_gain_v_per_kw": 0.05,
+        "fig9_dc_diesel_step_gain_v_per_kw": 0.05,
+        "fig9_dc_wind_step_gain_v_per_kw": 0.02,
+        "fig9_dc_transient_decay": 0.04,
         "fig9_dc_response": 0.04,
         "fig9_nominal_frequency_hz": 0.01,
         "fig9_dc_frequency_gain_hz_per_v": 0.004,
@@ -191,6 +199,10 @@ def calibrate(
         "fig9_dc_wind_power_gain_v_per_kw": (-0.25, 0.25),
         "fig9_dc_load_power_gain_v_per_kw": (-0.25, 0.25),
         "fig9_dc_unserved_power_gain_v_per_kw": (0.0, 3.0),
+        "fig9_dc_load_step_gain_v_per_kw": (-1.0, 1.0),
+        "fig9_dc_diesel_step_gain_v_per_kw": (-1.0, 1.0),
+        "fig9_dc_wind_step_gain_v_per_kw": (-0.4, 0.4),
+        "fig9_dc_transient_decay": (0.20, 0.98),
         "fig9_dc_response": (0.02, 0.80),
         "fig9_nominal_frequency_hz": (59.95, 60.15),
         "fig9_dc_frequency_gain_hz_per_v": (-0.04, 0.04),
@@ -287,6 +299,10 @@ def simulate(params: CalibrationParams) -> dict[str, list[dict[str, float | str 
         dc_wind_power_gain_v_per_kw=params.fig9_dc_wind_power_gain_v_per_kw,
         dc_load_power_gain_v_per_kw=params.fig9_dc_load_power_gain_v_per_kw,
         dc_unserved_power_gain_v_per_kw=params.fig9_dc_unserved_power_gain_v_per_kw,
+        dc_load_step_gain_v_per_kw=params.fig9_dc_load_step_gain_v_per_kw,
+        dc_diesel_step_gain_v_per_kw=params.fig9_dc_diesel_step_gain_v_per_kw,
+        dc_wind_step_gain_v_per_kw=params.fig9_dc_wind_step_gain_v_per_kw,
+        dc_transient_decay=params.fig9_dc_transient_decay,
         dc_response=params.fig9_dc_response,
         nominal_frequency_hz=params.fig9_nominal_frequency_hz,
         dc_frequency_gain_hz_per_v=params.fig9_dc_frequency_gain_hz_per_v,
