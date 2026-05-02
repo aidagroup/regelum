@@ -608,20 +608,14 @@ def _fig9_digitized_wind_power_profile_kw(
 
 def _fig9_digitized_load_power_profile_kw(
     *,
-    battery_voltage_v: float,
-    wind_converter_voltage_v: float,
-    diesel_power_kw: float = 50.0,
-    diesel_off_time_s: float = 10.7,
+    load_voltage_v: float = 460.0,
     target_dir: Path = Path("references/dubuisson2019_targets"),
 ) -> Callable[[float], float]:
     path = target_dir / "fig9_load_power_kw.csv"
     if not path.exists():
         _write_fig9_digitized_load_profile(
             path,
-            battery_voltage_v=battery_voltage_v,
-            wind_converter_voltage_v=wind_converter_voltage_v,
-            diesel_power_kw=diesel_power_kw,
-            diesel_off_time_s=diesel_off_time_s,
+            load_voltage_v=load_voltage_v,
             target_dir=target_dir,
         )
         _read_target_points.cache_clear()
@@ -634,35 +628,56 @@ def _fig9_digitized_load_power_profile_kw(
 def _write_fig9_digitized_load_profile(
     path: Path,
     *,
-    battery_voltage_v: float,
-    wind_converter_voltage_v: float,
-    diesel_power_kw: float,
-    diesel_off_time_s: float,
+    load_voltage_v: float,
     target_dir: Path,
 ) -> None:
-    wind_points = _read_target_points(target_dir / "fig9_wind_current_a.csv")
-    battery_points = _read_target_points(target_dir / "fig9_battery_current_a.csv")
-    if not wind_points or not battery_points:
+    current_path = target_dir / "fig9_load_current_a.csv"
+    if not current_path.exists():
+        _write_fig9_load_current_input(current_path)
+        _read_target_points.cache_clear()
+    load_current_points = _read_target_points(current_path)
+    if not load_current_points:
         return
 
+    scale = _kw_to_ac_current_peak_scale(load_voltage_v)
     path.parent.mkdir(parents=True, exist_ok=True)
-    times = sorted({time_s for time_s, _ in wind_points} | {time_s for time_s, _ in battery_points})
     with path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=("figure", "channel", "time", "value", "weight"))
         writer.writeheader()
-        for time_s in times:
-            wind_current_a = _interp_points(wind_points, time_s)
-            battery_current_a = _interp_points(battery_points, time_s)
-            wind_power_kw = wind_current_a * wind_converter_voltage_v / 1000.0
-            battery_power_kw = -battery_current_a * battery_voltage_v / 1000.0
-            diesel_kw = diesel_power_kw if time_s < diesel_off_time_s else 0.0
-            load_power_kw = max(0.0, wind_power_kw + diesel_kw - battery_power_kw)
+        for time_s, load_current_a in load_current_points:
+            load_power_kw = max(0.0, load_current_a / scale)
             writer.writerow(
                 {
                     "figure": "fig9",
                     "channel": "load_power_kw",
                     "time": f"{time_s:.6f}",
                     "value": f"{load_power_kw:.6f}",
+                    "weight": 1.0,
+                }
+            )
+
+
+def _write_fig9_load_current_input(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=("figure", "channel", "time", "value", "weight"))
+        writer.writeheader()
+        for index in range(181):
+            time_s = 2.0 + 0.1 * index
+            if time_s < 7.0:
+                current_a = 72.0
+            elif time_s < 9.0:
+                current_a = 35.0
+            elif time_s < 18.0:
+                current_a = 72.0
+            else:
+                current_a = 36.0
+            writer.writerow(
+                {
+                    "figure": "fig9",
+                    "channel": "load_current_a",
+                    "time": f"{time_s:.6f}",
+                    "value": f"{current_a:.6f}",
                     "weight": 1.0,
                 }
             )
@@ -827,8 +842,7 @@ def _calibrated_load_wind_trace(
         nominal_mppt_efficiency=params.get("fig9_nominal_mppt_efficiency", 0.98),
     )
     load_profile = _fig9_digitized_load_power_profile_kw(
-        battery_voltage_v=battery_nominal_voltage_v,
-        wind_converter_voltage_v=wind_converter_voltage_v,
+        load_voltage_v=460.0,
     )
     trace = _run_trace(
         dt=0.02,
@@ -1106,7 +1120,7 @@ def _write_match_report(
 
 The generated Fig. 9-11 PDFs are built from persisted `PhasedReactiveSystem.run(...)` simulation traces.
 The export pipeline is: simulate Regelum -> write CSV trace -> read CSV trace -> render PDF.
-Digitized paper traces are used as external Fig. 9 scenario inputs for wind and reconstructed load.
+Digitized paper traces are used as external Fig. 9 scenario inputs for wind and load.
 Digitized paper output traces are not used to overwrite simulated output channels.
 
 ## Trace files
