@@ -1,6 +1,6 @@
 <p align="center">
   <img
-    src="https://raw.githubusercontent.com/aidagroup/regelum/main/logo/logo_big.png"
+    src="https://raw.githubusercontent.com/aidagroup/regelum/main/docs/assets/logo/logo_big.png"
     alt="regelum"
     width="360"
   >
@@ -24,15 +24,15 @@ different phases, and move between phases with explicit transitions.
 ## Overview
 
 - **Nodes** declare typed inputs and outputs.
-- **Phases** decide which node instances are active together.
-- **Transitions** describe how one phase hands control to the next.
+- **Phases** decide which node instances are active together and how control
+  moves between phases.
 - **Compilation** resolves links, schedules nodes, and catches structural
   mistakes before runtime.
 
-The best entry point is the concepts overview:
+The best entry point is the Learn overview:
 
 - Docs: <https://aidagroup.github.io/regelum/>
-- Concepts overview: <https://aidagroup.github.io/regelum/concepts/>
+- Learn overview: <https://aidagroup.github.io/regelum/concepts/>
 
 ## Quick Example
 
@@ -106,13 +106,9 @@ uv run regelum-instance-connect
 
 ## Release Process
 
-Create a GitHub Release with a tag such as `v0.2.0`.
-
-The publish workflow will:
-
-1. build the package with `uv build`
-2. derive version `0.2.0` from the git tag via `hatch-vcs`
-3. publish the artifacts to PyPI with `uv publish`
+Create a GitHub Release tagged like `v0.2.0`.
+The publish workflow builds the package, derives the version from the tag, and
+uploads artifacts to PyPI.
 
 After installation, users can verify the packaged version:
 

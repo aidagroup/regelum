@@ -1,4 +1,4 @@
-# Concepts
+# Learn
 
 `regelum` is a framework for modeling **Phased Reactive Systems**.
 What that means is best understood through a concrete example, working from
@@ -19,8 +19,8 @@ While you watch the current second of video, the player is also quietly
 downloading the next few seconds in the background, so that playback does
 not have to wait for the network on every frame.
 That backlog of already-downloaded but not yet shown video is what we will
-call the **buffer** — measured in seconds of viewable content sitting in
-memory ahead of the playhead.
+call the buffer in this example — measured in seconds of viewable content
+sitting in memory ahead of the playhead.
 
 If the network is fast, the buffer grows and the player has slack.
 If the network slows down, the buffer shrinks; if it runs out completely,
@@ -35,11 +35,21 @@ next, and the system runs forever as long as it is alive.
 
 ```mermaid
 flowchart LR
-    measure --> decide{decide}
+    measure --> decide[decide]
     decide -->|healthy| play
     decide -->|stalling| drop_quality
     drop_quality --> play
     play -->|next pass| measure
+
+    classDef measure fill:#2f6fed22,stroke:#2f6fed;
+    classDef decide fill:#7c3aed22,stroke:#7c3aed;
+    classDef dropQuality fill:#d9770622,stroke:#d97706;
+    classDef play fill:#15803d22,stroke:#15803d;
+
+    class measure measure;
+    class decide decide;
+    class drop_quality dropQuality;
+    class play play;
 ```
 
 ## Breaking the cycle into ticks
@@ -54,11 +64,21 @@ terminator `⊥` — where every pass leaves it:
 ```mermaid
 flowchart LR
     init([init]) --> measure
-    measure --> decide{decide}
+    measure --> decide[decide]
     decide -->|healthy| play
     decide -->|stalling| drop_quality
     drop_quality --> play
     play --> done([⊥])
+
+    classDef measure fill:#2f6fed22,stroke:#2f6fed;
+    classDef decide fill:#7c3aed22,stroke:#7c3aed;
+    classDef dropQuality fill:#d9770622,stroke:#d97706;
+    classDef play fill:#15803d22,stroke:#15803d;
+
+    class measure measure;
+    class decide decide;
+    class drop_quality dropQuality;
+    class play play;
 ```
 
 One such pass through the graph — from the initial point to `⊥` — is a
@@ -85,12 +105,12 @@ Each arrow leaving a phase carries a **predicate** that is evaluated at
 runtime to decide whether that arrow fires:
 
 - if a phase has *one* outgoing arrow, its predicate is trivially `true` —
-  the arrow always fires, and we draw it as `Goto`.
+  the arrow always fires.
 - if a phase has *several* outgoing arrows, the predicates must be mutually
   exclusive — exactly one fires per tick.
 
-In other words, **every arrow is conditional**; an unconditional `Goto` is
-just the special case where the condition is `True`.
+In other words, **every arrow is conditional**; an unconditional transition
+is just the special case where the condition is `True`.
 This unifies sequential flow and branching under a single rule: at the end of
 each phase, evaluate the predicates and follow the one that matches.
 
@@ -127,6 +147,13 @@ Every node has two kinds of variables:
   Each output is owned by exactly one node, so there is never any ambiguity
   about who produced a given value.
 
+Alongside inputs and outputs, a node defines a `run` method.
+This method is the node's basic computation: it receives the node's inputs as
+arguments and returns the node's outputs.
+In other words, inputs and outputs describe the data boundary, while `run`
+contains the logic that transforms the current input values into the next
+output values.
+
 Inside a phase, several nodes can be active.
 They are scheduled in topological order from their input/output dependencies,
 so that every read sees a freshly written value when there is one.
@@ -136,10 +163,61 @@ nodes:
 
 | Phase | Nodes | What happens |
 |---|---|---|
-| `measure` | `Clock`, `Network` | Advance the tick counter; sample the current bandwidth. |
-| `decide` | `QualityPolicy` | Compare projected drain rate against the buffer; set `stalling`. |
-| `drop_quality` | `BitrateController` | Drop the target bitrate by one rung. |
-| `play` | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
+| <span class="phase-label phase-label--measure">measure</span> | `Clock`, `Network` | Advance the tick counter; sample the current bandwidth. |
+| <span class="phase-label phase-label--decide">decide</span> | `QualityPolicy` | Compare projected drain rate against the buffer; set `stalling`. |
+| <span class="phase-label phase-label--drop-quality">drop_quality</span> | `BitrateController` | Drop the target bitrate by one rung. |
+| <span class="phase-label phase-label--play">play</span> | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
+
+The same system at node level looks like this.
+Solid arrows show that one node reads another node's output; dashed
+arrows from `state` show self-reads, where a node reads its own output from
+the previous tick.
+The node colors correspond to the phase colors in the table above:
+
+```mermaid
+flowchart LR
+    clock["Clock"]
+    network["Network"]
+    policy["QualityPolicy"]
+    controller["BitrateController"]
+    decoder["Decoder"]
+    session["MediaSession"]
+    logger["Logger"]
+    clock_state(("state"))
+    controller_state(("state"))
+    session_state(("state"))
+    logger_state(("state"))
+
+    clock --> network
+    network --> policy
+    network --> decoder
+    network --> logger
+    controller --> policy
+    controller --> decoder
+    controller --> logger
+    decoder --> session
+    session --> logger
+    session --> policy
+    policy --> logger
+    clock --> logger
+
+    clock_state -.-> clock
+    controller_state -.-> controller
+    session_state -.-> session
+    logger_state -.-> logger
+
+    classDef measure fill:#2f6fed22,stroke:#2f6fed;
+    classDef decide fill:#7c3aed22,stroke:#7c3aed;
+    classDef dropQuality fill:#d9770622,stroke:#d97706;
+    classDef play fill:#15803d22,stroke:#15803d;
+    classDef state fill:#94a3b822,stroke:#94a3b8,stroke-dasharray:3 3;
+
+    class clock,network measure;
+    class policy decide;
+    class controller dropQuality;
+    class decoder,session,logger play;
+    class clock_state,controller_state,session_state,logger_state state;
+```
 
 This is where the framework's actual work happens: writing node classes,
 declaring their inputs and outputs, assigning instances to phases, and
@@ -156,30 +234,9 @@ attaching predicates to transitions.
 The remaining pages in this section walk through the model from the bottom
 up — same model, opposite direction:
 
-1. **Nodes** — declaring typed inputs, typed outputs, and a `run` method.
-2. **Ports** — the input and output declarations that make a node's
-   interface explicit.
-3. **Connections** — wiring an input to a specific output, including
-   instance-level wiring for multi-instance systems.
-4. **State and initialization** — which outputs need `initial` values and
-   why, and how persistent state closes the feedback loop across ticks.
-5. **Phases** — assembling node instances into phases and reading the
-   compiled schedule.
-6. **Transitions** — `Goto`, `If` / `Elif` / `Else`, predicates, and
-   `terminate`.
-7. **Compilation** — what is checked statically (C1, C3) and what the
-   compile report exposes.
-8. **Runtime** — how `step()` and `run()` execute compiled phases.
-
-## Three times to keep separate
-
-There are three distinct moments in the life of a system:
-
-- **declaration time** — Python classes declare ports and behavior;
-- **compile time** — node instances, sources, phases, and guards are
-  resolved into an executable model;
-- **runtime** — phases execute and state values are updated.
-
-Most mistakes should be caught at compile time.
-`PhasedReactiveSystem(..., strict=False)` lets a bad system be inspected via
-its compile report instead of raising.
+1. **Nodes** — declaring typed inputs, typed outputs, connections,
+   initialization, and a `run` method.
+2. **Phases** — assembling node instances into phases, declaring transitions,
+   and reading the compiled schedule.
+3. **Create, compile, and run** — constructing `rg.PhasedReactiveSystem`,
+   reading the compile report, and executing ticks.

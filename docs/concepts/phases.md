@@ -1,33 +1,172 @@
 # Phases
 
-A phase selects the node instances that are active together.
-Ticks move through one or more phases until a transition terminates.
+## Recap
+
+In the overview we took the adaptive-bitrate video player and cut its
+feedback loop into ticks.
+Each tick enters the phase graph at `init`, visits one or more named phases,
+and leaves at `⊥`.
+
+!!! example "The running example: an adaptive-bitrate video player"
+
+    The player samples network bandwidth, decides whether the current bitrate
+    is sustainable, optionally lowers quality, and then plays the next chunk.
+    The buffer and bitrate persist across ticks, so the next tick starts from
+    the state left by the previous one.
+
+```mermaid
+flowchart LR
+    init([init]) --> measure
+    measure --> decide[decide]
+    decide -->|healthy| play
+    decide -->|stalling| drop_quality
+    drop_quality --> play
+    play --> done([⊥])
+
+    classDef measure fill:#2f6fed22,stroke:#2f6fed;
+    classDef decide fill:#7c3aed22,stroke:#7c3aed;
+    classDef dropQuality fill:#d9770622,stroke:#d97706;
+    classDef play fill:#15803d22,stroke:#15803d;
+
+    class measure measure;
+    class decide decide;
+    class drop_quality dropQuality;
+    class play play;
+```
+
+The graph has four phases:
+
+| Phase | Nodes | What happens |
+|---|---|---|
+| <span class="phase-label phase-label--measure">measure</span> | `Clock`, `Network` | Advance the tick counter; sample the current bandwidth. |
+| <span class="phase-label phase-label--decide">decide</span> | `QualityPolicy` | Compare projected drain rate against the buffer; set `stalling`. |
+| <span class="phase-label phase-label--drop-quality">drop_quality</span> | `BitrateController` | Drop the target bitrate by one rung. |
+| <span class="phase-label phase-label--play">play</span> | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
+
+At node level, the same model looks like this.
+Solid arrows show that one node reads another node's output; dashed
+arrows from `state` show self-reads, where a node reads its own output from
+the previous tick.
+The node colors correspond to the phase colors in the table above:
+
+```mermaid
+flowchart LR
+    clock["Clock"]
+    network["Network"]
+    policy["QualityPolicy"]
+    controller["BitrateController"]
+    decoder["Decoder"]
+    session["MediaSession"]
+    logger["Logger"]
+    clock_state(("state"))
+    controller_state(("state"))
+    session_state(("state"))
+    logger_state(("state"))
+
+    clock --> network
+    network --> policy
+    network --> decoder
+    network --> logger
+    controller --> policy
+    controller --> decoder
+    controller --> logger
+    decoder --> session
+    session --> logger
+    session --> policy
+    policy --> logger
+    clock --> logger
+
+    clock_state -.-> clock
+    controller_state -.-> controller
+    session_state -.-> session
+    logger_state -.-> logger
+
+    classDef measure fill:#2f6fed22,stroke:#2f6fed;
+    classDef decide fill:#7c3aed22,stroke:#7c3aed;
+    classDef dropQuality fill:#d9770622,stroke:#d97706;
+    classDef play fill:#15803d22,stroke:#15803d;
+    classDef state fill:#94a3b822,stroke:#94a3b8,stroke-dasharray:3 3;
+
+    class clock,network measure;
+    class policy decide;
+    class controller dropQuality;
+    class decoder,session,logger play;
+    class clock_state,controller_state,session_state,logger_state state;
+```
+
+??? example "Full code listing: `examples/video_player.py`"
+
+    ```python
+    --8<-- "examples/video_player.py"
+    ```
+
+This page zooms in on how those phases are declared: which node instances
+belong to each phase, where a tick starts, how nodes inside a phase are
+scheduled, and how transitions choose the next phase.
+
+## What a phase is
+
+A phase is defined by two things:
+
+- **nodes** — the node instances that are active together;
+- **transitions** — the outgoing edges that choose the next phase, or
+  terminate the current tick.
+
+The nodes inside one phase must form a DAG with respect to their input/output
+dependencies.
+This is what lets the compiler resolve a deterministic topological order for
+the phase.
+Across the whole system there must also be exactly one initial phase, so every
+tick has a single unambiguous entry point.
+
+When a tick runs, it starts at the initial phase, executes that phase's nodes,
+and then evaluates the phase's transitions.
+Exactly one effective transition should be selected: zero true transitions
+means the tick has nowhere to go, and more than one true transition means the
+next phase is ambiguous.
+With [symbolic predicates](#branch-chains), `regelum` can inspect the
+phase graph during compilation and report structural problems before runtime
+where possible.
 
 The video player has four phases — `measure`, `decide`, `drop_quality`, and
 `play`.
 `measure` and `play` carry several nodes each; `decide` and `drop_quality`
 each hold one.
 
-## Phase nodes
+## Phase API
 
-`Phase.nodes` accepts node instances only.
-Node classes are rejected immediately.
+A phase declaration has three main parts:
 
-```python
-rg.Phase(
-    "play",
-    nodes=(decoder, session, logger),
-    transitions=(rg.Goto(rg.terminate),),
-)
-```
+- a **name**, such as `"measure"` or `"play"`;
+- `nodes`, a tuple of node instances that run together in that phase;
+- `transitions`, a tuple of transition rules that choose what happens after
+  the phase has executed.
 
-The `PhasedReactiveSystem` node set is derived from phases.
-There is no separate `nodes=[...]` list on the system.
+It may also set `is_initial=True`.
+The initial phase is where every tick enters the phase graph.
+For the player, that is `measure`: a tick begins by sampling the clock and the
+network before any decision is taken.
 
-## Initial phase
+Phase names must be unique inside one `PhasedReactiveSystem`, because
+transitions target phases by name.
+Node instances also have runtime names, either explicit or derived by
+`regelum`, and those names must be unique in the compiled system so diagnostics
+and state paths are unambiguous.
 
-Exactly one phase should be marked `is_initial=True`.
-There is no fallback to the first phase.
+!!! warning "Exactly one initial phase"
+
+    Exactly one phase in a `PhasedReactiveSystem` must be marked
+    `is_initial=True`.
+    There is no fallback to the first phase, and more than one initial phase
+    would make tick entry ambiguous.
+
+!!! note "All nodes live in phases"
+
+    Every node instance that belongs to the system must be listed in at least
+    one phase.
+    The system's node set is derived from phase declarations.
+    The same node instance may be reused in multiple phases when it should run
+    in more than one part of the tick.
 
 ```python
 rg.Phase(
@@ -38,41 +177,188 @@ rg.Phase(
 )
 ```
 
-The initial phase is *where every tick enters the cycle*.
-For the player, that is `measure`: a tick begins by sampling the clock and the
-network before any decision is taken.
+Here `nodes=(clock, network)` is the set of node instances active in the
+`measure` phase.
+`transitions=(rg.Goto("decide"),)` is the phase's transition rule set: in this
+case, the rule is unconditional and sends control to `decide` after `measure`
+finishes.
 
-## Complete phase graph
+## Transitions
 
-A phase must cover the nodes needed by its inputs and guards.
-The compiler walks the dependency graph from phase nodes and guard references.
-If a producer is outside all phase coverage, compilation reports an incomplete
-phase graph.
+Transitions choose the next phase after the current phase has executed.
+They may also terminate the current tick.
 
-For the player, `decide` reads `MediaSession.buffer_seconds`,
-`BitrateController.value`, and `Network.bandwidth_kbps` from committed state.
-All three producers belong to other phases, which is fine — the constraint
-applies to the union of phases, not each phase in isolation.
+The video player uses symbolic predicates for the branching decision, plus
+unconditional `Goto` transitions for the linear segments and
+`Goto(terminate)` to end the tick.
 
-## Phase schedule
+### Goto
 
-Nodes inside a phase run in topological order.
-Input dependencies define the order; the position in `Phase.nodes` only
-breaks ties between independent nodes.
+`Goto` is an unconditional transition.
+It says where control goes after the current phase has finished.
+There is no predicate to evaluate: if the phase reaches this transition, the
+transition is taken.
 
-For the player:
+Pass one of three target forms to `Goto`:
 
-| Phase | Order | Notes |
-|---|---|---|
-| `measure` | `Clock`, `Network` | `Network` reads `Clock.tick`, so `Clock` precedes it. |
-| `decide` | `QualityPolicy` | Single node. |
-| `drop_quality` | `BitrateController` | Single node. |
-| `play` | `Decoder`, `MediaSession`, `Logger` | `MediaSession` reads `Decoder.fetched_seconds`; `Logger` reads everything else. |
+- a phase name, such as `"decide"`;
+- a phase instance, when you already have the target object;
+- `rg.terminate`, which ends the current tick.
+
+```{.python .annotate}
+rg.Phase(
+    "measure",
+    nodes=(clock, network),
+    transitions=(rg.Goto("decide"),),  # (1)
+    is_initial=True,
+)
+
+rg.Phase(
+    "play",
+    nodes=(decoder, session, logger),
+    transitions=(rg.Goto(rg.terminate),),  # (2)
+)
+```
+
+1. `rg.Goto("decide")` sends control to the phase named `"decide"` after
+   `measure` has executed.
+   The same target could also be passed as a phase instance when the object is
+   already available.
+2. `rg.Goto(rg.terminate)` does not choose another phase.
+   It marks the current tick as complete.
+
+### Branch chains
+
+Use `If`, `Elif`, and `Else` for ordered branching.
+The video player only needs `If` plus `Else`, because the policy publishes a
+single boolean:
 
 ```python
-print(system.compile_report.phase_schedules)
-print(system.compile_report.phase_dependency_edges)
+rg.Phase(
+    "decide",
+    nodes=(policy,),
+    transitions=(
+        rg.If(rg.V(policy.Outputs.stalling), "drop_quality", name="stalling"),
+        rg.Else("play", name="healthy"),
+    ),
+)
 ```
+
+The preferred way to write branch predicates is with symbolic predicates:
+`V(...)` expressions that point at node outputs.
+Symbolic predicates keep transition guards visible to the compiler, which
+gives better graph checks and clearer diagnostics.
+
+The `If` API is:
+
+```python
+rg.If(predicate, target, name=None)
+```
+
+- `predicate` is a symbolic predicate such as `rg.V(...) < 2.0`, or a Python
+  callable used as an escape hatch;
+- `target` is the phase to enter when the predicate is true: a phase name, a
+  phase instance, or `rg.terminate`;
+- `name` is optional and gives the transition a stable diagnostic label.
+
+```python
+rg.If(rg.V(policy.Outputs.stalling), "drop_quality")
+rg.If(rg.V(MediaSession.Outputs.buffer_seconds) < 2.0, "buffer_warning")
+rg.If(rg.V(policy.Outputs.force_stop), rg.terminate, name="force_stop")
+```
+
+`V(...)` accepts the same kinds of output references as inputs:
+
+- output descriptors, such as
+  `rg.V(MediaSession.Outputs.buffer_seconds)`;
+- instance-bound output ports, such as
+  `rg.V(session.Outputs.buffer_seconds)`;
+- lazy callables, such as
+  `rg.V(lambda: MediaSession.Outputs.buffer_seconds)`;
+- string references, such as
+  `rg.V("MediaSession.buffer_seconds")`.
+
+Enum outputs can be compared directly inside symbolic predicates:
+
+```python
+from enum import Enum
+
+
+class PlaybackMode(Enum):
+    PLAYING = "playing"
+    PAUSED = "paused"
+
+
+rg.If(rg.V(state.Outputs.mode) == PlaybackMode.PLAYING, "play")
+```
+
+Python callables, including lambdas, can also be used as predicates when the
+guard cannot be expressed symbolically:
+
+```python
+rg.If(lambda state: state.buffer_seconds < 2.0, "buffer_warning")
+```
+
+Callable predicates are an escape hatch.
+Prefer symbolic `V(...)` predicates when possible, because they keep guard
+dependencies visible to the compiler and produce clearer diagnostics.
+
+A larger system might extend the chain with `Elif`:
+
+```python
+transitions = (
+    rg.If(rg.V(policy.Outputs.stalling), "drop_quality"),
+    rg.Elif(rg.V(policy.Outputs.healthy_steady), "upgrade_quality"),
+    rg.Else("play"),
+)
+```
+
+`ElseIf` is also available.
+`Elif` and `ElseIf` behave the same.
+An `Else` closes the current branch chain; `Elif` after `Else` is invalid.
+
+A phase may contain several independent `If` chains.
+Compilation checks that the transition structure is well formed, and runtime
+evaluates effective transitions in order.
+
+For example, this transition tuple contains three chains: a single `If`, an
+`If`/`Elif` chain, and another single `If`.
+
+```python
+transitions = (
+    rg.If(rg.V(network.Outputs.disconnected), "pause", name="offline"),
+    rg.If(rg.V(policy.Outputs.stalling), "drop_quality", name="stalling"),
+    rg.Elif(rg.V(policy.Outputs.can_upgrade), "upgrade_quality", name="upgrade"),
+    rg.If(rg.V(logger.Outputs.should_flush), "flush_logs", name="flush_logs"),
+)
+```
+
+Each `If` starts a chain.
+Each `Elif` continues the chain that immediately precedes it.
+If guards are written with `rg.V(...)`, the compiler can see the guard
+dependencies and verify the transition structure.
+At execution time, the effective transitions should resolve to exactly one
+selected next step; zero or multiple selected transitions make the next phase
+ambiguous.
+
+!!! warning "Avoid multiple Else branches in one transition tuple"
+
+    A tuple like this is hard to reason about:
+
+    ```python
+    transitions = (
+        rg.If(rg.V(network.Outputs.disconnected), "pause", name="offline"),
+        rg.Else("decide_quality", name="online"),
+
+        rg.If(rg.V(policy.Outputs.stalling), "drop_quality", name="stalling"),
+        rg.Else("play", name="healthy"),
+    )
+    ```
+
+    Each `Else` closes the chain immediately before it, but multiple `Else`
+    branches in one phase usually hide the control flow rather than clarify it.
+    Prefer explicit `If` / `Elif` chains and keep the phase's transition rules
+    easy to audit.
 
 ## Rules
 
@@ -81,3 +367,7 @@ print(system.compile_report.phase_dependency_edges)
 - Exactly one initial phase is expected.
 - Each phase is scheduled topologically.
 - Phase coverage must include input and guard producers.
+- Use `Goto` for unconditional jumps.
+- Use `If` / `Elif` / `Else` for ordered branches.
+- Use `rg.terminate` to end a tick.
+- Prefer symbolic `V(...)` predicates.

@@ -1,9 +1,14 @@
+---
+hide:
+  - toc
+---
+
 <style>
 .md-content .md-typeset h1 { display: none; }
 </style>
 
 <p class="hero-logo">
-  <img src="assets/logo_big.png" alt="regelum">
+  <img src="assets/logo/logo_big.png" alt="regelum">
 </p>
 
 <p>
@@ -92,7 +97,6 @@ uv run --group docs mkdocs serve \
   --watch docs \
   --watch mkdocs.yml \
   --watch src/regelum \
-  --watch logo \
   --watch README.md
 ```
 

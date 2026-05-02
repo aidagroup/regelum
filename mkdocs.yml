@@ -11,13 +11,12 @@ watch:
   - mkdocs.yml
   - examples
   - src/regelum
-  - logo
   - README.md
 
 theme:
   name: material
-  logo: assets/logo_mark_black_transparent.png
-  favicon: assets/logo_mark_black_transparent.png
+  logo: assets/logo/logo_mark_black_transparent.png
+  favicon: assets/logo/logo_mark_black_transparent.png
   palette:
     - media: "(prefers-color-scheme)"
       toggle:
@@ -59,19 +58,12 @@ extra:
 
 nav:
   - Home: index.md
-  - Getting Started: getting-started.md
-  - Concepts:
+  - Learn:
       - Overview: concepts/index.md
       - Nodes: concepts/nodes.md
-      - Ports: concepts/ports.md
-      - Connections: concepts/connections.md
-      - State and Initialization: concepts/state.md
       - Phases: concepts/phases.md
-      - Transitions: concepts/transitions.md
-      - Compilation: concepts/compilation.md
-      - Runtime: concepts/runtime.md
+      - Create, Compile, and Run: concepts/compilation.md
   - Authors: authors.md
-  - API Sketch: api.md
 
 markdown_extensions:
   - admonition
