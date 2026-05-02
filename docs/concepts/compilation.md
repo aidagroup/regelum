@@ -160,8 +160,6 @@ report.
 ## Creating a system
 
 The constructor receives the phases that define the system.
-There is no separate system-level `nodes=[...]` list: the system's node set is
-derived from the phase declarations.
 
 ```python
 system = rg.PhasedReactiveSystem(phases=phases)

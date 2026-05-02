@@ -229,7 +229,34 @@ rg.Phase(
 
 ### Branch chains
 
-Use `If`, `Elif`, and `Else` for ordered branching.
+For branching, `regelum` uses ordinary `if` / `elif` / `else` semantics.
+`If` starts a branch chain.
+`Elif` continues the current chain.
+`Else` closes the current chain and is taken only when none of the previous
+predicates in that chain were true.
+`ElseIf` is also available as an alias for `Elif`.
+
+Every `If` and `Elif` transition takes a predicate as its first argument.
+This predicate is the transition's **guard**.
+A guard is a boolean condition over system variables: after the current phase
+has executed, it evaluates to either `True` or `False`.
+If the guard is `True`, that transition is enabled.
+
+```python
+rg.If(predicate, target, name=None)
+rg.Elif(predicate, target, name=None)
+```
+
+- `target` is the phase to enter when the guard is true: a phase name, a
+  phase instance, or `rg.terminate`;
+- `name` is optional and gives the transition a stable diagnostic label.
+
+The point of the guard is to make the outgoing edge explicit.
+For the video player, the question is: did the policy detect that playback is
+stalling?
+If yes, the tick should enter `drop_quality`.
+If no, the tick should continue to `play`.
+
 The video player only needs `If` plus `Else`, because the policy publishes a
 single boolean:
 
@@ -244,28 +271,28 @@ rg.Phase(
 )
 ```
 
-The preferred way to write branch predicates is with symbolic predicates:
-`V(...)` expressions that point at node outputs.
-Symbolic predicates keep transition guards visible to the compiler, which
-gives better graph checks and clearer diagnostics.
+`policy.Outputs.stalling` is an output reference, not the current boolean
+value.
+`rg.V(policy.Outputs.stalling)` means: read this output value when the
+transition is evaluated.
 
-The `If` API is:
-
-```python
-rg.If(predicate, target, name=None)
-```
-
-- `predicate` is a symbolic predicate such as `rg.V(...) < 2.0`, or a Python
-  callable used as an escape hatch;
-- `target` is the phase to enter when the predicate is true: a phase name, a
-  phase instance, or `rg.terminate`;
-- `name` is optional and gives the transition a stable diagnostic label.
+Expressions that contain `rg.V(...)` build **symbolic guards** under the hood.
+Use this form for transition guards by default: if a guard depends on a node
+output, wrap that output reference with `rg.V(...)`.
+Symbolic guards can also compare output values or terminate a tick:
 
 ```python
-rg.If(rg.V(policy.Outputs.stalling), "drop_quality")
 rg.If(rg.V(MediaSession.Outputs.buffer_seconds) < 2.0, "buffer_warning")
 rg.If(rg.V(policy.Outputs.force_stop), rg.terminate, name="force_stop")
 ```
+
+Keeping guards symbolic is what lets `regelum` reason about transitions
+during graph compilation instead of treating them as opaque Python code.
+The compiler can see which outputs the guard depends on and can check whether
+the transition graph has structural problems, such as an ambiguous next phase
+or a path that may fail to terminate where this can be proven.
+Under the hood, this analysis is backed by
+[Z3](https://github.com/Z3Prover/z3), an SMT solver.
 
 `V(...)` accepts the same kinds of output references as inputs:
 
@@ -313,9 +340,7 @@ transitions = (
 )
 ```
 
-`ElseIf` is also available.
-`Elif` and `ElseIf` behave the same.
-An `Else` closes the current branch chain; `Elif` after `Else` is invalid.
+`Elif` after `Else` is invalid, because `Else` closes the current chain.
 
 A phase may contain several independent `If` chains.
 Compilation checks that the transition structure is well formed, and runtime
