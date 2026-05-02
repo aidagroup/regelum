@@ -3,9 +3,10 @@
 This directory contains digitized target traces for calibrating the Regelum reproduction
 against Dubuisson et al. Fig. 9 and Fig. 11. The CSV files are extracted from the
 rendered PDF page using `uv run regelum-dubuisson2019-digitize`.
-`fig9_load_power_kw.csv` is a reconstructed external scenario input derived from
-digitized Fig. 9 wind and battery currents plus the diesel-generator on/off event.
-It is used as an input profile, not as a simulated output target.
+`fig9_load_current_a.csv` is the external Fig. 9 load scenario input reconstructed
+from the load-current panel. `fig9_load_power_kw.csv` is derived from that load
+current using the nominal AC load voltage. These files are input profiles, not
+simulated output targets.
 
 Each CSV uses this schema:
 
