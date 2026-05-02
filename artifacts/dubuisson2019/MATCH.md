@@ -3,6 +3,7 @@
 The generated Fig. 9-11 PDFs are built from persisted `PhasedReactiveSystem.run(...)` simulation traces.
 The export pipeline is: simulate Regelum -> write CSV trace -> read CSV trace -> render PDF.
 Paper values are used only as calibration targets for scenario parameters.
+Digitized paper traces are not used to overwrite the simulated trace channels.
 
 ## Trace files
 
@@ -22,5 +23,5 @@ Paper values are used only as calibration targets for scenario parameters.
 
 ## Remaining mismatch
 
-Fig. 9-11 use the Regelum model outputs with paper-matched axes and calibrated scenario parameters.
+Fig. 9-11 use the Regelum model outputs with paper-comparable axes and calibrated scenario parameters.
 The high-frequency traces are synthesized 60 Hz envelopes from Regelum state, not a switching power-electronics simulation.
