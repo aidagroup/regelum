@@ -16,15 +16,15 @@ Digitized paper output traces are not used to overwrite simulated output channel
 | --- | ---: | ---: |
 | Fig. 9 DG turns off | 10.7 s | 10.74 s |
 | Fig. 9 SOC band | about 69.92-70.00 % | 69.92-70.00 % |
-| Fig. 9 DC bus | around 350 V | 346.8-356.0 V |
+| Fig. 9 DC bus | around 350 V | 339.3-353.5 V |
 | Fig. 11 dump load turns on | 6.65 s | 6.65 s |
 | Calibrated Fig. 9 battery capacity | fit parameter | 76.0 kWh |
 | Calibrated Fig. 11 initial SOC | fit parameter | 99.743 % |
 | Fig. 9 battery_current_a RMSE | digitized paper output | 35 |
 | Fig. 9 wind_current_a RMSE | digitized paper output | 0.006656 |
 | Fig. 9 soc_percent RMSE | digitized paper output | 0.01253 |
-| Fig. 9 dc_bus_voltage_v RMSE | digitized paper output | 3.385 |
-| Fig. 9 frequency_hz RMSE | digitized paper output | 0.04042 |
+| Fig. 9 dc_bus_voltage_v RMSE | digitized paper output | 2.131 |
+| Fig. 9 frequency_hz RMSE | digitized paper output | 0.02076 |
 
 ## Remaining mismatch
 
