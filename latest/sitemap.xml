@@ -2,54 +2,26 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://regelum.aidynamic.group/latest/</loc>
-         <lastmod>2026-05-01</lastmod>
-    </url>
-    <url>
-         <loc>https://regelum.aidynamic.group/latest/api/</loc>
-         <lastmod>2026-05-01</lastmod>
+         <lastmod>2026-05-02</lastmod>
     </url>
     <url>
          <loc>https://regelum.aidynamic.group/latest/authors/</loc>
-         <lastmod>2026-05-01</lastmod>
-    </url>
-    <url>
-         <loc>https://regelum.aidynamic.group/latest/getting-started/</loc>
-         <lastmod>2026-05-01</lastmod>
+         <lastmod>2026-05-02</lastmod>
     </url>
     <url>
          <loc>https://regelum.aidynamic.group/latest/concepts/</loc>
-         <lastmod>2026-05-01</lastmod>
+         <lastmod>2026-05-02</lastmod>
     </url>
     <url>
          <loc>https://regelum.aidynamic.group/latest/concepts/compilation/</loc>
-         <lastmod>2026-05-01</lastmod>
-    </url>
-    <url>
-         <loc>https://regelum.aidynamic.group/latest/concepts/connections/</loc>
-         <lastmod>2026-05-01</lastmod>
+         <lastmod>2026-05-02</lastmod>
     </url>
     <url>
          <loc>https://regelum.aidynamic.group/latest/concepts/nodes/</loc>
-         <lastmod>2026-05-01</lastmod>
+         <lastmod>2026-05-02</lastmod>
     </url>
     <url>
          <loc>https://regelum.aidynamic.group/latest/concepts/phases/</loc>
-         <lastmod>2026-05-01</lastmod>
-    </url>
-    <url>
-         <loc>https://regelum.aidynamic.group/latest/concepts/ports/</loc>
-         <lastmod>2026-05-01</lastmod>
-    </url>
-    <url>
-         <loc>https://regelum.aidynamic.group/latest/concepts/runtime/</loc>
-         <lastmod>2026-05-01</lastmod>
-    </url>
-    <url>
-         <loc>https://regelum.aidynamic.group/latest/concepts/state/</loc>
-         <lastmod>2026-05-01</lastmod>
-    </url>
-    <url>
-         <loc>https://regelum.aidynamic.group/latest/concepts/transitions/</loc>
-         <lastmod>2026-05-01</lastmod>
+         <lastmod>2026-05-02</lastmod>
     </url>
 </urlset>

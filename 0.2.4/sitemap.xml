@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://regelum.aidynamic.group/latest/</loc>
+         <lastmod>2026-05-02</lastmod>
+    </url>
+    <url>
+         <loc>https://regelum.aidynamic.group/latest/authors/</loc>
+         <lastmod>2026-05-02</lastmod>
+    </url>
+    <url>
+         <loc>https://regelum.aidynamic.group/latest/concepts/</loc>
+         <lastmod>2026-05-02</lastmod>
+    </url>
+    <url>
+         <loc>https://regelum.aidynamic.group/latest/concepts/compilation/</loc>
+         <lastmod>2026-05-02</lastmod>
+    </url>
+    <url>
+         <loc>https://regelum.aidynamic.group/latest/concepts/nodes/</loc>
+         <lastmod>2026-05-02</lastmod>
+    </url>
+    <url>
+         <loc>https://regelum.aidynamic.group/latest/concepts/phases/</loc>
+         <lastmod>2026-05-02</lastmod>
+    </url>
+</urlset>
