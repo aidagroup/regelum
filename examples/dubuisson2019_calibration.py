@@ -10,11 +10,11 @@ from typing import Callable
 from regelum.examples.dubuisson2019_water_treatment import (
     _dump_load_profile_kw,
     _dump_load_wind_power_profile_kw,
+    _fig9_digitized_load_power_profile_kw,
+    _fig9_digitized_wind_power_profile_kw,
     _first_time,
-    _load_profile_kw,
     _run_trace,
     _scaled_profile,
-    _wind_power_profile_kw,
     _write_plot_document,
     export_paper_figures,
 )
@@ -29,6 +29,21 @@ class CalibrationParams:
     fig9_initial_soc_percent: float = 69.92
     fig9_wind_scale: float = 1.0
     fig9_load_scale: float = 1.0
+    fig9_battery_nominal_voltage_v: float = 250.0
+    fig9_wind_converter_voltage_v: float = 520.0
+    fig9_nominal_mppt_efficiency: float = 0.98
+    fig9_max_charge_kw: float = 47.0
+    fig9_max_discharge_kw: float = 45.0
+    fig9_dc_nominal_voltage_v: float = 348.0
+    fig9_dc_battery_power_gain_v_per_kw: float = 0.03
+    fig9_dc_wind_power_gain_v_per_kw: float = 0.04
+    fig9_dc_load_power_gain_v_per_kw: float = -0.02
+    fig9_dc_unserved_power_gain_v_per_kw: float = 1.8
+    fig9_dc_response: float = 0.20
+    fig9_nominal_frequency_hz: float = 60.095
+    fig9_dc_frequency_gain_hz_per_v: float = 0.012
+    fig9_unserved_frequency_gain_hz_per_kw: float = 0.002
+    fig9_frequency_response: float = 0.18
     fig11_initial_soc_percent: float = 99.7425
     fig11_battery_capacity_kwh: float = 10.0
     fig11_wind_scale: float = 1.0
@@ -53,17 +68,13 @@ class ChannelSpec:
 
 
 CHANNEL_SPECS = {
-    ("fig9", "battery_current_a"): ChannelSpec(
-        "fig9", "battery_current_a", "battery_power_kw", -4.0
-    ),
-    ("fig9", "wind_current_a"): ChannelSpec("fig9", "wind_current_a", "wind_power_kw", 2.0),
+    ("fig9", "battery_current_a"): ChannelSpec("fig9", "battery_current_a", "battery_current_a"),
+    ("fig9", "wind_current_a"): ChannelSpec("fig9", "wind_current_a", "wind_current_a"),
     ("fig9", "soc_percent"): ChannelSpec("fig9", "soc_percent", "soc_percent"),
     ("fig9", "dc_bus_voltage_v"): ChannelSpec("fig9", "dc_bus_voltage_v", "dc_bus_voltage_v"),
     ("fig9", "frequency_hz"): ChannelSpec("fig9", "frequency_hz", "frequency_hz"),
-    ("fig11", "battery_current_a"): ChannelSpec(
-        "fig11", "battery_current_a", "battery_power_kw", -4.0
-    ),
-    ("fig11", "wind_current_a"): ChannelSpec("fig11", "wind_current_a", "wind_power_kw", 2.0),
+    ("fig11", "battery_current_a"): ChannelSpec("fig11", "battery_current_a", "battery_current_a"),
+    ("fig11", "wind_current_a"): ChannelSpec("fig11", "wind_current_a", "wind_current_a"),
     ("fig11", "dump_load_current_a"): ChannelSpec(
         "fig11", "dump_load_current_a", "dump_load_power_kw", 4.0
     ),
@@ -143,6 +154,21 @@ def calibrate(
         "fig9_initial_soc_percent": 0.015,
         "fig9_wind_scale": 0.04,
         "fig9_load_scale": 0.04,
+        "fig9_battery_nominal_voltage_v": 25.0,
+        "fig9_wind_converter_voltage_v": 25.0,
+        "fig9_nominal_mppt_efficiency": 0.01,
+        "fig9_max_charge_kw": 3.0,
+        "fig9_max_discharge_kw": 3.0,
+        "fig9_dc_nominal_voltage_v": 1.5,
+        "fig9_dc_battery_power_gain_v_per_kw": 0.02,
+        "fig9_dc_wind_power_gain_v_per_kw": 0.02,
+        "fig9_dc_load_power_gain_v_per_kw": 0.02,
+        "fig9_dc_unserved_power_gain_v_per_kw": 0.30,
+        "fig9_dc_response": 0.04,
+        "fig9_nominal_frequency_hz": 0.01,
+        "fig9_dc_frequency_gain_hz_per_v": 0.004,
+        "fig9_unserved_frequency_gain_hz_per_kw": 0.001,
+        "fig9_frequency_response": 0.04,
         "fig11_initial_soc_percent": 0.02,
         "fig11_battery_capacity_kwh": 1.5,
         "fig11_wind_scale": 0.04,
@@ -151,8 +177,23 @@ def calibrate(
     bounds = {
         "fig9_battery_capacity_kwh": (60.0, 130.0),
         "fig9_initial_soc_percent": (69.85, 69.99),
-        "fig9_wind_scale": (0.75, 1.25),
-        "fig9_load_scale": (0.75, 1.25),
+        "fig9_wind_scale": (0.65, 1.35),
+        "fig9_load_scale": (0.65, 1.35),
+        "fig9_battery_nominal_voltage_v": (160.0, 620.0),
+        "fig9_wind_converter_voltage_v": (360.0, 760.0),
+        "fig9_nominal_mppt_efficiency": (0.90, 1.00),
+        "fig9_max_charge_kw": (35.0, 75.0),
+        "fig9_max_discharge_kw": (20.0, 75.0),
+        "fig9_dc_nominal_voltage_v": (340.0, 353.0),
+        "fig9_dc_battery_power_gain_v_per_kw": (-0.25, 0.25),
+        "fig9_dc_wind_power_gain_v_per_kw": (-0.25, 0.25),
+        "fig9_dc_load_power_gain_v_per_kw": (-0.25, 0.25),
+        "fig9_dc_unserved_power_gain_v_per_kw": (0.0, 3.0),
+        "fig9_dc_response": (0.02, 0.80),
+        "fig9_nominal_frequency_hz": (59.95, 60.15),
+        "fig9_dc_frequency_gain_hz_per_v": (-0.04, 0.04),
+        "fig9_unserved_frequency_gain_hz_per_kw": (-0.02, 0.02),
+        "fig9_frequency_response": (0.02, 0.80),
         "fig11_initial_soc_percent": (99.55, 99.99),
         "fig11_battery_capacity_kwh": (4.0, 30.0),
         "fig11_wind_scale": (0.75, 1.25),
@@ -218,14 +259,36 @@ def loss_for_params(targets: list[TargetPoint], params: CalibrationParams) -> fl
 
 
 def simulate(params: CalibrationParams) -> dict[str, list[dict[str, float | str | bool]]]:
+    fig9_wind_profile = _fig9_digitized_wind_power_profile_kw(
+        converter_voltage_v=params.fig9_wind_converter_voltage_v,
+        nominal_mppt_efficiency=params.fig9_nominal_mppt_efficiency,
+    )
+    fig9_load_profile = _fig9_digitized_load_power_profile_kw(
+        battery_voltage_v=params.fig9_battery_nominal_voltage_v,
+        wind_converter_voltage_v=params.fig9_wind_converter_voltage_v,
+    )
     fig9 = _run_trace(
         dt=0.02,
         duration_s=18.0,
         init_time=2.0,
         init_soc_percent=params.fig9_initial_soc_percent,
         effective_capacity_kwh=params.fig9_battery_capacity_kwh,
-        wind_power_profile_kw=_scaled_profile(_wind_power_profile_kw, params.fig9_wind_scale),
-        load_profile_kw=_scaled_profile(_load_profile_kw, params.fig9_load_scale),
+        wind_power_profile_kw=_scaled_profile(fig9_wind_profile, params.fig9_wind_scale),
+        load_profile_kw=_scaled_profile(fig9_load_profile, params.fig9_load_scale),
+        battery_nominal_voltage_v=params.fig9_battery_nominal_voltage_v,
+        wind_converter_voltage_v=params.fig9_wind_converter_voltage_v,
+        max_charge_kw=params.fig9_max_charge_kw,
+        max_discharge_kw=params.fig9_max_discharge_kw,
+        dc_nominal_voltage_v=params.fig9_dc_nominal_voltage_v,
+        dc_battery_power_gain_v_per_kw=params.fig9_dc_battery_power_gain_v_per_kw,
+        dc_wind_power_gain_v_per_kw=params.fig9_dc_wind_power_gain_v_per_kw,
+        dc_load_power_gain_v_per_kw=params.fig9_dc_load_power_gain_v_per_kw,
+        dc_unserved_power_gain_v_per_kw=params.fig9_dc_unserved_power_gain_v_per_kw,
+        dc_response=params.fig9_dc_response,
+        nominal_frequency_hz=params.fig9_nominal_frequency_hz,
+        dc_frequency_gain_hz_per_v=params.fig9_dc_frequency_gain_hz_per_v,
+        unserved_frequency_gain_hz_per_kw=params.fig9_unserved_frequency_gain_hz_per_kw,
+        frequency_response=params.fig9_frequency_response,
     )
     fig11 = _run_trace(
         dt=0.005,

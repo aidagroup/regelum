@@ -5,6 +5,7 @@ import json
 import subprocess
 import tempfile
 from enum import Enum
+from functools import cache
 from math import pi, sin, sqrt
 from pathlib import Path
 from typing import Callable, cast
@@ -67,8 +68,12 @@ class ScenarioProfile(Node):
 
 
 class WindTurbinePMSG(Node):
+    def __init__(self, *, converter_voltage_v: float = 520.0) -> None:
+        self.converter_voltage_v = converter_voltage_v
+
     class Outputs(NodeOutputs):
         generated_power_kw: float = Output(initial=0.0)
+        current_a: float = Output(initial=0.0)
 
     def run(
         self,
@@ -78,7 +83,8 @@ class WindTurbinePMSG(Node):
         mppt_efficiency: float = Input(source=lambda: MpptController.Outputs.efficiency),
     ) -> Outputs:
         generated_power = wind_power_available_kw * mppt_efficiency
-        return self.Outputs(generated_power_kw=generated_power)
+        current = 1000.0 * generated_power / self.converter_voltage_v
+        return self.Outputs(generated_power_kw=generated_power, current_a=current)
 
 
 class MpptController(Node):
@@ -169,6 +175,10 @@ class DieselGenerator(Node):
 
 
 class PowerBalance(Node):
+    def __init__(self, *, max_charge_kw: float = 47.0, max_discharge_kw: float = 45.0) -> None:
+        self.max_charge_kw = max_charge_kw
+        self.max_discharge_kw = max_discharge_kw
+
     class Outputs(NodeOutputs):
         battery_power_kw: float
         dump_load_power_kw: float
@@ -185,8 +195,8 @@ class PowerBalance(Node):
         surplus = wind_power_kw + diesel_power_kw - load_power_kw
         dump_load_power = max(0.0, surplus) if dump_load_enabled else 0.0
         surplus_after_dump = surplus - dump_load_power
-        max_charge = 45.0 if soc_percent < 100.0 else 0.0
-        max_discharge = 45.0 if soc_percent > 0.0 else 0.0
+        max_charge = self.max_charge_kw if soc_percent < 100.0 else 0.0
+        max_discharge = self.max_discharge_kw if soc_percent > 0.0 else 0.0
         battery_power = _clamp(surplus_after_dump, -max_discharge, max_charge)
         unserved_power = surplus_after_dump - battery_power
         return self.Outputs(
@@ -221,31 +231,68 @@ class Battery(Node):
     ) -> Outputs:
         delta_soc = 100.0 * battery_power_kw * self.dt / (3600.0 * self.effective_capacity_kwh)
         soc_next = _clamp(soc_percent + delta_soc, 0.0, 100.0)
-        current = 1000.0 * battery_power_kw / self.nominal_voltage_v
+        current = -1000.0 * battery_power_kw / self.nominal_voltage_v
         return self.Outputs(soc_percent=soc_next, current_a=current)
 
 
 class DcBus(Node):
-    nominal_voltage_v = 350.0
+    def __init__(
+        self,
+        *,
+        nominal_voltage_v: float = 348.0,
+        battery_power_gain_v_per_kw: float = 0.03,
+        wind_power_gain_v_per_kw: float = 0.04,
+        load_power_gain_v_per_kw: float = -0.02,
+        unserved_power_gain_v_per_kw: float = 1.8,
+        response: float = 0.20,
+    ) -> None:
+        self.nominal_voltage_v = nominal_voltage_v
+        self.battery_power_gain_v_per_kw = battery_power_gain_v_per_kw
+        self.wind_power_gain_v_per_kw = wind_power_gain_v_per_kw
+        self.load_power_gain_v_per_kw = load_power_gain_v_per_kw
+        self.unserved_power_gain_v_per_kw = unserved_power_gain_v_per_kw
+        self.response = response
 
     class Outputs(NodeOutputs):
         voltage_v: float = Output(initial=350.0)
 
     def run(
         self,
+        battery_power_kw: float = Input(source=PowerBalance.Outputs.battery_power_kw),
+        wind_power_kw: float = Input(source=WindTurbinePMSG.Outputs.generated_power_kw),
+        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
         unserved_power_kw: float = Input(source=PowerBalance.Outputs.unserved_power_kw),
         voltage_v: float = Input(source=lambda: DcBus.Outputs.voltage_v),
     ) -> Outputs:
-        target = self.nominal_voltage_v + 1.8 * unserved_power_kw
+        target = (
+            self.nominal_voltage_v
+            + self.battery_power_gain_v_per_kw * battery_power_kw
+            + self.wind_power_gain_v_per_kw * wind_power_kw
+            + self.load_power_gain_v_per_kw * load_power_kw
+            + self.unserved_power_gain_v_per_kw * unserved_power_kw
+        )
         target = _clamp(target, 330.0, 356.0)
-        voltage_next = voltage_v + 0.55 * (target - voltage_v)
+        voltage_next = voltage_v + self.response * (target - voltage_v)
         return self.Outputs(voltage_v=voltage_next)
 
 
 class PccRegulator(Node):
+    def __init__(
+        self,
+        *,
+        nominal_frequency_hz: float = 60.095,
+        dc_frequency_gain_hz_per_v: float = 0.012,
+        unserved_frequency_gain_hz_per_kw: float = 0.002,
+        response: float = 0.18,
+    ) -> None:
+        self.nominal_frequency_hz = nominal_frequency_hz
+        self.dc_frequency_gain_hz_per_v = dc_frequency_gain_hz_per_v
+        self.unserved_frequency_gain_hz_per_kw = unserved_frequency_gain_hz_per_kw
+        self.response = response
+
     class Outputs(NodeOutputs):
         voltage_v: float = Output(initial=460.0)
-        frequency_hz: float = Output(initial=60.0)
+        frequency_hz: float = Output(initial=60.095)
 
     def run(
         self,
@@ -254,10 +301,14 @@ class PccRegulator(Node):
         voltage_v: float = Input(source=lambda: PccRegulator.Outputs.voltage_v),
         frequency_hz: float = Input(source=lambda: PccRegulator.Outputs.frequency_hz),
     ) -> Outputs:
-        voltage_target = 460.0 + 0.25 * (dc_bus_voltage_v - DcBus.nominal_voltage_v)
-        frequency_target = 60.0 + 0.01 * unserved_power_kw
+        voltage_target = 460.0 + 0.25 * (dc_bus_voltage_v - 350.0)
+        frequency_target = (
+            self.nominal_frequency_hz
+            + self.dc_frequency_gain_hz_per_v * (dc_bus_voltage_v - 348.0)
+            + self.unserved_frequency_gain_hz_per_kw * unserved_power_kw
+        )
         voltage_next = voltage_v + 0.60 * (voltage_target - voltage_v)
-        frequency_next = frequency_hz + 0.55 * (frequency_target - frequency_hz)
+        frequency_next = frequency_hz + self.response * (frequency_target - frequency_hz)
         return self.Outputs(voltage_v=voltage_next, frequency_hz=frequency_next)
 
 
@@ -270,9 +321,11 @@ class MicrogridLogger(Node):
         time: float = Input(source=ScenarioProfile.Outputs.time),
         mode: MicrogridMode = Input(source=PowerFlowSupervisor.Outputs.mode),
         wind_power_kw: float = Input(source=WindTurbinePMSG.Outputs.generated_power_kw),
+        wind_current_a: float = Input(source=WindTurbinePMSG.Outputs.current_a),
         diesel_power_kw: float = Input(source=DieselGenerator.Outputs.generated_power_kw),
         load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
         battery_power_kw: float = Input(source=PowerBalance.Outputs.battery_power_kw),
+        battery_current_a: float = Input(source=Battery.Outputs.current_a),
         dump_load_power_kw: float = Input(source=PowerBalance.Outputs.dump_load_power_kw),
         soc_percent: float = Input(source=Battery.Outputs.soc_percent),
         dc_bus_voltage_v: float = Input(source=DcBus.Outputs.voltage_v),
@@ -287,9 +340,11 @@ class MicrogridLogger(Node):
             "time": time,
             "mode": mode.value,
             "wind_power_kw": wind_power_kw,
+            "wind_current_a": wind_current_a,
             "diesel_power_kw": diesel_power_kw,
             "load_power_kw": load_power_kw,
             "battery_power_kw": battery_power_kw,
+            "battery_current_a": battery_current_a,
             "dump_load_power_kw": dump_load_power_kw,
             "soc_percent": soc_percent,
             "dc_bus_voltage_v": dc_bus_voltage_v,
@@ -307,6 +362,20 @@ def build_system(
     init_time: float = 2.0,
     init_soc_percent: float = 69.92,
     effective_capacity_kwh: float = 95.3,
+    battery_nominal_voltage_v: float = 250.0,
+    wind_converter_voltage_v: float = 520.0,
+    max_charge_kw: float = 47.0,
+    max_discharge_kw: float = 45.0,
+    dc_nominal_voltage_v: float = 348.0,
+    dc_battery_power_gain_v_per_kw: float = 0.03,
+    dc_wind_power_gain_v_per_kw: float = 0.04,
+    dc_load_power_gain_v_per_kw: float = -0.02,
+    dc_unserved_power_gain_v_per_kw: float = 1.8,
+    dc_response: float = 0.20,
+    nominal_frequency_hz: float = 60.095,
+    dc_frequency_gain_hz_per_v: float = 0.012,
+    unserved_frequency_gain_hz_per_kw: float = 0.002,
+    frequency_response: float = 0.18,
     wind_power_profile_kw: Callable[[float], float] | None = None,
     load_profile_kw: Callable[[float], float] | None = None,
 ) -> PhasedReactiveSystem:
@@ -318,20 +387,36 @@ def build_system(
             load_profile_kw=load_profile_kw,
         ),
         MpptController(),
-        WindTurbinePMSG(),
+        WindTurbinePMSG(converter_voltage_v=wind_converter_voltage_v),
         WaterTreatmentLoad(),
         DieselGenerator(),
     )
-    balance_nodes = (PowerBalance(),)
+    balance_nodes = (PowerBalance(max_charge_kw=max_charge_kw, max_discharge_kw=max_discharge_kw),)
     storage_nodes = (
         Battery(
             dt=dt,
             init_soc_percent=init_soc_percent,
             effective_capacity_kwh=effective_capacity_kwh,
+            nominal_voltage_v=battery_nominal_voltage_v,
         ),
-        DcBus(),
+        DcBus(
+            nominal_voltage_v=dc_nominal_voltage_v,
+            battery_power_gain_v_per_kw=dc_battery_power_gain_v_per_kw,
+            wind_power_gain_v_per_kw=dc_wind_power_gain_v_per_kw,
+            load_power_gain_v_per_kw=dc_load_power_gain_v_per_kw,
+            unserved_power_gain_v_per_kw=dc_unserved_power_gain_v_per_kw,
+            response=dc_response,
+        ),
     )
-    regulation_nodes = (PccRegulator(), MicrogridLogger())
+    regulation_nodes = (
+        PccRegulator(
+            nominal_frequency_hz=nominal_frequency_hz,
+            dc_frequency_gain_hz_per_v=dc_frequency_gain_hz_per_v,
+            unserved_frequency_gain_hz_per_kw=unserved_frequency_gain_hz_per_kw,
+            response=frequency_response,
+        ),
+        MicrogridLogger(),
+    )
     supervisor = PowerFlowSupervisor()
     return PhasedReactiveSystem(
         phases=[
@@ -428,22 +513,27 @@ def main() -> None:
 
 
 def _wind_power_profile_kw(time_s: float) -> float:
+    """Fallback Fig. 9 wind input when digitized paper inputs are unavailable."""
+
+    baseline = 3.0
     if time_s < 7.0:
-        return 0.0
+        return baseline
     if time_s < 8.0:
-        return 48.0 * (time_s - 7.0)
+        return baseline + 50.0 * (time_s - 7.0)
     if time_s < 11.0:
-        return 48.0
+        return 53.0
     if time_s < 15.0:
-        return 48.0 - 7.0 * (time_s - 11.0)
+        return 53.0 - 7.5 * (time_s - 11.0)
     if time_s < 16.0:
-        return 20.0
+        return 23.0
     if time_s < 18.0:
-        return 20.0 + 13.0 * (time_s - 16.0)
-    return 46.0
+        return 23.0 + 14.0 * (time_s - 16.0)
+    return 51.0
 
 
 def _load_profile_kw(time_s: float) -> float:
+    """Fallback Fig. 9 load input when digitized paper inputs are unavailable."""
+
     if time_s < 7.0:
         return 28.0
     if time_s < 9.0:
@@ -469,6 +559,111 @@ def _dump_load_profile_kw(time_s: float) -> float:
 
 def _zero_profile_kw(time_s: float) -> float:
     return 0.0
+
+
+def _fig9_digitized_wind_power_profile_kw(
+    *,
+    converter_voltage_v: float,
+    nominal_mppt_efficiency: float = 0.98,
+    target_dir: Path = Path("references/dubuisson2019_targets"),
+) -> Callable[[float], float]:
+    points = _read_target_points(target_dir / "fig9_wind_current_a.csv")
+    if not points:
+        return _wind_power_profile_kw
+
+    def profile(time_s: float) -> float:
+        paper_current_a = _interp_points(points, time_s)
+        generated_power_kw = paper_current_a * converter_voltage_v / 1000.0
+        return generated_power_kw / nominal_mppt_efficiency
+
+    return profile
+
+
+def _fig9_digitized_load_power_profile_kw(
+    *,
+    battery_voltage_v: float,
+    wind_converter_voltage_v: float,
+    diesel_power_kw: float = 50.0,
+    diesel_off_time_s: float = 10.7,
+    target_dir: Path = Path("references/dubuisson2019_targets"),
+) -> Callable[[float], float]:
+    path = target_dir / "fig9_load_power_kw.csv"
+    if not path.exists():
+        _write_fig9_digitized_load_profile(
+            path,
+            battery_voltage_v=battery_voltage_v,
+            wind_converter_voltage_v=wind_converter_voltage_v,
+            diesel_power_kw=diesel_power_kw,
+            diesel_off_time_s=diesel_off_time_s,
+            target_dir=target_dir,
+        )
+        _read_target_points.cache_clear()
+    points = _read_target_points(path)
+    if not points:
+        return _load_profile_kw
+    return lambda time_s: max(0.0, _interp_points(points, time_s))
+
+
+def _write_fig9_digitized_load_profile(
+    path: Path,
+    *,
+    battery_voltage_v: float,
+    wind_converter_voltage_v: float,
+    diesel_power_kw: float,
+    diesel_off_time_s: float,
+    target_dir: Path,
+) -> None:
+    wind_points = _read_target_points(target_dir / "fig9_wind_current_a.csv")
+    battery_points = _read_target_points(target_dir / "fig9_battery_current_a.csv")
+    if not wind_points or not battery_points:
+        return
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    times = sorted({time_s for time_s, _ in wind_points} | {time_s for time_s, _ in battery_points})
+    with path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=("figure", "channel", "time", "value", "weight"))
+        writer.writeheader()
+        for time_s in times:
+            wind_current_a = _interp_points(wind_points, time_s)
+            battery_current_a = _interp_points(battery_points, time_s)
+            wind_power_kw = wind_current_a * wind_converter_voltage_v / 1000.0
+            battery_power_kw = -battery_current_a * battery_voltage_v / 1000.0
+            diesel_kw = diesel_power_kw if time_s < diesel_off_time_s else 0.0
+            load_power_kw = max(0.0, wind_power_kw + diesel_kw - battery_power_kw)
+            writer.writerow(
+                {
+                    "figure": "fig9",
+                    "channel": "load_power_kw",
+                    "time": f"{time_s:.6f}",
+                    "value": f"{load_power_kw:.6f}",
+                    "weight": 1.0,
+                }
+            )
+
+
+@cache
+def _read_target_points(path: Path) -> tuple[tuple[float, float], ...]:
+    if not path.exists():
+        return ()
+    points: list[tuple[float, float]] = []
+    with path.open(newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            points.append((float(row["time"]), float(row["value"])))
+    points.sort(key=lambda point: point[0])
+    return tuple(points)
+
+
+def _interp_points(points: tuple[tuple[float, float], ...], time_s: float) -> float:
+    if time_s <= points[0][0]:
+        return points[0][1]
+    for left, right in zip(points, points[1:]):
+        left_time, left_value = left
+        right_time, right_value = right
+        if time_s <= right_time:
+            fraction = (time_s - left_time) / (right_time - left_time)
+            return left_value + fraction * (right_value - left_value)
+    return points[-1][1]
 
 
 def _prototype_constant_wind_kw(time_s: float) -> float:
@@ -508,12 +703,40 @@ def _run_trace(
     effective_capacity_kwh: float,
     wind_power_profile_kw: Callable[[float], float],
     load_profile_kw: Callable[[float], float],
+    battery_nominal_voltage_v: float = 250.0,
+    wind_converter_voltage_v: float = 520.0,
+    max_charge_kw: float = 47.0,
+    max_discharge_kw: float = 45.0,
+    dc_nominal_voltage_v: float = 348.0,
+    dc_battery_power_gain_v_per_kw: float = 0.03,
+    dc_wind_power_gain_v_per_kw: float = 0.04,
+    dc_load_power_gain_v_per_kw: float = -0.02,
+    dc_unserved_power_gain_v_per_kw: float = 1.8,
+    dc_response: float = 0.20,
+    nominal_frequency_hz: float = 60.095,
+    dc_frequency_gain_hz_per_v: float = 0.012,
+    unserved_frequency_gain_hz_per_kw: float = 0.002,
+    frequency_response: float = 0.18,
 ) -> list[dict[str, float | str | bool]]:
     system = build_system(
         dt=dt,
         init_time=init_time,
         init_soc_percent=init_soc_percent,
         effective_capacity_kwh=effective_capacity_kwh,
+        battery_nominal_voltage_v=battery_nominal_voltage_v,
+        wind_converter_voltage_v=wind_converter_voltage_v,
+        max_charge_kw=max_charge_kw,
+        max_discharge_kw=max_discharge_kw,
+        dc_nominal_voltage_v=dc_nominal_voltage_v,
+        dc_battery_power_gain_v_per_kw=dc_battery_power_gain_v_per_kw,
+        dc_wind_power_gain_v_per_kw=dc_wind_power_gain_v_per_kw,
+        dc_load_power_gain_v_per_kw=dc_load_power_gain_v_per_kw,
+        dc_unserved_power_gain_v_per_kw=dc_unserved_power_gain_v_per_kw,
+        dc_response=dc_response,
+        nominal_frequency_hz=nominal_frequency_hz,
+        dc_frequency_gain_hz_per_v=dc_frequency_gain_hz_per_v,
+        unserved_frequency_gain_hz_per_kw=unserved_frequency_gain_hz_per_kw,
+        frequency_response=frequency_response,
         wind_power_profile_kw=wind_power_profile_kw,
         load_profile_kw=load_profile_kw,
     )
@@ -568,14 +791,40 @@ def _calibrated_load_wind_trace(
     wind_scale = params.get("fig9_wind_scale", 1.0)
     load_scale = params.get("fig9_load_scale", 1.0)
     init_soc = params.get("fig9_initial_soc_percent", 69.92)
+    battery_nominal_voltage_v = params.get("fig9_battery_nominal_voltage_v", 250.0)
+    wind_converter_voltage_v = params.get("fig9_wind_converter_voltage_v", 520.0)
+    wind_profile = _fig9_digitized_wind_power_profile_kw(
+        converter_voltage_v=wind_converter_voltage_v,
+        nominal_mppt_efficiency=params.get("fig9_nominal_mppt_efficiency", 0.98),
+    )
+    load_profile = _fig9_digitized_load_power_profile_kw(
+        battery_voltage_v=battery_nominal_voltage_v,
+        wind_converter_voltage_v=wind_converter_voltage_v,
+    )
     trace = _run_trace(
         dt=0.02,
         duration_s=18.0,
         init_time=2.0,
         init_soc_percent=init_soc,
         effective_capacity_kwh=best_capacity,
-        wind_power_profile_kw=_scaled_profile(_wind_power_profile_kw, wind_scale),
-        load_profile_kw=_scaled_profile(_load_profile_kw, load_scale),
+        wind_power_profile_kw=_scaled_profile(wind_profile, wind_scale),
+        load_profile_kw=_scaled_profile(load_profile, load_scale),
+        battery_nominal_voltage_v=battery_nominal_voltage_v,
+        wind_converter_voltage_v=wind_converter_voltage_v,
+        max_charge_kw=params.get("fig9_max_charge_kw", 47.0),
+        max_discharge_kw=params.get("fig9_max_discharge_kw", 45.0),
+        dc_nominal_voltage_v=params.get("fig9_dc_nominal_voltage_v", 348.0),
+        dc_battery_power_gain_v_per_kw=params.get("fig9_dc_battery_power_gain_v_per_kw", 0.03),
+        dc_wind_power_gain_v_per_kw=params.get("fig9_dc_wind_power_gain_v_per_kw", 0.04),
+        dc_load_power_gain_v_per_kw=params.get("fig9_dc_load_power_gain_v_per_kw", -0.02),
+        dc_unserved_power_gain_v_per_kw=params.get("fig9_dc_unserved_power_gain_v_per_kw", 1.8),
+        dc_response=params.get("fig9_dc_response", 0.20),
+        nominal_frequency_hz=params.get("fig9_nominal_frequency_hz", 60.095),
+        dc_frequency_gain_hz_per_v=params.get("fig9_dc_frequency_gain_hz_per_v", 0.012),
+        unserved_frequency_gain_hz_per_kw=params.get(
+            "fig9_unserved_frequency_gain_hz_per_kw", 0.002
+        ),
+        frequency_response=params.get("fig9_frequency_response", 0.18),
     )
     return trace, best_capacity
 
@@ -659,9 +908,11 @@ _TRACE_FIELDS = (
     "time",
     "mode",
     "wind_power_kw",
+    "wind_current_a",
     "diesel_power_kw",
     "load_power_kw",
     "battery_power_kw",
+    "battery_current_a",
     "dump_load_power_kw",
     "unserved_power_kw",
     "soc_percent",
@@ -691,9 +942,11 @@ def _read_trace_csv(path: Path) -> list[dict[str, float | str | bool]]:
                     "time": float(row["time"]),
                     "mode": row["mode"],
                     "wind_power_kw": float(row["wind_power_kw"]),
+                    "wind_current_a": float(row.get("wind_current_a") or 0.0),
                     "diesel_power_kw": float(row["diesel_power_kw"]),
                     "load_power_kw": float(row["load_power_kw"]),
                     "battery_power_kw": float(row["battery_power_kw"]),
+                    "battery_current_a": float(row.get("battery_current_a") or 0.0),
                     "dump_load_power_kw": float(row["dump_load_power_kw"]),
                     "unserved_power_kw": float(row["unserved_power_kw"] or 0.0),
                     "soc_percent": float(row["soc_percent"]),
@@ -713,7 +966,7 @@ def _write_fig9(path: Path, trace: list[dict[str, float | str | bool]]) -> None:
             (2.0, 20.0, -500.0, 500.0),
         ),
         _with_axis(
-            _line_panel("Battery current (A)", trace, "battery_power_kw", scale=-4.0),
+            _line_panel("Battery current (A)", trace, "battery_current_a"),
             (2.0, 20.0, -200.0, 120.0),
         ),
         _with_axis(
@@ -721,7 +974,7 @@ def _write_fig9(path: Path, trace: list[dict[str, float | str | bool]]) -> None:
             (2.0, 20.0, 340.0, 400.0),
         ),
         _with_axis(
-            _line_panel("Wind turbine current (A)", trace, "wind_power_kw", scale=2.0),
+            _line_panel("Wind turbine current (A)", trace, "wind_current_a"),
             (2.0, 20.0, 0.0, 110.0),
         ),
         _with_axis(
@@ -768,7 +1021,7 @@ def _write_fig11(path: Path, trace: list[dict[str, float | str | bool]]) -> None
             (4.0, 10.0, -500.0, 500.0),
         ),
         _with_axis(
-            _line_panel("Battery current (A)", trace, "battery_power_kw", scale=-4.0),
+            _line_panel("Battery current (A)", trace, "battery_current_a"),
             (4.0, 10.0, -100.0, 100.0),
         ),
         _with_axis(
@@ -776,7 +1029,7 @@ def _write_fig11(path: Path, trace: list[dict[str, float | str | bool]]) -> None
             (4.0, 10.0, 340.0, 400.0),
         ),
         _with_axis(
-            _line_panel("Wind turbine current (A)", trace, "wind_power_kw", scale=2.0),
+            _line_panel("Wind turbine current (A)", trace, "wind_current_a"),
             (4.0, 10.0, 0.0, 120.0),
         ),
         _with_axis(
@@ -813,12 +1066,16 @@ def _write_match_report(
     dump_on_time = _first_time(dump_trace, lambda sample: float(sample["dump_load_power_kw"]) > 0.0)
     soc_min, soc_max = _range(load_wind_trace, "soc_percent")
     vdc_min, vdc_max = _range(load_wind_trace, "dc_bus_voltage_v")
+    fig9_error_rows = "\n".join(
+        f"| Fig. 9 {channel} RMSE | digitized paper output | {rmse:.4g} |"
+        for channel, rmse in _fig9_output_rmse(load_wind_trace).items()
+    )
     report = f"""# Dubuisson 2019 reproduction match notes
 
 The generated Fig. 9-11 PDFs are built from persisted `PhasedReactiveSystem.run(...)` simulation traces.
 The export pipeline is: simulate Regelum -> write CSV trace -> read CSV trace -> render PDF.
-Paper values are used only as calibration targets for scenario parameters.
-Digitized paper traces are not used to overwrite the simulated trace channels.
+Digitized paper traces are used as external Fig. 9 scenario inputs for wind and reconstructed load.
+Digitized paper output traces are not used to overwrite simulated output channels.
 
 ## Trace files
 
@@ -835,13 +1092,38 @@ Digitized paper traces are not used to overwrite the simulated trace channels.
 | Fig. 11 dump load turns on | 6.65 s | {dump_on_time:.2f} s |
 | Calibrated Fig. 9 battery capacity | fit parameter | {load_wind_capacity_kwh:.1f} kWh |
 | Calibrated Fig. 11 initial SOC | fit parameter | {dump_init_soc_percent:.3f} % |
+{fig9_error_rows}
 
 ## Remaining mismatch
 
-Fig. 9-11 use the Regelum model outputs with paper-comparable axes and calibrated scenario parameters.
+Fig. 9 uses CSV-backed external wind and load inputs; battery current, SOC, DC bus voltage,
+and frequency are still Regelum outputs.
+Fig. 10-11 use Regelum model outputs with paper-comparable axes and calibrated scenario parameters.
 The high-frequency traces are synthesized 60 Hz envelopes from Regelum state, not a switching power-electronics simulation.
 """
     path.write_text(report, encoding="utf-8")
+
+
+def _fig9_output_rmse(trace: list[dict[str, float | str | bool]]) -> dict[str, float]:
+    channels: dict[str, Callable[[dict[str, float | str | bool]], float]] = {
+        "battery_current_a": lambda sample: float(sample["battery_current_a"]),
+        "wind_current_a": lambda sample: float(sample["wind_current_a"]),
+        "soc_percent": lambda sample: float(sample["soc_percent"]),
+        "dc_bus_voltage_v": lambda sample: float(sample["dc_bus_voltage_v"]),
+        "frequency_hz": lambda sample: float(sample["frequency_hz"]),
+    }
+    errors: dict[str, float] = {}
+    for channel, value_fn in channels.items():
+        targets = _read_target_points(Path(f"references/dubuisson2019_targets/fig9_{channel}.csv"))
+        if not targets:
+            continue
+        squared_error = 0.0
+        for sample in trace:
+            time_s = float(sample["time"])
+            error = value_fn(sample) - _interp_points(targets, time_s)
+            squared_error += error * error
+        errors[channel] = (squared_error / len(trace)) ** 0.5
+    return errors
 
 
 def _first_time(
