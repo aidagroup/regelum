@@ -1,0 +1,10 @@
+{
+  "fig11_battery_capacity_kwh": 10.0,
+  "fig11_initial_soc_percent": 99.7425,
+  "fig11_load_scale": 1.0,
+  "fig11_wind_scale": 1.0,
+  "fig9_battery_capacity_kwh": 85.5,
+  "fig9_initial_soc_percent": 69.92,
+  "fig9_load_scale": 1.2000000000000002,
+  "fig9_wind_scale": 0.7999999999999998
+}

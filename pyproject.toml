@@ -8,6 +8,7 @@ authors = [
 requires-python = ">=3.13"
 dynamic = ["version"]
 dependencies = [
+    "matplotlib>=3.10.0",
     "z3-solver>=4.16.0.0",
 ]
 
@@ -16,6 +17,8 @@ regelum-pendulum = "regelum.examples.pendulum:main"
 regelum-instance-connect = "regelum.examples.instance_connect:main"
 regelum-json-enrichment = "regelum.examples.json_enrichment:main"
 regelum-dubuisson2019 = "regelum.examples.dubuisson2019_water_treatment:main"
+regelum-dubuisson2019-calibrate = "regelum.examples.dubuisson2019_calibration:main"
+regelum-dubuisson2019-digitize = "regelum.examples.dubuisson2019_digitize_pdf:main"
 regelum-video-player = "regelum.examples.video_player:main"
 
 [tool.hatch.build.targets.wheel]

@@ -1,0 +1,652 @@
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TIA.2019.2938727, IEEE
+                                                                                            Transactions on Industry Applications
+                                                                                                                                                                                                             1
+
+
+
+
+                            Control of Hybrid Wind-Diesel Standalone
+                             Microgrid for Water Treatment System
+                                          Application
+                          Félix Dubuisson, Student Member, IEEE, Miloud Rezkallah, Member, IEEE, Ambrish Chandra,
+                           Fellow, IEEE, Maarouf Saad, Senior Member, IEEE, Marco Tremblay, and Hussein Ibrahim
+
+
+                                                                                                             elements such as energy storage system to compensate their
+            Abstract— This paper deals with the control of a                                                  intermittency [2]. Moreover, complex control strategies are
+        standalone microgrid based on variable speed wind                                                     needed to ensure a stable operation and clean uninterruptible
+        turbine (WT) and fixed speed Diesel Generator (DG) for                                                power supply to the water treatment station as application,
+        water treatment application. A Perturb and Observe                                                    which is considered as a critical load.
+        (P&O) method is used to achieve the Maximum Power                                                       According to [3], the most of isolated microgrids are
+        Point Tracking (MPPT) from the WT without using speed                                                 operating using a droop control strategy. This control
+        sensors. Two levels of control are proposed for the three-                                            technique can regulate the voltage and frequency as well as
+        phase voltage source inverter for voltage and frequency                                               achieve power sharing. Droop control possesses different
+        regulation at the Point of Common Coupling (PCC) and                                                  advantages such as simplicity, robustness and ability to
+        power management in standalone and diesel connected                                                   operate without resorting to communication between system
+        modes. Furthermore, the battery energy storage is                                                     elements [4]. However, each energy source is independent and
+        controlled using simple approach to balance the power in
+                                                                                                              adapt its voltage and frequency references based on the
+        the system during load variations and wind speed changes.
+                                                                                                              powers measured at the PCC. Usually, the frequency reference
+        The performance of the proposed system is tested using
+        Matlab/Simulink under load and weather variations. In                                                 is regulated with controlling the active power variations and
+        addition, the system is tested on a small-scale prototype in                                          the voltage references are regulated by controlling the reactive
+        the laboratory under load and wind speed variations.                                                  power variations, that is why this control technique is
+                                                                                                              identified as P-f and Q-V droop. It is reported in [5], that
+           Index Terms— Diesel generator, perturbation and observation                                        droop control is not perfect and possesses drawbacks, such as
+        technique (P&O), power management, SRF, standalone
+        microgrid, voltage and frequency regulation, wind turbine
+                                                                                                              the high droop coefficients, which can compromise the grid
+                                                                                                              stability, by the deviations in voltage and frequency. In
+                                                                                                              addition, its implementation is hard due to the complex
+                                          I. INTRODUCTION                                                     transformation needed. Many, droop-based control strategies
+                                                                                                              are proposed in the literature to compensate these drawbacks
+        M         ANY facilities, such as water treatment systems
+                                                               are not
+              connected to the main electrical grid. They are powered
+        only from the conventional DG. As known that this energy
+                                                                                                              [6-7]. In [6], an adaptive voltage droop control, is proposed to
+                                                                                                              tune the voltage droop coefficients, to compensate the
+                                                                                                              mismatch of the different energy sources voltage output, and
+        source is costly and responsible for the emission of
+                                                                                                              to improve the reactive power sharing. For this technique,
+        greenhouse gases especially when it operates at light loads.
+                                                                                                              communication is suggested to achieve high performances
+        Generating electricity locally in these isolated areas from
+                                                                                                              from the adaptive voltage droop strategy and if the
+        Renewable Energy Sources (RES), such as wind or solar is a
+                                                                                                              communication system is interrupted the controller operates
+        good way to answer these drawbacks [1]. However,
+                                                                                                              using last tuned droop coefficients. This control technique is
+        combination of RES with the existing DG is a complex
+                                                                                                              more efficient than conventional droop control system where
+        process; it requires advanced control and additional reliable
+                                                                                                              the obtained experimental results show that the reactive power
+                                                                                                              sharing is done properly, and that the system is not affected by
+           F. Dubuisson, M. Rezkallah, A. Chandra and M. Saad are with the                                    delay time caused by communication system. In [7], droop-
+        Department of Electrical Engineering, École de Techonologie Superieure,                               based strategy to control the inverter in a microgrid, is
+        Montreal, QC H3C 1K3, Canada (e-mail: felix.dubuisson.1@ens.etsmtl.ca,
+        cc-miloud.rezkallah@etsmtl.ca;ambrish.chandra@etsmtl.ca,                                              proposed. This control technique is validated in simulation
+        maarouf.saad@etsmtl.ca).                                                                              using Matlab Simulink and in real time through hardware
+           M. Tremblay is with the SUEZ Treatment Solutions, Montréal, QC H4R                                 prototype. The obtained results under different conditions
+        2K9,Canada (e-mail: Marco.Tremblay@suez-na.com)
+           M. Rezkallah and H. Ibrahim is with the Cégep de Sept-Îles, Sept-Îles, QC                          show satisfactory performances in terms of power sharing and
+        G4R        5B7,      Canada        (e-mail:       miloud.rezkallah@itmi.ca                            voltage as well as frequency regulation at the PCC.
+        Hussein.Ibrahim@cegepsi.ca).                                                                            In the same context, authors in [8] proposed Synchronous
+
+
+
+0093-9994 (c) 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TIA.2019.2938727, IEEE
+                                                                                            Transactions on Industry Applications
+                                                                                                                                                                                                             2
+
+
+
+
+                                                                       Fig. 1. Configuration of the proposed standalone microgrid
+
+        Reference Frame (SRF) control. This technique is a well-                                              based PMSG possesses various advantages such as no need of
+        developed technique for three-phase converters control. It                                            electrical excitation, higher efficiency, higher number of
+        controls the current and guarantees a good dynamic                                                    poles, higher power density, also they are easier to control and
+        performance, as well as zero steady-state error during                                                no needs gearbox [12] [13]. Moreover, this technology usually
+        transitions. The measured current is transformed from the                                             requires power converters to achieve stable operation with
+        stationary frame into the rotating frame and can be regulated                                         high efficiency. To achieve high efficiency from WT driven
+        using PI controllers. This control technique is used to control                                       variable speed PMSG, Maximum Power Point Tracking
+        Active Power Filter (APF) and Unified Power Quality                                                   (MPPT) based control, is required. Many MPPT techniques
+        Conditioner (UPQC) as detailed in [9]. Unfortunately, it                                              are proposed in the literature [14-17], such as Tip-Speed Ratio
+        requires decisive PLL techniques. However, in grid connected                                          (TSR) technique, Optimum Relation Based (ORB) technique,
+        systems, the voltage and frequency are considered as constant,                                        and Perturbation and observation (P&O) technique.
+        so, synchronization with PCC is not a big issue but in                                                  According, to [15], these MPPT methods possess advantages
+        standalone systems where the DG operates only when needed,                                            and drawbacks, which should be solved. Among these
+        a robust technique for the synchronization between the                                                drawbacks, there is the necessity of mechanical sensors.
+        inverter and the PCC, is needed.                                                                      Presence of this sensors lead to increase of the cost and
+          UPQCs are controlled to manage the power in hybrid                                                  hardware complexity of installation [16]. Generally, P&O
+        microgrids and improve the power quality [9]. They are                                                method require only output voltage and current of the WT.
+        composed of two back-to-back inverters sharing a DC link.                                             according to [16], it is so hard to find a good step size which
+        The first inverter is controlled as a voltage source and the                                          ensures a fast convergence of the control when system is
+        second as an active filter. Consequently, one ensures the                                             subjected to the sudden wind variations without any
+        voltage regulation at the PCC and delivers power to                                                   oscillation around the MPP. In [17], a P&O technique based
+        compensate load variations while the other one improves                                               on integral action, is proposed. A correlation between the
+        power quality. Unfortunately, the use of two back-to-back                                             variations of the power and the voltage at the input of the DC-
+        inverters increase the number of power converters, which                                              DC boost converter is used, therefore only electrical measures
+        leads to an increase the hardware complexity, consequently its                                        are needed.
+        cost is increasing as well. In [10], authors proposed a droop-                                          In [18], control of wind–diesel hybrid system for standalone
+        based control strategy controlling UPQC to ensure a proper                                            application to reduce the fuel consumption, is proposed, and in
+        power flow between the AC and the DC side. The obtained                                               [19], battery storage system is employed to achieve high
+        results show good performances under severe conditions, such                                          performances and reduce the fuel consumption in standalone
+        as nonlinear load and the reactive power sharing is done                                              microgrid. In [18,19], DG is kept running at all time, which is
+        properly, as well as, the AC voltage regulation at the PCC. In                                        not effective, costly and can affect the lifespan of the DG.
+        [11], a new SRF based control is proposed for UPQC with an                                             To solve these issues and achieve high performances in
+        improved PLL. This method is simpler and easier to                                                    standalone microgrid for water treatment applications, the
+        implement, as it needs reduced number of current sensors. In                                          following solutions, which represent the contributions of this
+        addition, the reactive power and harmonic compensation are                                            research work, are proposed,
+        done properly under presence of unbalanced linear and non-                                              1) Design of a new and simple standalone micro-grid
+        linear loads.                                                                                         configuration based on fixed speed DG and WT driven
+          Wind Energy Conversion System (WECS) based on                                                       variable speed PMSG for water treatment station without any
+        Permanent Magnet Synchronous Generator (PMSG) has                                                     mechanical sensors.
+        gained more and more interests in microgrid applications. WT
+
+
+
+0093-9994 (c) 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TIA.2019.2938727, IEEE
+                                                                                            Transactions on Industry Applications
+                                                                                                                                                                                                             3
+
+          2) Enhanced power sharing strategy to regulate the voltage
+        and frequency at the PCC.
+          3) Less fuel consumption by reducing the time running of
+        DG and maximizing its efficiency by operating the DG only at
+        its rated power.
+          4) Robust and simple control strategy for the DC-DC buck-
+        boost converter to ease the bidirectional power flow through
+        the battery.
+          5) Enhanced MPPT technique, which is proposed first in
+        [17].
+                                                                                                                Fig. 2. Control strategy for the DG
+          6) Validation in real time of all proposed concept for water
+        treatment system application.
+          This paper is organized as follows, in section II the proposed
+        standalone microgrid is presented with its operation mode. In
+        section III, all developed control strategies are detailed. In
+        section IV, simulation and experimental results as well as
+        discussion are given, and the conclusion is presented in
+        Section V.
+
+                    II. STANDALONE MICROGRID CONFIGURATION
+           Fig. 1 shows the proposed standalone microgrid
+        configuration. It consists of Diesel Engine (DE) driven fixed
+        speed Synchronous Generator (SG) and WT driven variable
+        speed Permanent Magnetic Synchronous Generator (PMSG),
+        which is connected to the common DC bus through a diode
+        rectifier and controlled DC-DC boost converter. A battery
+        pack of Nickel Cadmium technology is used to balance the
+        power in the system. To protect the battery from overcharging
+        a DC dump load, is employed. For a galvanic isolation
+                                                                                                                Fig. 3. Two-level control strategy for the three-phase inverter
+        between the AC and the DC bus, a delta-star transformer is
+        employed. The water treatment system is considered as a load
+        and is connected to the AC bus.                                                                                                      III. CONTROL SYSTEM
+           In Table 1, different operation modes of the system shown                                             In this section, the developed control strategies of the
+        in Fig. 1, are detailed. The operation mode depends on the                                            different elements of the system, are detailed.
+        state of charge (SOC) of the battery, the power generated by
+        the WT (PWT) and the power consumed by the load (PLOAD).                                              A. Control strategy for the DG
+        For each mode, the energy sources are detailed, as well as, the                                          Regarding the control strategy of the DG, it can be seen on
+        SOC of the battery.                                                                                   Fig. 2. A governor compares the measured speed with its
+           The DG is used as a backup energy source, it starts only                                           reference and the error is fed to Proportional Integral (PI)
+        when the SOC of the battery gets lower than 50% and stop                                              controller that decide the amount of fuel required to increase
+        when the SOC reaches 70%. The DG charges the battery and                                              or decrease the speed of the engine in order to regulate the
+        supply the load at the same time. The battery charges much                                            frequency at the PCC. The Automatic Voltage Regulation
+        faster if the WT is delivering power at the same time, but the                                        (AVR) compares the voltage measured at the PCC with its
+        DG can supply the load and charges the battery on its own.                                            reference and the error is fed to a PI controller to obtain the
+                                            TABLE I                                                           field voltage required to generate the excitation current for
+                                     SYSTEM OPERATION MODES                                                   SG.
+                                                   Energy                        State of the
+             Mode                Conditions
+                                                   sources                         battery                    B. Control Strategy for the Three-Phase Inverter
+                                PWT > PLOAD
+            Mode 1
+                                SOC > 50%
+                                                     WT                            Charging                      The developed control strategy for the three-phase inverter
+                                PWT < PLOAD                                                                   is illustrated in Fig. 3. It consists of two-level control. When
+            Mode 2                              WT + Battery                     Discharging
+                                SOC > 50%                                                                     the DG is turned on, the inverter is responsible for balancing
+                                PWT < PLOAD                                                                   the powers between the AC and the DC side of the microgrid
+            Mode 3                                   DG                            Charging
+                                SOC < 50%
+                                PWT > PLOAD                                                                   and the first level control, is used. The inverter current is
+            Mode 4                                DG +WT                        Fast charging
+                                SOC < 50%                                                                     converted from the stationary frame to the rotating frame
+                                 PWT >PLOAD          WT                            Charging                   using Park transformation.
+            Mode 5
+                                 SOC>70%
+                                PWT > PLOAD                                     Discharging in
+            Mode 6                              WT +Battery
+                                SOC = 100%                                     the Dump Load
+
+
+
+
+0093-9994 (c) 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TIA.2019.2938727, IEEE
+                                                                                            Transactions on Industry Applications
+                                                                                                                                                                                                             4
+
+
+                                     2       2  
+                          sin  sin    sin    
+             id        
+                        2
+                                         3
+                                      2 
+                                                   3 
+                                                 2   a
+                                                          i                  
+             i q      cos  cos    cos  
+                        3               3    
+                                                        i
+                                                     3  b                                           (1)
+             io       1            1          1
+                                                          i
+                                                         c                                                   Fig. 4. Control strategy for the DC-DC Buck-boost Converter
+                                                       
+                          2            2          2    
+
+
+
+           The inverter direct current reference (IdINV_ref) is calculated
+        using the sensed load current (IdLOAD) and the DG current
+        reference (IdDG_ref). Using the DG current reference makes
+        sure that the DG operates at its rated power. A PI controller is
+        used to compare the sensed direct inverter current to this new
+        reference. Regarding the q component of the inverter current,                                           Fig. 5. MPPT strategy for the WT
+        it is forced to zero thanks to a PI controller to minimize the
+                                                                                                              second level control. The measured voltage at the PCC is
+        reactive power exchanges between the AC and the DC side of
+                                                                                                              compared with its reference and the error is fed to PI
+        the microgrid. The inverter current reference in the rotating
+                                                                                                              controller and the current measured at the PCC is subtracted
+        frame is fed to a hysteresis controller in order to create the
+                                                                                                              from the output of the PI controller in order get the new
+        signal switches of the inverter as,
+                                                                                                              current references as,
+
+
+                                                                                                    (2)                                                                                                   (7)
+
+
+                                                                                                              C. Control Strategy for the DC-DC Buck-Boost Converter
+           A PLL is needed to obtain the phase shift (θ) for the
+        transformations between the rotating and the stationary                                                 Fig. 4 shows the control strategy for the DC-DC buck-boost
+        frames. The phase shift (θ) is calculated using in-phase and                                          converter. A PI controller is used to regulate the DC link
+        quadrature unit templates, which are calculated as follows,                                           voltage. The output of the PI controller represents the battery
+                                                                                                              current reference and is compared with the sensed battery
+                                                                                                              current and the output of the PI controller is the control signal
+                                                                                                              which is fed to PWM to get the switches signals of the buck-
+                                                                                                    (3)       boost converter.
+
+                                                                                                                                                                                                          (8)
+           Where vLa, vLb and vLc are the line to line voltage and VL is                                                                                                                                  (9)
+        the amplitude of the AC voltage.
+        The quadrature units are calculated as follows:
+                                                                                                              D. MPPT Approach for the WECS
+                                                                                                                 The control strategy used to achieve MPPT form the WT is
+                                                                                                              shown in Fig. 5. As already mentioned, the proposed control
+                                                                                                              technique for MPPT from WT does not need speed sensor,
+                                                                                                    (4)
+                                                                                                              only output voltage and current are used to compute the power
+                                                                                                              at nth and (n-1) th instants as,
+
+                                                                                                                                                                                                         (10)
+           The frequency is obtained based on the following equations                                                                                                                                    (11)
+        as,
+                                                                                                                 The sign of the power variation is used to determine the
+                                                                                                    (5)       sign of the incremental step to reach the MPP.
+
+                                                                                                    (6)
+                                                                                                                                                                                                         (12)
+
+           If the DG is turned off, the inverter supplies the connected
+        loads and ensures regulation of the frequency as well as the                                             As detailed in Fig. 5, dD is the incremental step, it is
+        voltage at the PCC. These tasks are achieved by selecting the                                         responsible for the speed of convergence but also for the size
+
+
+
+0093-9994 (c) 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TIA.2019.2938727, IEEE
+                                                                                            Transactions on Industry Applications
+                                                                                                                                                                                                             5
+
+
+
+
+                                                                                                               Fig. 7. Transfer function of the DC-voltage regulation
+
+
+
+
+        Fig. 6. State flow chart to control AVR, governor and the controlled switch
+
+        of the oscillations. According to [20], the step size dD should
+        be 0.5% in order to get a good compromise between speed of
+        convergence to the MPP and oscillations around the MPP.                                                Fig. 8. Bode diagrams of the transfer function, PI controller and closed loop
+                                                                                                               system.
+        E. Control Strategy for the Dump- Load
+          The dump load is used to protect the battery from
+        overcharging. Its switch is turned off only if the SOC of the                                             Based on (14), one obtains the gains as:
+        battery is fully charged.
+                                                                                                                                                                                                        (15)
+        F. Power Flow Supervisor
+                                                                                                                                                                                                        (16)
+           A supervisor based on state flow chart is used to turn ON
+        and OFF the DG. As one can see on Fig. 6, the DG is turned
+                                                                                                                 Selecting, ζ and ω equal to 0.7 and 439.82 rad/s as detailed
+        ON only based on the SOC of the battery. Once the SOC of
+                                                                                                              in [21], one obtains a good compromise between the static and
+        battery becomes less than 50%, the governor and AVR are
+        turned ON and once the system frequency and the terminal                                              dynamic performances.
+        stator voltage of the DG are equal to the system frequency and                                           The CDC is selected equal to =500e-6F. The optimal gains
+        the AC voltage at the PCC, the controlled switch is turned on.                                        that ensure less overrun and fast response time as presented in
+        If the SOC of the battery is high or equal to 70%, the                                                Fig.8 are selected as, kp=0.3079 and ki=96.7208.
+        controlled switch, AVR and governors, are turned off.
+                                                                                                                          IV. SIMULATION AND EXPERIMENTAL RESULTS
+        G. Optimal method for PI gain tuning
+                                                                                                                To validate the different control approaches presented
+           The PI controller have two parameters: kp and ki to tune.                                          above and test the performances of the proposed standalone
+        The following technique, which is based on determination of                                           microgrid, many scenarios are tested and validated using
+        the transfer function of the control loop, is applied to get the                                      simulations on Matlab/Simulink and in real time through
+        optimal gains of the proposed PI controllers. As is detailed in
+                                                                                                              small-scale hardware prototype of 2 kW.
+        Fig. 7 and 8, the transfer function in open loop of the DC-
+        voltage control loop is described as:                                                                 A. Simulation Results under Load and Wind variations
+                                                                                                                 Fig. 9 shows the waveforms of the PCC voltage and its
+                                                                                                              magnitude, the load current, DG current, inverter current,
+                                                                                                 (13)
+                                                                                                              battery current, WT current, voltage of the DC bus, SOC of
+                                                                                                              the battery, and system frequency. During this test, the wind
+            And the closed loop is given as:                                                                  varies as follows: it starts at t=7s and increases until t=8s, then
+                                                                                                              it stays constant until t=11s, next it starts decreasing until
+                                                                                                              t=15s and stays constant until t=16s, where it increases until
+                                                                                                 (14)         t=18s and then it stays constant until the end of the simulation.
+                                                                                                              The load is varying between t=7s and t=9s and at t=18s.
+
+
+
+0093-9994 (c) 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TIA.2019.2938727, IEEE
+                                                                                            Transactions on Industry Applications
+                                                                                                                                                                                                             6
+
+           One can see that the WT current varies with the wind speed                                         load, the DG and the inverter. One can see the exchange of
+        variations and that the PCC voltage and frequency are well                                            active power between t=2s and t=10,7s, when the DG is
+        regulated at their rated values, which are 460V and 60 Hz. The                                        charging the battery. Also, one can see that the DG is always
+        DC voltage oscillates during wind and load variations, but it is                                      producing the same amount of power, which is its rated
+        regulated around its rated value, which is equal to 350V. In                                          power. And when the DG is off, the inverter is supplying the
+        addition, one can see that the battery is charging very slowly                                        load on its own. Regarding reactive power one can see a small
+        from t=2s to t=7s, this is due to the absence of wind. Then,                                          exchange of reactive power between the DG and the inverter.
+        from t=7s to t= 10.7s, it starts charging much faster when the                                        These exchanges can reach 500 Var when the load is varying
+        DG and the WT are providing power. At t=10.7s, the SOC of                                             but they are about 100 Var is steady state, so one can consider
+        the battery is equal to 70% so the DG is turned off. Between                                          they are insignificant.
+        t=10.7s and t=18s, the WT is not delivering enough power to                                              To validate the performances of the dump-load another test
+        supply the load, so the battery is discharging to help the wind                                       was done. Fig. 11 shows the waveforms of the PCC voltage
+        turbine supply the load. At t=18s, the load is reduced, and the                                       and its magnitude, the load current, dump load current,
+        WT is delivering enough power to supply the load and charge                                           inverter current, battery current, WT current, voltage of the
+        the battery at the same time. Therefore, one can say that both                                        DC bus, SOC of the battery, and the system frequency. As one
+        the DG and the WT can charge the battery and supply the load                                          can see, at t=6.65s the SOC of the battery reaches 100% and
+        simultaneously. Which leads to say that the battery is helping                                        the dump load is activated to dissipate the power and protect
+        the system to maintain its stability by balancing the powers.
+           On Fig. 10 one can see the active and reactive power of the
+
+
+
+
+                                                                                                                Fig. 11. Simulation results of the dump load system
+
+
+
+
+        Fig. 9. Simulation results under load and wind variations
+
+
+
+
+        Fig. 10. Active and reactive power of the system under weathered and load
+        variations.                                                                                             Fig. 12. Hardware configuration
+
+
+
+0093-9994 (c) 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TIA.2019.2938727, IEEE
+                                                                                            Transactions on Industry Applications
+                                                                                                                                                                                                             7
+
+        the battery from overcharging. One can see that the load
+        voltage, frequency and DC bus voltage are well regulated.
+        This confirms that battery is protected from overvoltage and
+        system is able to operates in this operation mode without any
+        unbalance or frequency deviation.
+        B. Experimental Results Under Load and Wind Variations
+           Fig. 12 shows the hardware configuration used to validate
+        the results obtained with the simulation. It is composed of DG
+        (Induction Motor (IM) driven SG), synchronization switch,
+        inverter, boost converter, variable voltage transformer, LC
+        filter, dSPACE controller, lead acid batteries, WT (IM driven
+        PMSG), and loads.
+           Fig. 13 demonstrates the performances of the Diesel-Battery                                                                                       (a)
+        system under load variations. In Fig. 13 (a) and (b), the
+
+
+
+
+                                                                                                                                                   (b)
+                                                                                                                Fig. 15. Dynamic performances of the Battery-WT system under load and
+                                                                                                                wind speed variations
+                                                      (a)
+
+
+
+
+                                           (b)
+        Fig. 13. Dynamic performances of the Diesel-Battery system under load                                                                                (a)
+        variations
+
+
+
+
+                                                                                                                                                   (b)
+        Fig. 14. Dynamic performances of the Battery system without Diesel under                                Fig. 16. Dynamic performances of the Diesel-Battery-WT system under load
+        load variations                                                                                         and wind speed variations
+
+
+
+
+0093-9994 (c) 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TIA.2019.2938727, IEEE
+                                                                                            Transactions on Industry Applications
+                                                                                                                                                                                                             8
+
+        waveforms of the DC bus voltage, DG current, battery current                                          developed to operate the DG efficiently at its rated power by
+        and load current are shown. One can see that the DG is                                                controlling the three-phase voltage source inverter. The
+        producing current even when there is no load and that the                                             obtained results in the presence of severe conditions show
+        current charges the battery. Also, one can see that the dynamic                                       satisfactory performance without any saturation of the
+        of the DG is slow when the load increases and that the battery                                        controllers and with less overrun and fast response time. The
+        delivers or absorb more current during the load variations. So,                                       voltage and frequency regulation at the PCC as well as power
+        one can say that the battery helps to keep stable the operation                                       sharing, are achieved at different operation modes and during
+        by balancing the powers in the system. One can clearly see                                            transitions. It has been demonstrated that the DG was used as
+        that the DC voltage is well regulated in this operation mode,                                         back up energy sources and that the load is supplied at all time
+        which confirms the robustness of the developed control                                                with a stable power without any interruption.
+        strategy for the DC-DC buck boost converter.
+           In Fig. 14, the waveforms of the DC bus voltage, the                                                                                        APPENDIX
+        voltage of the PCC, the battery current and the load current are                                                                           TABLE II
+        shown. One can see that the battery can provide power to the                                                                        SYSTEM PARAMETERS
+        load at any time. It is observed that during absence of load, the                                       Elements                          Parameters and Values
+                                                                                                                                  P=50kW, Vdc=288V, ω=12500 rpm, Rs=0.0041 Ω ,
+        battery is discharging slowly, this is due to the passive                                             WECS                Ld=8.7079e-05H , Lq=1.4634e-04H, Flux linkage=
+        elements of the system. In this operation mode, the DC                                                                    0.07V.s, J=0.089kg.m^2, F=0.005N.Més, Tf=4N.m
+        voltage is well regulated, which confirms the robustness of the                                                           nominal voltage=250V, cut-off voltage=187.5V, fully
+                                                                                                                                  charge voltage=286V, energy capacity=100KWh,
+        developed control strategy for the DC-DC buck boost                                                   Battery
+                                                                                                                                  nominal discharge current=80A, internal
+        converter.                                                                                                                resistance=0.00625Ω
+           In Fig. 15 (a) the voltage measured after the MSAP, the                                                                Sn=52.5kVA, Vn=460V, fs=60Hz, 2P=4, Rs=0.0181Ω,
+        load current, the battery current and the DC current measured                                         SG                  Ll=0.0009622 H, Lmd=0.02683H,
+                                                                                                                                  Lmq=0.01187H, J=0.3987kg.m2, F=0.031N.m.s
+        after the DC-DC boost converter, are presented. In this test,                                         AC bus              VLLrms=460V, Frequency=60Hz
+        there is no load and the wind speed are varying. One can see                                          Load                Maximum load=40kW
+        that the battery is being charged by the WT. In Fig. 15 (b) the
+                                                                                                                                                  TABLE III
+        waveforms of the voltage at the PCC, the load current, the                                                               SMALL SCALE PROTOTYPE PARAMETERS
+        battery current and the DC current measured after the DC-DC                                            Elements                           Parameters and Values
+        boost converter, are shown. In this test, the wind speed is kept                                      DG                  P=2kW, ω=1800rpm, V=208, I=6.8A, fs=60Hz,
+        constant, and load varies. One can see that when load is                                              Battery             V=120V
+        removed, WT charges the battery. When load increase at                                                WECS                P=2.5kW, ω=1800 rpm, V=280V, I=5,1A
+        t=1.2s, the battery stops charging because the current                                                AC bus              VLLrms=40V, Frequency=60Hz
+                                                                                                              Load                40kW
+        produced by the WT is used to supply the connected load.
+        When load is increased more at t=3.2s, battery is discharging
+        in order to balance the power in the system. Then one can                                                                                    REFERENCES
+        observe the same phenomena when the load is decreasing.                                               [1]  Y. Han, P. Shen, X. Zhao, and J. M. Guerrero, “Control strategies for
+                                                                                                                   islanded microgrid using enhanced hierarchical control structure with
+        Once again, the battery helps the system to remain stable.                                                 multiple current-loop damping schemes,“, IEEE Transactions on Smart
+           In Fig. 16, the waveforms of the DG voltage, the load                                                   Grid, vol. 8, no. 3, pp. 1139-1153, May 2017.
+        current, the DC current of the WT and the battery current, are                                        [2] Y. Karimi, H. Oraee, M. S. Golsorkhi, and J. M. Guerrero,
+                                                                                                                   “Decentralized Method for Load Sharing and Power Management in a
+        shown. To test the performance of the proposed configuration                                               PV/Battery Hybrid Source Islanded Microgrid,“, IEEE Transactions on
+        as well as the developed control algorithms, two testes are                                                Power Electronics, vol. 32, no. 5, pp. 3525-3535, May 2017.
+        performed. In Fig. 16 (a), load is completely removed, and the                                        [3] S. K. Sahoo, A. Sinha, and N. Kishore, “Control Techniques in AC, DC,
+        wind speed varies with time. It is observed that DG and the                                                and Hybrid AC-DC Microgrid: A Review,“, IEEE Journal of Emerging
+                                                                                                                   and Selected Topics in Power Electronics, vol. 6, no. 2, pp. 738-759,
+        WT charge the battery. In Fig. 16 (b), the wind speed is                                                   June 2018.
+        considered constant and the load varies with time. One can                                            [4] Y. Sun, X. Hou, J. Yang, H. Han, M. Su, and J. M. Guerrero, “New
+        observe that the battery balance power in the system when                                                  perspectives on droop control in AC microgrid,“, IEEE Transactions on
+        load is increased. These experimental tests show the same                                                  Industrial Electronics, vol. 64, no. 7, pp. 5741-5745, July 2017.
+        results obtained with the simulations. Both the DG and the                                            [5] A. Micallef, M. Apap, C. Spiteri-Staines, J. M. Guerrero, and J. C.
+                                                                                                                   Vasquez, “Reactive power sharing and voltage harmonic distortion
+        WT can charge the battery and supply the load                                                              compensation of droop controlled single phase islanded microgrids,“
+        simultaneously. It is observed that the battery contributes to                                             IEEE Transactions on Smart Grid, vol. 5, no. 3, pp. 1149-1158, May
+        maintain the stability of the system by balancing the powers in                                            2014.
+        each operation mode.                                                                                   [6] Mahmood, Hisham, Dennis Michaelson et Jin Jiang. 2015. “Reactive
+                                                                                                                   power sharing in islanded microgrids using adaptive voltage droop
+                                                                                                                   control “, IEEE Transactions on Smart Grid, vol. 6, no 6, p. 3052-3060,
+                                           V. CONCLUSION                                                           Nov. 2015.
+                                                                                                              [7] Dubuisson, F, M Rezkallah, A Chandra, M Saad et M Tremblay. 2018.
+          In this paper, a standalone microgrid for small water station                                            “Implementation of a new control for hybrid wind-diesel for water
+        is designed and validated using simulations with                                                           treatment standalone system,“ In 2018 IEEE Industry Applications
+        Matlab/Simulink and experimental tests on a small-scale                                                    Society Annual Meeting (IAS). p. 1-5. IEEE.
+        prototype. An improved control strategy based on SRF was
+
+
+0093-9994 (c) 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TIA.2019.2938727, IEEE
+                                                                                            Transactions on Industry Applications
+                                                                                                                                                                                                             9
+
+        [8]   Han, Yang, Hao Chen, Zipeng Li, Ping Yang, Lin Xu et Josep M                                    design of microgrids, renewable energy generations and
+              Guerrero. 2019. “Stability Analysis for the Grid-Connected Single-Phase
+              Asymmetrical Cascaded Multilevel Inverter With SRF-PI Current
+                                                                                                              applications, and energy storage systems.
+              Control Under Weak Grid Conditions,“ IEEE Transactions on Power
+              Electronics, vol. 34, no 3, p. 2052-2069, March 2019.                                                               Miloud Rezkallah (S’11–M’14) received
+        [9] Kesler, Metin, et Engin Ozdemir. 2011. “Synchronous-reference-frame-                                                  the B. Tech. degree in electrical machines
+              based control method for UPQC under unbalanced and distorted load                                                   and drive from the University of Science
+              conditions,“ IEEE Transactions on Industrial Electronics, vol. 58, no 9,
+              p. 3967-3975, Sept. 2011.                                                                                           and Technology USTO, Oran, Algeria,
+        [10] P. G. Khorasani, M. Joorabian, and S. G. Seifossadat, “Smart grid                                                    and the M. Tech. and Ph.D. degrees in
+              realization with introducing unified power quality conditioner integrated                                           power electronics and system control
+              with DC microgrid,“ Electric Power Systems Research, vol. 151, pp. 68-                                              from École de Technologie Supérieure,
+              85, Oct. 2017.                                                                                                      Université, Montréal, Canada., in 2010
+        [11] Kesler, Metin, et Engin Ozdemir. 2011. “Synchronous-reference-frame-                             and 2016, respectively. He is working as researcher at research
+              based control method for UPQC under unbalanced and distorted load
+              conditions,“ IEEE Transactions on Industrial Electronics, vol. 58, no 9,                        center on smart grids and energy systems (Inergia Lab) at
+              p. 3967-3975, Sept. 2011.                                                                       spet-iles in Quebec and as a research assistant in Electrical
+         [12] L. Trilla, F. D. Bianchi, and O. Gomis-Bellmunt, “Linear parameter-                             Engineering Department at École de Technologie Supérieure
+              varying control of permanent magnet synchronous generators for wind                             and his research interests include control and design of
+              power systems“, IET Power Electronics, vol. 7, no. 3, pp. 692-704,
+              March 2014.
+                                                                                                              microgrid, power quality, renewable energy generations and
+        [13] R. Engleitner, A. Nied, M. S. M. Cavalca, and J. P. da Costa, “Dynamic
+                                                                                                              applications, power management in smart grid, and energy
+              Analysis of Small Wind Turbines Frequency Support Capability in a                               storage systems.
+              Low-Power Wind-Diesel Microgrid,“ IEEE Transactions on Industry
+              Applications, vol. 54, no. 1, pp. 102-111, Feb. 2018.
+        [14] Z. M. Dalala, Z. U. Zahid, W. Yu, Y. Cho, and J.-S. J. Lai, “Design and
+              analysis of an MPPT technique for small-scale wind energy conversion
+              systems,“ IEEE Transactions on Energy Conversion, vol. 28, no. 3, pp.                                                Ambrish Chandra (SM’99–F’14) is a
+              756-767, Sept. 2013.                                                                                                 full professor of Electrical Engineering at
+        [15] J. Chen, T. Lin, C. Wen, and Y. Song, “Design of a unified power                                                      École de technologie supérieure (ÉTS),
+              controller for variable-speed fixed-pitch wind energy conversion                                                     Montréal since 1999. He received B.E.
+              system,“ IEEE Transactions on Industrial Electronics, vol. 63, no. 8, pp.
+              4899-4908, Aug. 2016.                                                                                                degree from the University of Roorkee
+        [16] Y. Zhao, C. Wei, Z. Zhang, and W. Qiao, “A review on position/speed                                                   (presently IITR), India, M. Tech. from
+              sensorless control for permanent-magnet synchronous machine-based                                                    IIT Delhi, and Ph.D. from University of
+              wind energy conversion systems,“ IEEE Journal of Emerging and
+              Selected Topics in Power Electronics, vol. 1, no. 4, pp. 203-216, Dec.
+                                                                                                                                   Calgary, in 1977, 1980, and 1987,
+              2013.                                                                                                                respectively. Before joining as an
+        [17] H. Abouobaida, “New MPPT control for wind conversion system based                                Associate Professor at ÉTS in 1994, he worked as a faculty at
+              PMSG and a comparaison to conventionals approachs,“ in Systems,                                 IITR. From 2012-15, he was the director of multidisciplinary
+              Signals & Devices (SSD), 2017 14th International Multi-Conference on,
+              2017, pp. 38-43: IEEE.                                                                          graduate program on Renewable Energy and Energy
+        [18] Tiwari, Shailendra Kr, Bhim Singh, and Puneet K. Goel. “Control of                               Efficiency at ÉTS. The primary focus of his work is related to
+              Wind-Diesel Hybrid System with BESS for Optimal Operation,“ IEEE                                the advancement of new theory & control algorithms for
+              Transactions on Industry Applications, vol. 55 , n 2 , April 2019.                              power electronic converters for power quality improvement in
+        [19] Nguyen-Hong N, Nguyen-Duc H, Nakanishi Y. “Optimal sizing of                                     distribution systems & integration of renewable energy
+              energy storage devices in isolated wind-diesel systems considering load
+              growth uncertainty,“ IEEE Transactions on Industry Applications. Vol.                           sources. He is coauthor of John Wiley book ‘Power Quality –
+              54, no 3, pp 1983-91, May 2018.                                                                 Problems and Mitigation Techniques’. He is Fellow of many
+        [20] A. Dolara, R. Faranda, and S. Leva, “Energy comparison of seven                                  organizations, including Canadian Academy of Engineering,
+              MPPT techniques for PV systems,“ Journal of Electromagnetic Analysis
+              and Applications, vol. 1, no. 03, p. 152, Sept. 2009.
+                                                                                                              Institute of Engineering and Technology U.K., Engineering
+        [21] J. Xu, C. Lott, S. Saadate, and B. Davat, “Simulation and
+                                                                                                              Institute of Canada etc. and registered as a Professional
+              experimentation of a voltage source active filter compensating current                          Engineer in Quebec. He is a Distinguished Lecturer of the
+              harmonics and power factor,“ in Proceeding of IECON'94-20th Annual                              IEEE Power and Energy Society and the IEEE Industry
+              Conference of IEEE Industrial Electronics, 1994, vol. 1, pp. 411-415.
+                                                                                                              Application Society. He is the recipient of IEEE Canada ‘P.
+                                                                                                              Ziogas Electric Power Award 2018’.
+
+
+                                        Félix Dubuuisson (S’18) received the
+                                        M.Sc. degrees in electrical engineering
+                                                                                                                                             Maarouf Saad received a bachelor and
+                                        from the École de Technologie
+                                                                                                                                             master degrees in electrical engineering
+                                        Superieure Montreal, QC, Canada, where
+                                                                                                                                             from Ecole Polytechnique of Montreal
+                                        he is currently working toward Ph.D.
+                                                                                                                                             respectively in 1982 and 1984. In 1988, he
+                                        degree. He is currently studying the
+                                                                                                                                             received a Ph.D. from McGill University
+                                        predictive control for an off-grid system
+                                                                                                                                             in electrical engineering. He joined Ecole
+                                        using renewable energy sources. His
+                                                                                                                                             de technologie superieure in 1987 where
+                                        research interests include control and
+                                                                                                                                             he is teaching control theory. His research
+
+
+
+0093-9994 (c) 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TIA.2019.2938727, IEEE
+                                                                                            Transactions on Industry Applications
+                                                                                                                                                                                                           10
+
+        is mainly in nonlinear control and optimization applied to
+        robotics and power systems.
+
+                             Marco Tremblay is the R&D Director at
+                             Suez Water Technologies & Solutions in
+                             Montreal, Canada, developing industrial
+                             power electronic and control products.
+                             He is a licensed professional engineer
+                             with a bachelor degree from McGill
+                             University. He later obtained a Master
+                             degree from École de Technologie
+        Supérieure de Montréal where he is presently a PhD
+        candidate. His major contribution has been the development
+        of innovative products used to purify drinking water for more
+        than fifty million people around the world and to reduction
+        industrial pollution. He is presently studying the use of neural
+        networks in equipment condition monitoring and diagnostics.
+
+
+
+
+                             Hussein Ibrahim received the PhD
+                             degree in engineering from Québec
+                             University at Chicoutimi, Canada.
+                             Since July 2009, he has research
+                             director at Cégep of Sept-iles in the
+                             north of Quebec. His research interests
+                             include renewable energy sources
+                             integration, hybrid energy power
+        system, storage energy, heat and mass transfer, fluid
+        dynamics, and energy efficiency.
+
+
+
+
+0093-9994 (c) 2019 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+
