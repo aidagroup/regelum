@@ -47,6 +47,11 @@ class CalibrationParams:
     fig9_nominal_frequency_hz: float = 60.095
     fig9_dc_frequency_gain_hz_per_v: float = 0.012
     fig9_unserved_frequency_gain_hz_per_kw: float = 0.002
+    fig9_pcc_load_step_gain_v_per_kw: float = -0.25
+    fig9_pcc_wt_load_drop_gain_v_per_kw: float = 1.00
+    fig9_pcc_diesel_step_gain_v_per_kw: float = 0.70
+    fig9_pcc_wind_step_gain_v_per_kw: float = 0.02
+    fig9_pcc_transient_decay: float = 0.60
     fig9_frequency_response: float = 0.18
     fig9_inverter_efficiency: float = 0.97
     fig11_initial_soc_percent: float = 99.7425
@@ -177,6 +182,11 @@ def calibrate(
         "fig9_nominal_frequency_hz": 0.01,
         "fig9_dc_frequency_gain_hz_per_v": 0.004,
         "fig9_unserved_frequency_gain_hz_per_kw": 0.001,
+        "fig9_pcc_load_step_gain_v_per_kw": 0.05,
+        "fig9_pcc_wt_load_drop_gain_v_per_kw": 0.05,
+        "fig9_pcc_diesel_step_gain_v_per_kw": 0.05,
+        "fig9_pcc_wind_step_gain_v_per_kw": 0.02,
+        "fig9_pcc_transient_decay": 0.04,
         "fig9_frequency_response": 0.04,
         "fig9_inverter_efficiency": 0.01,
         "fig11_initial_soc_percent": 0.02,
@@ -207,6 +217,11 @@ def calibrate(
         "fig9_nominal_frequency_hz": (59.95, 60.15),
         "fig9_dc_frequency_gain_hz_per_v": (-0.04, 0.04),
         "fig9_unserved_frequency_gain_hz_per_kw": (-0.02, 0.02),
+        "fig9_pcc_load_step_gain_v_per_kw": (-2.0, 2.0),
+        "fig9_pcc_wt_load_drop_gain_v_per_kw": (-2.0, 2.0),
+        "fig9_pcc_diesel_step_gain_v_per_kw": (-2.0, 2.0),
+        "fig9_pcc_wind_step_gain_v_per_kw": (-0.4, 0.4),
+        "fig9_pcc_transient_decay": (0.20, 0.98),
         "fig9_frequency_response": (0.02, 0.80),
         "fig9_inverter_efficiency": (0.85, 1.0),
         "fig11_initial_soc_percent": (99.55, 99.99),
@@ -307,6 +322,11 @@ def simulate(params: CalibrationParams) -> dict[str, list[dict[str, float | str 
         nominal_frequency_hz=params.fig9_nominal_frequency_hz,
         dc_frequency_gain_hz_per_v=params.fig9_dc_frequency_gain_hz_per_v,
         unserved_frequency_gain_hz_per_kw=params.fig9_unserved_frequency_gain_hz_per_kw,
+        pcc_load_step_gain_v_per_kw=params.fig9_pcc_load_step_gain_v_per_kw,
+        pcc_wt_load_drop_gain_v_per_kw=params.fig9_pcc_wt_load_drop_gain_v_per_kw,
+        pcc_diesel_step_gain_v_per_kw=params.fig9_pcc_diesel_step_gain_v_per_kw,
+        pcc_wind_step_gain_v_per_kw=params.fig9_pcc_wind_step_gain_v_per_kw,
+        pcc_transient_decay=params.fig9_pcc_transient_decay,
         frequency_response=params.fig9_frequency_response,
         inverter_efficiency=params.fig9_inverter_efficiency,
     )
