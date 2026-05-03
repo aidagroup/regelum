@@ -39,7 +39,7 @@ The graph is high-level; each phase is itself made of smaller pieces called
 
 | Phase | Nodes | What happens |
 |---|---|---|
-| <span class="phase-label phase-label--measure">measure</span> | `Clock`, `Network` | Advance the tick counter; sample the current bandwidth. |
+| <span class="phase-label phase-label--measure">measure</span> | `Network` | Sample the current bandwidth from the system clock. |
 | <span class="phase-label phase-label--decide">decide</span> | `QualityPolicy` | Compare projected drain rate against the buffer; set `stalling`. |
 | <span class="phase-label phase-label--drop-quality">drop_quality</span> | `BitrateController` | Drop the target bitrate by one rung. |
 | <span class="phase-label phase-label--play">play</span> | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
@@ -52,19 +52,16 @@ The node colors correspond to the phase colors in the table above:
 
 ```mermaid
 flowchart LR
-    clock["Clock"]
     network["Network"]
     policy["QualityPolicy"]
     controller["BitrateController"]
     decoder["Decoder"]
     session["MediaSession"]
     logger["Logger"]
-    clock_state(("state"))
     controller_state(("state"))
     session_state(("state"))
     logger_state(("state"))
 
-    clock --> network
     network --> policy
     network --> decoder
     network --> logger
@@ -75,9 +72,6 @@ flowchart LR
     session --> logger
     session --> policy
     policy --> logger
-    clock --> logger
-
-    clock_state -.-> clock
     controller_state -.-> controller
     session_state -.-> session
     logger_state -.-> logger
@@ -88,11 +82,11 @@ flowchart LR
     classDef play fill:#15803d22,stroke:#15803d;
     classDef state fill:#94a3b822,stroke:#94a3b8,stroke-dasharray:3 3;
 
-    class clock,network measure;
+    class network measure;
     class policy decide;
     class controller dropQuality;
     class decoder,session,logger play;
-    class clock_state,controller_state,session_state,logger_state state;
+    class controller_state,session_state,logger_state state;
 ```
 
 ??? example "Full code listing: `examples/video_player.py`"
@@ -363,7 +357,7 @@ class MediaSession(rg.Node):
 
 `buffer_seconds` is read by `QualityPolicy` in `decide` before
 `MediaSession` writes it in `play`, so it needs `initial=10.0`.
-The same idea applies to persistent outputs such as `Clock.tick`,
+The same idea applies to persistent outputs such as
 `Network.bandwidth_kbps`, `BitrateController.value`, and
 `QualityPolicy.stalling`.
 
@@ -458,23 +452,42 @@ def run(self, inputs: Inputs) -> Outputs:
 ```
 
 No-input nodes may write `run(self)`.
-Compact nodes may declare inputs directly on `run`; the video player uses this
-style for `Clock`, where there is just one self-referential input:
+Compact nodes may declare inputs directly on `run`; this is useful for small
+nodes with one or two inputs:
 
 ```python
-class Clock(rg.Node):
+class TickCounter(rg.Node):
     class Outputs(rg.NodeOutputs):
         tick: int = rg.Output(initial=0)
 
     def run(
         self,
-        tick: int = rg.Input(source=lambda: Clock.Outputs.tick),
+        tick: int = rg.Input(source=lambda: TickCounter.Outputs.tick),
     ) -> Outputs:
         return self.Outputs(tick=tick + 1)
 ```
 
 Do not mix compact `run` inputs with a `NodeInputs` namespace in the same
 node.
+
+### System clock inputs
+
+Every `rg.PhasedReactiveSystem` has a built-in system clock. It is not a
+`Node`, is not listed in any phase, and `Clock` is a reserved node name.
+Read it through `rg.Clock.tick` and `rg.Clock.time`:
+
+```python
+class Network(rg.Node):
+    class Inputs(rg.NodeInputs):
+        tick: int = rg.Input(source=rg.Clock.tick)
+        time: float = rg.Input(source=rg.Clock.time)
+```
+
+`Clock.tick` is the integer tick index. `Clock.time` is the physical time
+computed from `tick * base_dt` for discrete-only systems, or from the latest
+continuous integration boundary when the tick contains continuous dynamics.
+The clock can also be used in guards, for example
+`rg.If(rg.V(rg.Clock.tick) >= 10, rg.terminate)`.
 
 ### Mutating inputs
 

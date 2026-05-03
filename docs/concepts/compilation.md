@@ -4,8 +4,7 @@
 
 By this point the video player has three layers of declarations:
 
-- node instances such as `Clock`, `Network`, `QualityPolicy`, and
-  `MediaSession`;
+- node instances such as `Network`, `QualityPolicy`, and `MediaSession`;
 - phases such as `measure`, `decide`, `drop_quality`, and `play`;
 - transitions that say how one phase hands control to the next.
 
@@ -38,7 +37,7 @@ flowchart LR
 
 | Phase | Nodes | What happens |
 |---|---|---|
-| <span class="phase-label phase-label--measure">measure</span> | `Clock`, `Network` | Advance the tick counter; sample the current bandwidth. |
+| <span class="phase-label phase-label--measure">measure</span> | `Network` | Sample the current bandwidth from the system clock. |
 | <span class="phase-label phase-label--decide">decide</span> | `QualityPolicy` | Compare projected drain rate against the buffer; set `stalling`. |
 | <span class="phase-label phase-label--drop-quality">drop_quality</span> | `BitrateController` | Drop the target bitrate by one rung. |
 | <span class="phase-label phase-label--play">play</span> | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
@@ -51,19 +50,16 @@ The node colors correspond to the phase colors in the table above:
 
 ```mermaid
 flowchart LR
-    clock["Clock"]
     network["Network"]
     policy["QualityPolicy"]
     controller["BitrateController"]
     decoder["Decoder"]
     session["MediaSession"]
     logger["Logger"]
-    clock_state(("state"))
     controller_state(("state"))
     session_state(("state"))
     logger_state(("state"))
 
-    clock --> network
     network --> policy
     network --> decoder
     network --> logger
@@ -74,9 +70,6 @@ flowchart LR
     session --> logger
     session --> policy
     policy --> logger
-    clock --> logger
-
-    clock_state -.-> clock
     controller_state -.-> controller
     session_state -.-> session
     logger_state -.-> logger
@@ -87,11 +80,11 @@ flowchart LR
     classDef play fill:#15803d22,stroke:#15803d;
     classDef state fill:#94a3b822,stroke:#94a3b8,stroke-dasharray:3 3;
 
-    class clock,network measure;
+    class network measure;
     class policy decide;
     class controller dropQuality;
     class decoder,session,logger play;
-    class clock_state,controller_state,session_state,logger_state state;
+    class controller_state,session_state,logger_state state;
 ```
 
 ??? example "Full code listing: `examples/video_player.py`"
@@ -111,7 +104,6 @@ import regelum as rg
 
 
 def build_system() -> rg.PhasedReactiveSystem:
-    clock = Clock()
     network = Network()
     policy = QualityPolicy()
     controller = BitrateController()
@@ -123,7 +115,7 @@ def build_system() -> rg.PhasedReactiveSystem:
         phases=[
             rg.Phase(
                 "measure",
-                nodes=(clock, network),
+                nodes=(network,),
                 transitions=(rg.Goto("decide"),),
                 is_initial=True,
             ),
@@ -199,9 +191,8 @@ Compilation resolves:
 For the video player, the report's `phase_schedules` shows the topologically
 ordered nodes per phase and `minimal_initial_outputs` lists the six outputs
 that need initial state
-(`Clock.tick`, `Network.bandwidth_kbps`, `BitrateController.value`,
-`QualityPolicy.stalling`, `MediaSession.buffer_seconds`,
-`Logger.history`).
+(`Network.bandwidth_kbps`, `BitrateController.value`,
+`QualityPolicy.stalling`, `MediaSession.buffer_seconds`, `Logger.history`).
 
 ## Compile report
 
@@ -299,6 +290,14 @@ The feedback loop closes between ticks: `MediaSession.buffer_seconds` written
 in `play` of tick N is read by `QualityPolicy` in `decide` of tick N+1, and
 that read is what selects the branch.
 
+Every system also has a built-in `rg.Clock`.
+`Clock.tick` is incremented after the whole tick terminates.
+In a discrete-only system, `Clock.time` advances with the tick by `base_dt`.
+When a tick contains a continuous phase, `Clock.time` advances immediately
+after that continuous phase, so later phases in the same tick can observe the
+new physical time.
+See [Continuous dynamics](continuous.md) for the ODE resolution rules.
+
 ### Step order
 
 One `step()` starts at the initial phase and follows transitions until the
@@ -323,7 +322,6 @@ A 30-tick run of the player produces records like:
 ```python
 for record in records:
     print(record.phase, record.node, record.outputs)
-# measure Clock {'tick': 7}
 # measure Network {'bandwidth_kbps': 600.0}
 # decide  QualityPolicy {'stalling': False}
 # play    Decoder {'fetched_seconds': 0.278}
@@ -345,6 +343,8 @@ State persists across ticks unless `reset()` is called.
 ### State access
 
 Use `snapshot()` to inspect current state.
+It returns user node outputs and committed ODE state values; system clock
+fields are read explicitly.
 
 ```python
 snapshot = system.snapshot()
@@ -356,6 +356,8 @@ Use `read(...)` when code has an output reference.
 
 ```python
 buffer = system.read(session.Outputs.buffer_seconds)
+tick = system.read(rg.Clock.tick)
+time = system.read(rg.Clock.time)
 ```
 
 ### Reset
@@ -386,4 +388,5 @@ update from `MediaSession` and the freshly committed bitrate.
 - State persists between ticks.
 - `reset()` clears state and history.
 - `step()` returns execution records.
-- `snapshot()` returns a copy of the current state mapping.
+- `snapshot()` returns user-visible state; use `read(rg.Clock.time)` for clock
+  fields.

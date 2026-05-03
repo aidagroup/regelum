@@ -5,7 +5,10 @@ import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from fractions import Fraction
+from functools import reduce
 from itertools import product
+from math import gcd
 from typing import (
     Annotated,
     Any,
@@ -29,10 +32,27 @@ StateSnapshot = dict[str, Any]
 Predicate = Callable[[StateSnapshot], bool]
 InitialValue = Any | Callable[[], Any] | Callable[[Any], Any]
 _MISSING = object()
+TimeStep = Fraction | int | str
+BaseTimeStep = TimeStep | Literal["auto"]
+SYSTEM_CLOCK = "Clock"
+SYSTEM_OUTPUTS = frozenset((f"{SYSTEM_CLOCK}.tick", f"{SYSTEM_CLOCK}.time"))
 
 
 class ConnectablePort(Protocol):
     def connect(self, other: Any) -> Connection: ...
+
+
+@dataclass(frozen=True)
+class SystemSource:
+    path: str
+
+
+class _ClockNamespace:
+    tick = SystemSource(f"{SYSTEM_CLOCK}.tick")
+    time = SystemSource(f"{SYSTEM_CLOCK}.time")
+
+
+Clock = _ClockNamespace()
 
 
 class Expr:
@@ -73,10 +93,10 @@ class Expr:
     def __invert__(self) -> Expr:
         return UnaryExpr("not", self)
 
-    def __eq__(self, other: object) -> Expr:  # type: ignore[override]
+    def __eq__(self, other: object) -> Expr:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         return BinaryExpr("eq", self, _as_expr(other))
 
-    def __ne__(self, other: object) -> Expr:  # type: ignore[override]
+    def __ne__(self, other: object) -> Expr:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         return BinaryExpr("ne", self, _as_expr(other))
 
     def __lt__(self, other: Any) -> Expr:
@@ -318,7 +338,7 @@ class OutputPort(Generic[T]):
         return self.path
 
 
-type ResolvedOutputSource[T] = OutputPort[T] | BoundOutputPort[T] | str
+type ResolvedOutputSource[T] = OutputPort[T] | BoundOutputPort[T] | SystemSource | str
 type OutputSource[T] = ResolvedOutputSource[T] | Callable[[], ResolvedOutputSource[T]]
 
 
@@ -368,9 +388,10 @@ def connect(
 ) -> Connection:
     if not isinstance(input_port, BoundInputPort):
         raise TypeError(f"connect(...) expects an input port on the left side; got {input_port!r}.")
-    if not isinstance(output, (BoundOutputPort, OutputPort, str)):
+    if not isinstance(output, (BoundOutputPort, OutputPort, SystemSource, str)):
         raise TypeError(
-            "connect(...) expects an output port or output reference on the right side; "
+            "connect(...) expects an output port or output reference, or system source on "
+            "the right side; "
             f"got {output!r}."
         )
     return Connection(input=input_port, source=output)
@@ -476,6 +497,39 @@ def _accepts_keyword(callable_: Callable[..., Any], keyword: str) -> bool:
     return False
 
 
+def _parse_time_step(value: Any, *, field_name: str) -> Fraction:
+    if isinstance(value, bool):
+        raise TypeError(f"{field_name} must be a positive Fraction, int, or decimal string.")
+    if isinstance(value, Fraction):
+        parsed = value
+    elif isinstance(value, int):
+        parsed = Fraction(value, 1)
+    elif isinstance(value, str):
+        parsed = Fraction(value)
+    elif isinstance(value, float):
+        raise TypeError(
+            f"{field_name} must not be a float; use a decimal string or Fraction instead."
+        )
+    else:
+        raise TypeError(f"{field_name} must be a positive Fraction, int, or decimal string.")
+    if parsed <= 0:
+        raise ValueError(f"{field_name} must be positive.")
+    return parsed
+
+
+def _gcd_fraction(values: Iterable[Fraction]) -> Fraction:
+    value_tuple = tuple(values)
+    if not value_tuple:
+        return Fraction(1, 1)
+    common_denominator = reduce(_lcm, (value.denominator for value in value_tuple), 1)
+    scaled = [value.numerator * (common_denominator // value.denominator) for value in value_tuple]
+    return Fraction(reduce(gcd, scaled), common_denominator)
+
+
+def _lcm(left: int, right: int) -> int:
+    return abs(left * right) // gcd(left, right)
+
+
 @dataclass_transform(field_specifiers=(Input,))
 class NodeInputs:
     def __init__(self, **values: Any) -> None:
@@ -551,7 +605,7 @@ class Node:
             inputs_cls = type("Inputs", (NodeInputs,), dict(run_inputs))
             for name, port in run_inputs.items():
                 port.__set_name__(inputs_cls, name)
-            cls.Inputs = inputs_cls
+            cls.Inputs = inputs_cls  # ty: ignore[invalid-assignment]
             cls._input_namespace_name = "Inputs"
             cls._input_namespace_cls = inputs_cls
             cls._run_input_mode = "parameters"
@@ -570,29 +624,44 @@ class Node:
             self: Node,
             *args: Any,
             name: str | None = None,
+            dt: TimeStep | None = None,
             **kwargs: Any,
         ) -> None:
-            self._initialize_node(name=name)
+            self._initialize_node(name=name, dt=dt)
             if original_init is not None:
                 if _accepts_keyword(original_init, "name"):
-                    original_init(self, *args, name=name, **kwargs)
+                    if _accepts_keyword(original_init, "dt") and dt is not None:
+                        original_init(self, *args, name=name, dt=dt, **kwargs)
+                    else:
+                        original_init(self, *args, name=name, **kwargs)
                 else:
-                    original_init(self, *args, **kwargs)
-                if name is not None:
-                    self._initialize_node(name=name)
+                    if _accepts_keyword(original_init, "dt") and dt is not None:
+                        original_init(self, *args, dt=dt, **kwargs)
+                    else:
+                        original_init(self, *args, **kwargs)
+                if name is not None or dt is not None:
+                    self._initialize_node(name=name, dt=dt)
             self._bind_ports()
 
-        cls.__init__ = __init__  # type: ignore[method-assign]
+        cls.__init__ = __init__  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
 
-    def __init__(self, *, name: str | None = None) -> None:
-        self._initialize_node(name=name)
+    def __init__(self, *, name: str | None = None, dt: TimeStep | None = None) -> None:
+        self._initialize_node(name=name, dt=dt)
         self._bind_ports()
 
-    def _initialize_node(self, *, name: str | None = None) -> None:
+    def _initialize_node(
+        self,
+        *,
+        name: str | None = None,
+        dt: TimeStep | None = None,
+    ) -> None:
         class_name = getattr(self.__class__, "name", None)
         self.node_id = name or class_name or self.__class__.__name__
         self.name = self.node_id
         self._name_is_explicit = name is not None
+        self._schedule_dt = (
+            _parse_time_step(dt, field_name=f"{self.node_id}.dt") if dt is not None else None
+        )
         self._connections: dict[str, Connection] = {}
 
     def _bind_ports(self) -> None:
@@ -991,7 +1060,7 @@ def compile_nodes(
                         ),
                     )
                 )
-            elif source not in output_set:
+            elif source not in output_set and source not in SYSTEM_OUTPUTS:
                 issues.append(
                     CompileIssue(
                         location=location,
@@ -1014,9 +1083,11 @@ class PhasedReactiveSystem:
         self,
         *,
         phases: Iterable[Phase],
+        base_dt: BaseTimeStep = "auto",
         connections: Iterable[Connection] = (),
         initial_state: Mapping[Any, Any] | None = None,
         initial_phase: str | None = None,
+        initial_tick: int = 0,
         max_phase_steps: int = 64,
         c2star_depth: int | None = None,
         c2star_max_depth: int = 64,
@@ -1032,6 +1103,15 @@ class PhasedReactiveSystem:
         self.c2star_depth = c2star_depth
         self.c2star_max_depth = c2star_max_depth
         self.strict = strict
+        self._requested_base_dt = base_dt
+        self._continuous_phase_names = tuple(
+            phase.name for phase in self.phases if _is_continuous_phase(phase)
+        )
+        self._base_dt = self._resolve_base_dt(base_dt)
+        self._period_ticks = self._resolve_period_ticks()
+        self._initial_tick = initial_tick
+        self._tick = initial_tick
+        self._time_tick = initial_tick
         self._nodes_by_id = {node.node_id: node for node in self.nodes}
         self._nodes_by_type = self._index_nodes_by_type()
         self._outputs_by_path = self._index_outputs()
@@ -1049,12 +1129,70 @@ class PhasedReactiveSystem:
     def history(self) -> tuple[StepRecord, ...]:
         return tuple(self._history)
 
+    @property
+    def base_dt(self) -> Fraction:
+        return self._base_dt
+
+    @property
+    def tick(self) -> int:
+        return self._tick
+
+    def _resolve_base_dt(self, requested: BaseTimeStep) -> Fraction:
+        if requested != "auto":
+            return _parse_time_step(requested, field_name="base_dt")
+        explicit_dts = self._explicit_schedule_dts()
+        if not any(_is_ode_system(node) for node in self.nodes):
+            return Fraction(1, 1)
+        return _gcd_fraction(explicit_dts)
+
+    def _explicit_schedule_dts(self) -> tuple[Fraction, ...]:
+        values: list[Fraction] = []
+        for node in self.nodes:
+            if _is_ode_system(node):
+                values.append(_ode_system_dt(node))
+                continue
+            node_dt = getattr(node, "_schedule_dt", None)
+            if node_dt is not None:
+                values.append(node_dt)
+        return tuple(values)
+
+    def _resolve_period_ticks(self) -> dict[str, int]:
+        periods: dict[str, int] = {}
+        for node in self.nodes:
+            effective_dt = getattr(node, "_schedule_dt", None) or self._base_dt
+            if _is_ode_system(node):
+                effective_dt = _ode_system_dt(node)
+            ratio = effective_dt / self._base_dt
+            if ratio.denominator != 1:
+                raise ValueError(
+                    f"{node.node_id}.dt={effective_dt} is not an integer multiple "
+                    f"of base_dt={self._base_dt}."
+                )
+            periods[node.node_id] = ratio.numerator
+        return periods
+
+    def _is_due(self, node: Node) -> bool:
+        return self._tick % self._period_ticks[node.node_id] == 0
+
+    def _clock_state(self) -> dict[str, Any]:
+        return {
+            f"{SYSTEM_CLOCK}.tick": self._tick,
+            f"{SYSTEM_CLOCK}.time": float(self._time_tick * self._base_dt),
+        }
+
+    def _commit_clock(self) -> None:
+        self._state.update(self._clock_state())
+
     def reset(
         self,
         initial_state: Mapping[Any, Any] | None = None,
     ) -> None:
         self._state.clear()
         self._history.clear()
+        self._tick = self._initial_tick
+        self._time_tick = self._initial_tick
+        self._reset_ode_runtime_state()
+        self._commit_clock()
         for node in self.nodes:
             for output in node.__class__._outputs.values():
                 if output.initial is _MISSING:
@@ -1068,13 +1206,15 @@ class PhasedReactiveSystem:
             self._state.update(self._initial_state_overrides)
         else:
             self._state.update(self._resolve_initial_state(initial_state))
+        self._sync_ode_runtime_state_from_system_state()
+        self._commit_clock()
 
     def read(self, output: OutputSource[T]) -> T:
         path = self._resolve_output(output)
         return self._state[path]
 
     def snapshot(self) -> dict[str, Any]:
-        return dict(self._state)
+        return {path: value for path, value in self._state.items() if path not in SYSTEM_OUTPUTS}
 
     def _resolve_initial_state(
         self,
@@ -1089,29 +1229,108 @@ class PhasedReactiveSystem:
         records: list[StepRecord] = []
         phase_name: str | None = self.initial_phase
         phase_steps = 0
+        crossed_continuous_phase = False
         while phase_name is not None:
             phase_steps += 1
             if phase_steps > self.max_phase_steps:
                 raise RuntimeError(f"Tick exceeded max_phase_steps={self.max_phase_steps}.")
             phase = self._phases_by_name[phase_name]
-            for node_id in self._phase_schedules[phase.name]:
-                node = self._nodes_by_id[node_id]
-                inputs = self._build_inputs(node)
-                result = _run_node(node, inputs, state_snapshot=self.snapshot())
-                outputs = self._normalize_outputs(node, result)
-                for name, value in outputs.items():
-                    output = node.__class__._outputs[name]
-                    self._state[_node_output_path(node, output)] = value
-                record = StepRecord(
-                    phase=phase.name,
-                    node=node.__class__.__name__,
-                    inputs=dict(vars(inputs)),
-                    outputs=outputs,
-                )
-                records.append(record)
-                self._history.append(record)
+            if _is_continuous_phase(phase):
+                records.extend(self._run_continuous_phase(phase))
+                crossed_continuous_phase = True
+            else:
+                for node_id in self._phase_schedules[phase.name]:
+                    node = self._nodes_by_id[node_id]
+                    if not self._is_due(node):
+                        continue
+                    record = self._run_discrete_node(phase, node)
+                    records.append(record)
+                    self._history.append(record)
             phase_name = self._choose_next_phase(phase)
+        if crossed_continuous_phase:
+            self._tick += 1
+        else:
+            self._tick += 1
+            self._time_tick += 1
+        self._commit_clock()
         return tuple(records)
+
+    def _run_discrete_node(self, phase: Phase, node: Node) -> StepRecord:
+        inputs = self._build_inputs(node)
+        result = _run_node(node, inputs, state_snapshot=dict(self._state))
+        outputs = self._normalize_outputs(node, result)
+        self._commit_node_outputs(node, outputs)
+        return StepRecord(
+            phase=phase.name,
+            node=node.__class__.__name__,
+            inputs=dict(vars(inputs)),
+            outputs=outputs,
+        )
+
+    def _run_continuous_phase(self, phase: Phase) -> tuple[StepRecord, ...]:
+        records: list[StepRecord] = []
+        time_start = float(self._time_tick * self._base_dt)
+        for node in phase.nodes:
+            if not self._is_due(node):
+                continue
+            inputs = self._build_inputs(node)
+            result = _run_node(
+                node,
+                inputs,
+                state_snapshot=dict(self._state),
+                time_start=time_start,
+                time_stop=time_start + float(_ode_system_dt(node)),
+            )
+            outputs = self._normalize_outputs(node, result)
+            self._commit_node_outputs(node, outputs)
+            self._commit_ode_state_outputs(node)
+            record = StepRecord(
+                phase=phase.name,
+                node=node.__class__.__name__,
+                inputs=dict(vars(inputs)),
+                outputs=outputs,
+            )
+            records.append(record)
+            self._history.append(record)
+        self._time_tick += 1
+        self._commit_clock()
+        return tuple(records)
+
+    def _commit_node_outputs(self, node: Node, outputs: dict[str, Any]) -> None:
+        for name, value in outputs.items():
+            output = node.__class__._outputs[name]
+            self._state[_node_output_path(node, output)] = value
+
+    def _commit_ode_state_outputs(self, node: Node) -> None:
+        if not _is_ode_system(node):
+            return
+        for ode_node in _ode_system_nodes(node):
+            for name, value in ode_node._ode_state_values.items():
+                port = ode_node.__class__._outputs[name]
+                self._state[_node_output_path(ode_node, port)] = value
+
+    def _reset_ode_runtime_state(self) -> None:
+        time_s = float(self._time_tick * self._base_dt)
+        for node in self.nodes:
+            if _is_ode_system(node):
+                cast(Any, node)._time_s = time_s
+                continue
+            state_vars = getattr(node.__class__, "_state_vars", {})
+            if state_vars:
+                cast(Any, node)._ode_state_values = {
+                    name: port.initial_value(node) for name, port in state_vars.items()
+                }
+
+    def _sync_ode_runtime_state_from_system_state(self) -> None:
+        for node in self.nodes:
+            state_vars = getattr(node.__class__, "_state_vars", {})
+            if not state_vars:
+                continue
+            values = cast(Any, node)._ode_state_values
+            for name, port in state_vars.items():
+                path = _node_output_path(node, port)
+                if path in self._state:
+                    values[name] = self._state[path]
 
     def run(self, steps: int) -> None:
         for _ in range(steps):
@@ -1124,6 +1343,31 @@ class PhasedReactiveSystem:
         report = compile_nodes(self.nodes, self.connections)
         issues = list(report.issues)
         warnings = list(report.warnings)
+        issues.extend(_check_clock_name_is_reserved(self.nodes))
+        phase_kind_issues = _check_phase_kinds(self.phases)
+        issues.extend(phase_kind_issues)
+        if len(self._continuous_phase_names) > 1:
+            issues.append(
+                CompileIssue(
+                    location="phases",
+                    message=(
+                        "PhasedReactiveSystem supports at most one phase containing ODESystem "
+                        "nodes for now"
+                    ),
+                )
+            )
+        warnings.extend(
+            _schedule_warnings(
+                base_dt=self._base_dt,
+                requested_base_dt=self._requested_base_dt,
+                continuous=bool(self._continuous_phase_names),
+                explicit_dts=tuple(
+                    getattr(node, "_schedule_dt")
+                    for node in self.nodes
+                    if getattr(node, "_schedule_dt", None) is not None and not _is_ode_system(node)
+                ),
+            )
+        )
         completeness_issues = _check_phase_graph_completeness(
             self.phases,
             self.nodes,
@@ -1298,7 +1542,11 @@ class PhasedReactiveSystem:
             for node_id in phase_schedules.get(phase.name, self._phase_node_ids(phase)):
                 for input_path in node_inputs.get(node_id, ()):
                     source_path = inputs.get(input_path)
-                    if source_path is not None and source_path not in written:
+                    if (
+                        source_path is not None
+                        and source_path not in SYSTEM_OUTPUTS
+                        and source_path not in written
+                    ):
                         issues.setdefault(source_path, set()).add(input_path)
                 written.update(node_outputs.get(node_id, ()))
 
@@ -1357,16 +1605,20 @@ class PhasedReactiveSystem:
             return output.path
         if isinstance(output, OutputPort):
             output = output.path
+        if isinstance(output, SystemSource):
+            output = output.path
         output = _normalize_output_path(output)
         if "." not in output:
             raise ValueError(f"Output reference must be 'Node.output', got {output!r}.")
+        if output in SYSTEM_OUTPUTS:
+            return output
         try:
             return self._outputs_by_path[output]
         except KeyError as exc:
             raise KeyError(f"Unknown output reference: {output}") from exc
 
     def _choose_next_phase(self, phase: Phase) -> str | None:
-        snapshot = self.snapshot()
+        snapshot = dict(self._state)
         enabled = [
             transition
             for transition in _effective_transitions(phase)
@@ -1417,10 +1669,16 @@ def _run_node(
     inputs: NodeInputs,
     *,
     state_snapshot: StateSnapshot | None = None,
+    time_start: float | None = None,
+    time_stop: float | None = None,
 ) -> Any:
     kwargs: dict[str, Any] = {}
     if state_snapshot is not None and _accepts_keyword(node.run, "state_snapshot"):
         kwargs["state_snapshot"] = state_snapshot
+    if time_start is not None and _accepts_keyword(node.run, "time_start"):
+        kwargs["time_start"] = time_start
+    if time_stop is not None and _accepts_keyword(node.run, "time_stop"):
+        kwargs["time_stop"] = time_stop
     if node.__class__._run_input_mode == "parameters":
         return node.run(**vars(inputs), **kwargs)
     if node.__class__._inputs or _run_requires_inputs(node):
@@ -1705,6 +1963,9 @@ def _resolve_guard_variable_path(
     outputs_by_path: dict[str, str],
     class_output_paths: dict[str, tuple[str, ...]],
 ) -> str:
+    variable = _normalize_output_path(variable)
+    if variable in SYSTEM_OUTPUTS:
+        return variable
     try:
         return outputs_by_path[variable]
     except KeyError:
@@ -1750,12 +2011,91 @@ def _nodes_from_phases(phases: tuple[Phase, ...]) -> tuple[Node, ...]:
     seen: set[int] = set()
     for phase in phases:
         for node in phase.nodes:
-            identity = id(node)
-            if identity in seen:
-                continue
-            nodes.append(node)
-            seen.add(identity)
+            for expanded_node in _expand_phase_node(node):
+                identity = id(expanded_node)
+                if identity in seen:
+                    continue
+                nodes.append(expanded_node)
+                seen.add(identity)
     return tuple(nodes)
+
+
+def _expand_phase_node(node: Node) -> tuple[Node, ...]:
+    if _is_ode_system(node):
+        return (node, *_ode_system_nodes(node))
+    return (node,)
+
+
+def _is_ode_system(node: Node) -> bool:
+    return bool(getattr(node, "_is_ode_system", False))
+
+
+def _ode_system_dt(node: Node) -> Fraction:
+    return cast(Any, node).dt
+
+
+def _ode_system_nodes(node: Node) -> tuple[Any, ...]:
+    return tuple(cast(Any, node).nodes)
+
+
+def _is_continuous_phase(phase: Phase) -> bool:
+    return bool(phase.nodes) and all(_is_ode_system(node) for node in phase.nodes)
+
+
+def _is_discrete_phase(phase: Phase) -> bool:
+    return all(not _is_ode_system(node) for node in phase.nodes)
+
+
+def _check_phase_kinds(phases: tuple[Phase, ...]) -> list[CompileIssue]:
+    issues: list[CompileIssue] = []
+    for phase in phases:
+        if _is_continuous_phase(phase) or _is_discrete_phase(phase):
+            continue
+        issues.append(
+            CompileIssue(
+                location=phase.name,
+                message="phase cannot mix ODESystem nodes with ordinary nodes",
+            )
+        )
+    return issues
+
+
+def _check_clock_name_is_reserved(nodes: tuple[Node, ...]) -> list[CompileIssue]:
+    return [
+        CompileIssue(
+            location=node.node_id,
+            message="Clock is a reserved system source name",
+        )
+        for node in nodes
+        if node.node_id == SYSTEM_CLOCK
+    ]
+
+
+def _schedule_warnings(
+    *,
+    base_dt: Fraction,
+    requested_base_dt: BaseTimeStep,
+    continuous: bool,
+    explicit_dts: tuple[Fraction, ...],
+) -> list[CompileIssue]:
+    if continuous or not explicit_dts:
+        return []
+    common = _gcd_fraction(explicit_dts)
+    if common <= base_dt:
+        return []
+    if requested_base_dt == "auto":
+        message = (
+            f'discrete-only system uses base_dt=1 for base_dt="auto", but all explicit '
+            f"node dt values are multiples of {common}; this creates idle ticks. "
+            f"Set base_dt={common!s} to compress the schedule."
+        )
+    else:
+        message = (
+            f"explicit base_dt={base_dt} creates idle ticks because all explicit node dt "
+            f"values are multiples of {common}. Set base_dt={common!s} if this is not "
+            "intentional."
+        )
+    return [CompileIssue(location="base_dt", message=message)]
 
 
 def _phase_ref_name(phase_ref: PhaseRef) -> str | None:
@@ -1814,18 +2154,20 @@ def _source_path(source: OutputSource[Any]) -> str:
         return source.path
     if isinstance(source, OutputPort):
         return source.path
+    if isinstance(source, SystemSource):
+        return source.path
     if not isinstance(source, str):
         raise TypeError(
-            "Output source must be an OutputPort, a string reference, "
+            "Output source must be an OutputPort, SystemSource, a string reference, "
             "or a zero-argument callable returning one."
         )
     return _normalize_output_path(source)
 
 
 def _resolve_lazy_source(source: OutputSource[T]) -> ResolvedOutputSource[T]:
-    if callable(source) and not isinstance(source, OutputPort):
-        source = source()
-    return source
+    if isinstance(source, (BoundOutputPort, OutputPort, SystemSource, str)):
+        return source
+    return source()
 
 
 def _normalize_output_path(path: str) -> str:
@@ -2172,6 +2514,8 @@ def _check_c3_for_phase_with_z3(
     transitions: tuple[EffectiveTransition, ...],
 ) -> list[CompileIssue]:
     output_types = _output_types(nodes)
+    output_types[f"{SYSTEM_CLOCK}.tick"] = int
+    output_types[f"{SYSTEM_CLOCK}.time"] = float
     domains = _finite_domains_by_path(nodes)
     ctx = Z3Context(output_types, domains=domains)
     try:

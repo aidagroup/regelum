@@ -16,6 +16,7 @@ Phase graph::
 from __future__ import annotations
 
 from regelum import (
+    Clock,
     Else,
     Goto,
     If,
@@ -36,19 +37,6 @@ TOP_BITRATE_KBPS = BITRATE_LADDER_KBPS[-1]
 STALL_HORIZON_SECONDS = 4.0
 
 
-class Clock(Node):
-    """Counts ticks; lets other nodes parameterize their behavior in time."""
-
-    class Outputs(NodeOutputs):
-        tick: int = Output(initial=0)
-
-    def run(
-        self,
-        tick: int = Input(source=lambda: Clock.Outputs.tick),
-    ) -> Outputs:
-        return self.Outputs(tick=tick + 1)
-
-
 class Network(Node):
     """Stochastic-looking but deterministic bandwidth model.
 
@@ -58,7 +46,7 @@ class Network(Node):
     """
 
     class Inputs(NodeInputs):
-        tick: int = Input(source=Clock.Outputs.tick)
+        tick: int = Input(source=Clock.tick)
 
     class Outputs(NodeOutputs):
         bandwidth_kbps: float = Output(initial=float(TOP_BITRATE_KBPS))
@@ -159,7 +147,7 @@ class Logger(Node):
     Sample = tuple[int, float, int, float, bool]
 
     class Inputs(NodeInputs):
-        tick: int = Input(source=Clock.Outputs.tick)
+        tick: int = Input(source=Clock.tick)
         bandwidth_kbps: float = Input(source=Network.Outputs.bandwidth_kbps)
         bitrate_kbps: int = Input(source=lambda: BitrateController.Outputs.value)
         buffer_seconds: float = Input(source=lambda: MediaSession.Outputs.buffer_seconds)
@@ -182,7 +170,6 @@ class Logger(Node):
 
 
 def build_system() -> PhasedReactiveSystem:
-    clock = Clock()
     network = Network()
     policy = QualityPolicy()
     controller = BitrateController()
@@ -194,7 +181,7 @@ def build_system() -> PhasedReactiveSystem:
         phases=[
             Phase(
                 "measure",
-                nodes=(clock, network),
+                nodes=(network,),
                 transitions=(Goto("decide"),),
                 is_initial=True,
             ),
@@ -241,7 +228,7 @@ def main() -> None:
         path = " -> ".join(path_phases)
         snapshot = system.snapshot()
         print(
-            f"{snapshot['Clock.tick']:4d} | "
+            f"{system.read(Clock.tick):4d} | "
             f"{snapshot['Network.bandwidth_kbps']:8.0f} | "
             f"{snapshot['BitrateController.value']:7d} | "
             f"{snapshot['MediaSession.buffer_seconds']:9.2f} | "

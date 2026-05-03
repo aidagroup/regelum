@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, cast, dataclass_transform
@@ -16,6 +17,8 @@ from regelum.core import (
     NodeOutputs,
     OutputPort,
     StateSnapshot,
+    SystemSource,
+    _parse_time_step,
 )
 
 Scalar = int | float
@@ -96,9 +99,11 @@ class ODENode(Node):
         }
 
     def state(self) -> NodeState:
+        if self.__class__._state_namespace_cls is None:
+            raise RuntimeError(f"{self.__class__.__name__} has no State namespace.")
         return self.__class__._state_namespace_cls(**self._ode_state_values)
 
-    def dstate(self, inputs: NodeInputs, state: NodeState) -> NodeState:
+    def dstate(self, inputs: Any, state: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
     def run(self, _inputs: NodeInputs | None = None) -> dict[str, Any]:
@@ -128,15 +133,17 @@ class _CasadiGraph:
 
 
 class ODESystem(Node):
+    _is_ode_system = True
+
     def __init__(
         self,
         *,
         nodes: Sequence[ODENode],
-        dt: float,
+        dt: Any,
         method: str = "LSODA",
     ) -> None:
         self.nodes = tuple(nodes)
-        self.dt = dt
+        self.dt = _parse_time_step(dt, field_name="ODESystem.dt")
         self.method = method
         self._time_s = 0.0
         self._casadi_graph: _CasadiGraph | None = None
@@ -151,21 +158,25 @@ class ODESystem(Node):
         _inputs: NodeInputs | None = None,
         *,
         state_snapshot: StateSnapshot,
+        time_start: float | None = None,
+        time_stop: float | None = None,
     ) -> dict[str, Any]:
         x0 = self._pack_state()
         graph = self._get_casadi_graph(state_snapshot)
         parameters = self._pack_parameters(graph.parameter_fields, state_snapshot)
+        start = self._time_s if time_start is None else time_start
+        stop = start + float(self.dt) if time_stop is None else time_stop
         result = solve_ivp(
-            lambda _time_s, state: _casadi_vector(graph.rhs_function(state, parameters)),
-            (self._time_s, self._time_s + self.dt),
+            lambda time_s, state: _casadi_vector(graph.rhs_function(time_s, state, parameters)),
+            (start, stop),
             x0,
             method=self.method,
             jac=lambda _time_s, state: _casadi_matrix(
-                graph.jacobian_function(state, parameters)
+                graph.jacobian_function(_time_s, state, parameters)
             ),
         )
         self._unpack_state([float(value) for value in result.y[:, -1]])
-        self._time_s += self.dt
+        self._time_s = stop
         return {}
 
     def _get_casadi_graph(self, state_snapshot: StateSnapshot) -> _CasadiGraph:
@@ -186,7 +197,12 @@ class ODESystem(Node):
             field.node._ode_state_values[field.name] = _unflatten(chunk, field.shape)
             offset += field.size
 
-    def _dstate_from_current_node_state(self, state_snapshot: StateSnapshot) -> list[Any]:
+    def _dstate_from_current_node_state(
+        self,
+        state_snapshot: StateSnapshot,
+        *,
+        time: Any = None,
+    ) -> list[Any]:
         snapshot = dict(state_snapshot)
         for node in self.nodes:
             for name, value in node._ode_state_values.items():
@@ -196,7 +212,11 @@ class ODESystem(Node):
         derivatives: list[float] = []
         for node in self.nodes:
             inputs = _build_node_inputs(node, snapshot)
-            dstate = node.dstate(inputs, node.state())
+            state = node.state()
+            if _accepts_dstate_time(node):
+                dstate = node.dstate(inputs, state, time=time)
+            else:
+                dstate = node.dstate(inputs, state)
             derivatives.extend(
                 value
                 for name in node.__class__._state_vars
@@ -208,11 +228,9 @@ class ODESystem(Node):
         self,
         state_snapshot: StateSnapshot,
     ) -> _CasadiGraph:
-        original_state = {
-            node: dict(node._ode_state_values)
-            for node in self.nodes
-        }
+        original_state = {node: dict(node._ode_state_values) for node in self.nodes}
         try:
+            time = ca.MX.sym("t")
             x = ca.MX.sym("x", len(self._pack_state()))
             parameter_fields = self._parameter_fields(state_snapshot)
             p = ca.MX.sym("p", sum(field.size for field in parameter_fields))
@@ -228,12 +246,14 @@ class ODESystem(Node):
                 chunk = [x[index] for index in range(offset, offset + field.size)]
                 field.node._ode_state_values[field.name] = _unflatten(chunk, field.shape)
                 offset += field.size
-            dstate = ca.vertcat(*self._dstate_from_current_node_state(parameter_snapshot))
+            dstate = ca.vertcat(
+                *self._dstate_from_current_node_state(parameter_snapshot, time=time)
+            )
             jacobian = ca.jacobian(dstate, x)
             return _CasadiGraph(
                 parameter_fields=parameter_fields,
-                rhs_function=ca.Function("ode_rhs", [x, p], [dstate]),
-                jacobian_function=ca.Function("ode_jacobian", [x, p], [jacobian]),
+                rhs_function=ca.Function("ode_rhs", [time, x, p], [dstate]),
+                jacobian_function=ca.Function("ode_jacobian", [time, x, p], [jacobian]),
             )
         except Exception as exc:
             raise CasadiTraceError(
@@ -249,9 +269,7 @@ class ODESystem(Node):
 
     def _parameter_fields(self, state_snapshot: StateSnapshot) -> tuple[_ParameterField, ...]:
         state_paths = {
-            f"{node.node_id}.{name}"
-            for node in self.nodes
-            for name in node.__class__._state_vars
+            f"{node.node_id}.{name}" for node in self.nodes for name in node.__class__._state_vars
         } | {
             f"{node.__class__.__name__}.{name}"
             for node in self.nodes
@@ -270,7 +288,9 @@ class ODESystem(Node):
                 if path not in state_snapshot:
                     raise KeyError(f"Cannot build CasADi ODE graph: missing input source {path!r}.")
                 value = state_snapshot[path]
-                fields.append(_ParameterField(path=path, shape=_shape(value), size=len(_flatten(value))))
+                fields.append(
+                    _ParameterField(path=path, shape=_shape(value), size=len(_flatten(value)))
+                )
                 seen.add(path)
         return tuple(fields)
 
@@ -306,9 +326,7 @@ def _collect_state_vars(nested_cls: type[NodeState] | None) -> dict[str, StateVa
     if nested_cls is None:
         return {}
     return {
-        name: value
-        for name, value in vars(nested_cls).items()
-        if isinstance(value, StateVarPort)
+        name: value for name, value in vars(nested_cls).items() if isinstance(value, StateVarPort)
     }
 
 
@@ -316,11 +334,7 @@ def _collect_existing_outputs(node_cls: type[ODENode]) -> dict[str, OutputPort[A
     outputs = node_cls.__dict__.get("Outputs")
     if not isinstance(outputs, type) or not issubclass(outputs, NodeOutputs):
         return {}
-    return {
-        name: value
-        for name, value in vars(outputs).items()
-        if isinstance(value, OutputPort)
-    }
+    return {name: value for name, value in vars(outputs).items() if isinstance(value, OutputPort)}
 
 
 def _build_node_inputs(node: ODENode, snapshot: StateSnapshot) -> NodeInputs:
@@ -335,12 +349,30 @@ def _build_node_inputs(node: ODENode, snapshot: StateSnapshot) -> NodeInputs:
     return node.__class__.Inputs(**values)
 
 
+def _accepts_dstate_time(node: ODENode) -> bool:
+    try:
+        signature = inspect.signature(node.dstate)
+    except (TypeError, ValueError):
+        return False
+    for parameter in signature.parameters.values():
+        if parameter.kind == inspect.Parameter.VAR_KEYWORD:
+            return True
+        if parameter.name == "time" and parameter.kind in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
+            return True
+    return False
+
+
 def _source_path(source: Any) -> str:
     if callable(source) and not isinstance(source, OutputPort):
         source = source()
     if isinstance(source, BoundOutputPort):
         return source.path
     if isinstance(source, OutputPort):
+        return source.path
+    if isinstance(source, SystemSource):
         return source.path
     if not isinstance(source, str):
         raise TypeError(

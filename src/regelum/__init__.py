@@ -1,4 +1,5 @@
 from regelum.core import (
+    Clock,
     CompileError,
     CompileIssue,
     CompileReport,
@@ -45,6 +46,7 @@ __all__ = [
     "CompileIssue",
     "CompileReport",
     "Connection",
+    "Clock",
     "CasadiTraceError",
     "Elif",
     "Else",

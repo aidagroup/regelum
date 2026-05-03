@@ -62,6 +62,7 @@ nav:
       - Overview: concepts/index.md
       - Nodes: concepts/nodes.md
       - Phases: concepts/phases.md
+      - Continuous Dynamics: concepts/continuous.md
       - Create, Compile, and Run: concepts/compilation.md
   - Authors: authors.md
 
