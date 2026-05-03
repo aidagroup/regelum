@@ -1356,6 +1356,7 @@ class PhasedReactiveSystem:
                     ),
                 )
             )
+        issues.extend(_check_cross_ode_system_coupling(self.phases, report.inputs))
         warnings.extend(
             _schedule_warnings(
                 base_dt=self._base_dt,
@@ -2057,6 +2058,44 @@ def _check_phase_kinds(phases: tuple[Phase, ...]) -> list[CompileIssue]:
                 message="phase cannot mix ODESystem nodes with ordinary nodes",
             )
         )
+    return issues
+
+
+def _check_cross_ode_system_coupling(
+    phases: tuple[Phase, ...],
+    inputs: dict[str, str],
+) -> list[CompileIssue]:
+    issues: list[CompileIssue] = []
+    for phase in phases:
+        if not _is_continuous_phase(phase) or len(phase.nodes) < 2:
+            continue
+        ode_system_by_node_id: dict[str, str] = {}
+        for ode_system in phase.nodes:
+            for ode_node in _ode_system_nodes(ode_system):
+                ode_system_by_node_id[ode_node.node_id] = ode_system.node_id
+        for ode_system in phase.nodes:
+            ode_system_id = ode_system.node_id
+            for ode_node in _ode_system_nodes(ode_system):
+                for input_port in ode_node.__class__._inputs.values():
+                    input_path = _node_input_path(ode_node, input_port)
+                    source_path = inputs.get(input_path)
+                    if source_path is None:
+                        continue
+                    source_node_id = source_path.split(".", maxsplit=1)[0]
+                    source_system_id = ode_system_by_node_id.get(source_node_id)
+                    if source_system_id is None or source_system_id == ode_system_id:
+                        continue
+                    issues.append(
+                        CompileIssue(
+                            location=input_path,
+                            message=(
+                                "continuous phase contains coupled ODESystem nodes: "
+                                f"{input_path} reads {source_path} across ODESystem "
+                                f"boundary {source_system_id!r} -> {ode_system_id!r}. "
+                                "Put continuously coupled ODENodes into the same ODESystem."
+                            ),
+                        )
+                    )
     return issues
 
 

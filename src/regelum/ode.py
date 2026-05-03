@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import inspect
+import sys
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, cast, dataclass_transform
+from typing import Any, cast, dataclass_transform, get_type_hints
 
 import casadi as ca
 from scipy.integrate import solve_ivp
@@ -12,6 +13,7 @@ from regelum.core import (
     _MISSING,
     BoundOutputPort,
     InitialValue,
+    InputPort,
     Node,
     NodeInputs,
     NodeOutputs,
@@ -80,6 +82,7 @@ class ODENode(Node):
             existing_outputs = _collect_existing_outputs(cls)
             cls.Outputs = type("Outputs", (NodeOutputs,), {**existing_outputs, **state_vars})
         super().__init_subclass__()
+        _install_dstate_input_ports(cls)
         cls._state_namespace_name = state_namespace_name
         cls._state_namespace_cls = state_namespace_cls
         cls._state_vars = state_vars
@@ -213,10 +216,7 @@ class ODESystem(Node):
         for node in self.nodes:
             inputs = _build_node_inputs(node, snapshot)
             state = node.state()
-            if _accepts_dstate_time(node):
-                dstate = node.dstate(inputs, state, time=time)
-            else:
-                dstate = node.dstate(inputs, state)
+            dstate = _call_dstate(node, inputs=inputs, state=state, time=time)
             derivatives.extend(
                 value
                 for name in node.__class__._state_vars
@@ -337,6 +337,49 @@ def _collect_existing_outputs(node_cls: type[ODENode]) -> dict[str, OutputPort[A
     return {name: value for name, value in vars(outputs).items() if isinstance(value, OutputPort)}
 
 
+def _install_dstate_input_ports(node_cls: type[ODENode]) -> None:
+    dstate_inputs = _collect_dstate_input_ports(node_cls)
+    if not dstate_inputs:
+        return
+    if node_cls._inputs:
+        node_cls._input_declaration_error = (
+            "define ODE inputs either as a NodeInputs namespace or as dstate(...) "
+            "Input parameters, not both"
+        )
+        return
+    inputs_cls = type("Inputs", (NodeInputs,), dict(dstate_inputs))
+    for name, port in dstate_inputs.items():
+        port.__set_name__(inputs_cls, name)
+        port.node_cls = node_cls
+    node_cls.Inputs = inputs_cls  # ty: ignore[invalid-assignment]
+    node_cls._input_namespace_name = "Inputs"
+    node_cls._input_namespace_cls = inputs_cls
+    node_cls._run_input_mode = "object"
+    node_cls._inputs = dstate_inputs
+
+
+def _collect_dstate_input_ports(node_cls: type[ODENode]) -> dict[str, InputPort[Any]]:
+    dstate = node_cls.__dict__.get("dstate")
+    if dstate is None:
+        return {}
+    try:
+        signature = inspect.signature(dstate)
+    except (TypeError, ValueError):
+        return {}
+    inputs: dict[str, InputPort[Any]] = {}
+    for name, parameter in signature.parameters.items():
+        if name == "self":
+            continue
+        if parameter.kind not in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
+            continue
+        if isinstance(parameter.default, InputPort):
+            inputs[name] = parameter.default
+    return inputs
+
+
 def _build_node_inputs(node: ODENode, snapshot: StateSnapshot) -> NodeInputs:
     values: dict[str, Any] = {}
     for name, input_port in node.__class__._inputs.items():
@@ -349,20 +392,124 @@ def _build_node_inputs(node: ODENode, snapshot: StateSnapshot) -> NodeInputs:
     return node.__class__.Inputs(**values)
 
 
-def _accepts_dstate_time(node: ODENode) -> bool:
+def _call_dstate(
+    node: ODENode,
+    *,
+    inputs: NodeInputs,
+    state: NodeState,
+    time: Any,
+) -> NodeState:
     try:
         signature = inspect.signature(node.dstate)
     except (TypeError, ValueError):
-        return False
+        return node.dstate(inputs, state)
+
+    values = {
+        "inputs": inputs,
+        "state": state,
+        "time": time,
+    }
+    args: list[Any] = []
+    kwargs: dict[str, Any] = {}
+    type_hints = _dstate_type_hints(node)
+
     for parameter in signature.parameters.values():
+        if parameter.kind == inspect.Parameter.VAR_POSITIONAL:
+            raise TypeError("ODENode.dstate does not support *args parameters.")
         if parameter.kind == inspect.Parameter.VAR_KEYWORD:
-            return True
-        if parameter.name == "time" and parameter.kind in (
+            continue
+        value = _dstate_argument_value(node, parameter, type_hints, values)
+        if value is _MISSING:
+            if parameter.default is inspect.Parameter.empty:
+                raise TypeError(
+                    "ODENode.dstate parameters must be named inputs, state, or time; "
+                    "annotated as the node's Inputs/State namespace; or declared as "
+                    f"a dstate Input parameter; got required parameter {parameter.name!r}."
+                )
+            if isinstance(parameter.default, InputPort):
+                raise TypeError(
+                    f"ODENode.dstate Input parameter {parameter.name!r} was not registered."
+                )
+            continue
+        if parameter.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            inspect.Parameter.KEYWORD_ONLY,
         ):
-            return True
-    return False
+            args.append(value)
+        elif parameter.kind == inspect.Parameter.KEYWORD_ONLY:
+            kwargs[parameter.name] = value
+
+    return node.dstate(*args, **kwargs)
+
+
+def _dstate_argument_value(
+    node: ODENode,
+    parameter: inspect.Parameter,
+    type_hints: dict[str, Any],
+    values: dict[str, Any],
+) -> Any:
+    if parameter.name == "time":
+        return values["time"]
+    if parameter.name in ("inputs", "state"):
+        return values[parameter.name]
+    if parameter.name in node.__class__._inputs:
+        return getattr(values["inputs"], parameter.name)
+    if isinstance(parameter.default, InputPort):
+        return getattr(values["inputs"], parameter.name, _MISSING)
+    annotation = type_hints.get(parameter.name, parameter.annotation)
+    if _is_inputs_annotation(node, annotation):
+        return values["inputs"]
+    if _is_state_annotation(node, annotation):
+        return values["state"]
+    return _MISSING
+
+
+def _dstate_type_hints(node: ODENode) -> dict[str, Any]:
+    module = sys.modules.get(node.__class__.__module__)
+    globalns = vars(module) if module is not None else {}
+    localns: dict[str, Any] = {node.__class__.__name__: node.__class__}
+    input_namespace_cls = node.__class__._input_namespace_cls
+    state_namespace_name = node.__class__._state_namespace_name
+    state_namespace_cls = node.__class__._state_namespace_cls
+    if input_namespace_cls is not None:
+        localns["Inputs"] = input_namespace_cls
+        if node.__class__._input_namespace_name is not None:
+            localns[node.__class__._input_namespace_name] = input_namespace_cls
+    if state_namespace_cls is not None:
+        localns["State"] = state_namespace_cls
+        if state_namespace_name is not None:
+            localns[state_namespace_name] = state_namespace_cls
+    try:
+        return get_type_hints(node.dstate, globalns=globalns, localns=localns)
+    except Exception:
+        return {}
+
+
+def _is_inputs_annotation(node: ODENode, annotation: Any) -> bool:
+    input_namespace_cls = node.__class__._input_namespace_cls
+    if input_namespace_cls is not None and _is_subclass(annotation, input_namespace_cls):
+        return True
+    return _annotation_name(annotation) in {"Inputs", node.__class__._input_namespace_name}
+
+
+def _is_state_annotation(node: ODENode, annotation: Any) -> bool:
+    state_namespace_cls = node.__class__._state_namespace_cls
+    if state_namespace_cls is not None and _is_subclass(annotation, state_namespace_cls):
+        return True
+    return _annotation_name(annotation) in {"State", node.__class__._state_namespace_name}
+
+
+def _is_subclass(annotation: Any, parent: type[Any]) -> bool:
+    try:
+        return isinstance(annotation, type) and issubclass(annotation, parent)
+    except TypeError:
+        return False
+
+
+def _annotation_name(annotation: Any) -> str | None:
+    if isinstance(annotation, str):
+        return annotation
+    return getattr(annotation, "__name__", None)
 
 
 def _source_path(source: Any) -> str:
