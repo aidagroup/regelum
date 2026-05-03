@@ -29,9 +29,56 @@ class Integrator(rg.ODENode):
 ```
 
 `dstate(...)` returns the derivative in the same `State` shape.
-It may be declared as either `dstate(self, inputs, state)` or
+Declare only the arguments the node actually needs.
+The ODE runtime resolves `inputs` and `state` by name or by annotation.
+`time` is a reserved name and is resolved by name.
+Individual input ports can also be declared directly on `dstate` with
+`rg.Input(...)`.
+Arguments may be declared in any order, so these forms are supported:
+
+```python
+def dstate(self, inputs, state, time): ...
+def dstate(self, time, state: State, inputs: Inputs): ...
+def dstate(self, control: Inputs, memory: State): ...
+def dstate(self, time, state: State, a=rg.Input(...), b=rg.Input(...)): ...
+def dstate(self, inputs, state): ...
+def dstate(self, inputs, time): ...
+def dstate(self, time): ...
+def dstate(self, inputs): ...
+def dstate(self, state): ...
+```
+
+`time` may also be keyword-only, for example
 `dstate(self, inputs, state, *, time)`.
-The `time` argument is the continuous solver time, not a sampled node output.
+The `time` value is the continuous solver time, not a sampled node output.
+
+When `dstate` declares input ports directly, those parameter names become the
+ODE node input names and can be connected like ordinary inputs:
+
+```python
+class Plant(rg.ODENode):
+    class State(rg.NodeState):
+        x: float = rg.StateVar(initial=0.0)
+
+    def dstate(
+        self,
+        time,
+        state: State,
+        u: float = rg.Input(source=Controller.Outputs.u),
+    ) -> State:
+        return self.State(x=u - state.x + ca.sin(time))
+```
+
+Sources may be lazy references, just like ordinary node inputs:
+
+```python
+def dstate(
+    self,
+    state: State,
+    load: float = rg.Input(source=lambda: Load.State.current),
+) -> State:
+    ...
+```
 
 The ODE backend is CasADi-only.
 Use CasADi primitives directly inside `dstate`, for example `ca.sin`,
@@ -70,6 +117,10 @@ system = rg.PhasedReactiveSystem(
 
 A phase may not mix `ODESystem` objects with ordinary `Node` objects.
 For now, one `PhasedReactiveSystem` supports at most one continuous phase.
+One continuous phase may contain more than one independent `ODESystem`, but
+cross-system continuous coupling is rejected at compile time.
+If an `ODENode` in one `ODESystem` reads state from an `ODENode` in another
+`ODESystem`, put those ODE nodes into the same `ODESystem`.
 
 ## Resolution Order
 
@@ -95,6 +146,12 @@ class Logger(rg.Node):
         time: float = rg.Input(source=rg.Clock.time)
         x: float = rg.Input(source=Integrator.State.x)
 ```
+
+Multiple `ODESystem` objects in the same continuous phase are treated as
+separate systems. They are valid only when they are independent. Continuous
+state dependencies across `ODESystem` boundaries would imply operator
+splitting/sample-and-hold semantics, so `regelum` currently rejects them
+instead of silently choosing an execution order.
 
 ## Base Time And Scheduling
 

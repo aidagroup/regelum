@@ -108,6 +108,25 @@ class ConstantIntegrator(ODENode):
         return self.State(x=1.0)
 
 
+class CoupledSourceIntegrator(ODENode):
+    class State(NodeState):
+        x: float = StateVar(initial=1.0)
+
+    def dstate(self, state: State) -> State:  # ty: ignore[invalid-method-override]
+        return self.State(x=0.0 * state.x)
+
+
+class CoupledSinkIntegrator(ODENode):
+    class Inputs(NodeInputs):
+        source_x: float = Input(source=lambda: CoupledSourceIntegrator.State.x)
+
+    class State(NodeState):
+        x: float = StateVar(initial=0.0)
+
+    def dstate(self, inputs: Inputs) -> State:  # ty: ignore[invalid-method-override]
+        return self.State(x=inputs.source_x)
+
+
 def test_system_clock_is_readable_but_not_part_of_public_snapshot() -> None:
     counter = Counter()
     system = _one_phase_system(counter)
@@ -217,6 +236,49 @@ def test_prs_allows_only_one_continuous_phase_for_now() -> None:
         )
 
     assert any("at most one phase" in issue.message for issue in exc_info.value.report.issues)
+
+
+def test_independent_ode_systems_can_share_one_continuous_phase() -> None:
+    first_ode = ODESystem(nodes=(ConstantIntegrator(name="first"),), dt="0.1")
+    second_ode = ODESystem(nodes=(ConstantIntegrator(name="second"),), dt="0.1")
+
+    system = PhasedReactiveSystem(
+        phases=[
+            Phase(
+                "plant",
+                nodes=(first_ode, second_ode),
+                transitions=(Goto(terminate),),
+                is_initial=True,
+            )
+        ]
+    )
+
+    system.step()
+
+    assert system.read("first.x") == pytest.approx(0.1)
+    assert system.read("second.x") == pytest.approx(0.1)
+
+
+def test_continuous_phase_rejects_coupled_ode_systems() -> None:
+    source_ode = ODESystem(nodes=(CoupledSourceIntegrator(),), dt="0.1")
+    sink_ode = ODESystem(nodes=(CoupledSinkIntegrator(),), dt="0.1")
+
+    with pytest.raises(CompileError) as exc_info:
+        PhasedReactiveSystem(
+            phases=[
+                Phase(
+                    "plant",
+                    nodes=(source_ode, sink_ode),
+                    transitions=(Goto(terminate),),
+                    is_initial=True,
+                )
+            ]
+        )
+
+    assert any(
+        "Put continuously coupled ODENodes into the same ODESystem" in issue.message
+        for issue in exc_info.value.report.issues
+    )
 
 
 def test_continuous_phase_commits_ode_state_and_updates_time_before_next_phase() -> None:

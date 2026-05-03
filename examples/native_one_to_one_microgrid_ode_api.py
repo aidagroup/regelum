@@ -5,31 +5,8 @@ import math
 from pathlib import Path
 
 import casadi as ca
+import matplotlib.pyplot as plt
 
-from examples.native_two_inverter_microgrid import (
-    DDS,
-    PLL,
-    DroopController,
-    InverseDroopController,
-    MultiPhasePIController,
-    PhaseVector,
-    VoltageSample,
-    abc_to_dq0,
-    abc_to_dq0_cos_sin,
-    add3,
-    clip,
-    clip3,
-    dq0_to_abc,
-    dq0_to_abc_cos_sin,
-    inst_power,
-    inst_reactive,
-    inst_rms,
-    repo_root,
-    save_lcl1_plot,
-    scale3,
-    sub3,
-    zeros3,
-)
 from regelum import (
     Clock,
     Goto,
@@ -43,6 +20,265 @@ from regelum import (
     terminate,
 )
 from regelum.ode import NodeState, ODENode, ODESystem, StateVar
+
+PhaseVector = tuple[float, float, float]
+VoltageSample = tuple[float, float, float, float]
+
+
+def repo_root() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "pyproject.toml").exists() and (parent / "src" / "regelum").exists():
+            return parent
+    raise RuntimeError("Could not locate the regelum repository root.")
+
+
+def zeros3() -> PhaseVector:
+    return (0.0, 0.0, 0.0)
+
+
+def add3(left: PhaseVector, right: PhaseVector) -> PhaseVector:
+    return tuple(left[index] + right[index] for index in range(3))  # type: ignore[return-value]
+
+
+def sub3(left: PhaseVector, right: PhaseVector) -> PhaseVector:
+    return tuple(left[index] - right[index] for index in range(3))  # type: ignore[return-value]
+
+
+def scale3(value: PhaseVector, gain: float) -> PhaseVector:
+    return tuple(component * gain for component in value)  # type: ignore[return-value]
+
+
+def dot3(left: PhaseVector, right: PhaseVector) -> float:
+    return sum(left[index] * right[index] for index in range(3))
+
+
+def clip(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, value))
+
+
+def clip3(value: PhaseVector, lower: float, upper: float) -> PhaseVector:
+    return tuple(clip(component, lower, upper) for component in value)  # type: ignore[return-value]
+
+
+def vector_norm(value: PhaseVector) -> float:
+    return math.sqrt(dot3(value, value))
+
+
+def inst_rms(value: PhaseVector) -> float:
+    return vector_norm(value) / math.sqrt(3.0)
+
+
+def normalise_abc(value: PhaseVector) -> PhaseVector:
+    magnitude = inst_rms(value)
+    if magnitude == 0:
+        return value
+    return scale3(value, 1.0 / magnitude)
+
+
+def abc_to_alpha_beta(abc: PhaseVector) -> tuple[float, float]:
+    alpha = (2.0 / 3.0) * (abc[0] - 0.5 * abc[1] - 0.5 * abc[2])
+    beta = (2.0 / 3.0) * (0.866 * abc[1] - 0.866 * abc[2])
+    return alpha, beta
+
+
+def cos_sin(theta: float) -> tuple[float, float]:
+    return math.cos(theta), math.sin(theta)
+
+
+def dq0_to_abc_cos_sin(dq0: PhaseVector, cos_value: float, sin_value: float) -> PhaseVector:
+    a = cos_value * dq0[0] - sin_value * dq0[1] + dq0[2]
+    cos_shift = cos_value * (-0.5) - sin_value * (-0.866)
+    sin_shift = sin_value * (-0.5) + cos_value * (-0.866)
+    b = cos_shift * dq0[0] - sin_shift * dq0[1] + dq0[2]
+    cos_shift = cos_value * (-0.5) - sin_value * 0.866
+    sin_shift = sin_value * (-0.5) + cos_value * 0.866
+    c = cos_shift * dq0[0] - sin_shift * dq0[1] + dq0[2]
+    return a, b, c
+
+
+def dq0_to_abc(dq0: PhaseVector, theta: float) -> PhaseVector:
+    return dq0_to_abc_cos_sin(dq0, *cos_sin(theta))
+
+
+def abc_to_dq0_cos_sin(abc: PhaseVector, cos_value: float, sin_value: float) -> PhaseVector:
+    cos_shift_neg = cos_value * (-0.5) - sin_value * (-0.866)
+    sin_shift_neg = sin_value * (-0.5) + cos_value * (-0.866)
+    cos_shift_pos = cos_value * (-0.5) - sin_value * 0.866
+    sin_shift_pos = sin_value * (-0.5) + cos_value * 0.866
+    d = (2.0 / 3.0) * (cos_value * abc[0] + cos_shift_neg * abc[1] + cos_shift_pos * abc[2])
+    q = (2.0 / 3.0) * (-sin_value * abc[0] - sin_shift_neg * abc[1] - sin_shift_pos * abc[2])
+    z = sum(abc) / 3.0
+    return d, q, z
+
+
+def abc_to_dq0(abc: PhaseVector, theta: float) -> PhaseVector:
+    return abc_to_dq0_cos_sin(abc, *cos_sin(theta))
+
+
+def inst_power(voltage: PhaseVector, current: PhaseVector) -> float:
+    return dot3(voltage, current)
+
+
+def inst_reactive(voltage: PhaseVector, current: PhaseVector) -> float:
+    rolled_left = (voltage[1], voltage[2], voltage[0])
+    rolled_right = (voltage[2], voltage[0], voltage[1])
+    return -0.5773502691896258 * dot3(sub3(rolled_left, rolled_right), current)
+
+
+class PIController:
+    def __init__(
+        self,
+        *,
+        kp: float,
+        ki: float,
+        limits: tuple[float, float],
+        kb: float = 1.0,
+        dt: float,
+    ) -> None:
+        self.kp = kp
+        self.ki = ki
+        self.limits = limits
+        self.kb = kb
+        self.dt = dt
+        self.integral = 0.0
+        self.windup_compensation = 0.0
+
+    def step(self, error: float, feedforward: float = 0.0) -> float:
+        self.integral += (self.ki * error + self.windup_compensation) * self.dt
+        output = self.kp * error + self.integral
+        clipped = clip(output + feedforward, *self.limits)
+        self.windup_compensation = (output + feedforward - clipped) * self.kb
+        return clipped
+
+
+class MultiPhasePIController:
+    def __init__(self, *, kp: float, ki: float, limits: tuple[float, float], dt: float) -> None:
+        self.controllers = [
+            PIController(kp=kp, ki=ki, limits=limits, dt=dt),
+            PIController(kp=kp, ki=ki, limits=limits, dt=dt),
+            PIController(kp=kp, ki=ki, limits=limits, dt=dt),
+        ]
+
+    def step(
+        self,
+        setpoint: PhaseVector,
+        measured: PhaseVector,
+        feedforward: PhaseVector | None = None,
+    ) -> PhaseVector:
+        if feedforward is None:
+            feedforward = zeros3()
+        return tuple(
+            controller.step(setpoint[index] - measured[index], feedforward[index])
+            for index, controller in enumerate(self.controllers)
+        )  # type: ignore[return-value]
+
+
+class PT1Filter:
+    def __init__(self, *, gain: float, tau: float, dt: float) -> None:
+        self.gain = gain
+        self.tau = tau
+        self.dt = dt
+        self.integral = 0.0
+
+    def step(self, value: float) -> float:
+        output = value * self.gain - self.integral
+        if self.tau != 0:
+            self.integral += output / self.tau * self.dt
+            return self.integral
+        if self.gain != 0:
+            self.integral = 0.0
+            return output
+        return 0.0
+
+
+class DroopController:
+    def __init__(self, *, gain: float, tau: float, nominal: float, dt: float) -> None:
+        inverted_gain = 1.0 / gain if gain != 0 else 0.0
+        self.nominal = nominal
+        self.filter = PT1Filter(gain=inverted_gain, tau=tau, dt=dt)
+
+    def step(self, value: float) -> float:
+        return self.filter.step(value) + self.nominal
+
+
+class InverseDroopController:
+    def __init__(
+        self,
+        *,
+        gain: float,
+        tau: float,
+        nominal: float,
+        tau_filter: float,
+        dt: float,
+    ) -> None:
+        self.gain = gain
+        self.tau = tau
+        self.nominal = nominal
+        self.dt = dt
+        self.previous = 0.0
+        self.input_filter = PT1Filter(gain=1.0, tau=tau_filter, dt=dt)
+
+    def step(self, value: float) -> float:
+        filtered = self.input_filter.step(value - self.nominal)
+        derivative = (filtered - self.previous) / self.dt * self.tau
+        self.previous = filtered
+        if self.gain == 0:
+            return 0.0
+        return filtered * self.gain + derivative
+
+
+class DDS:
+    def __init__(self, *, dt: float, theta_0: float = 0.0) -> None:
+        self.dt = dt
+        self.integral = theta_0
+
+    def step(self, frequency_hz: float) -> float:
+        self.integral += self.dt * frequency_hz
+        if self.integral > 1.0:
+            self.integral -= 1.0
+        return self.integral * 2.0 * math.pi
+
+
+class PLL:
+    def __init__(
+        self,
+        *,
+        kp: float,
+        ki: float,
+        f_nom: float,
+        dt: float,
+        theta_0: float = 0.0,
+    ) -> None:
+        self.pi = PIController(kp=kp, ki=ki, limits=(-math.inf, math.inf), dt=dt)
+        self.dds = DDS(dt=dt, theta_0=theta_0)
+        self.previous_cos_sin = cos_sin(theta_0)
+        self.f_nom = f_nom
+
+    def step(self, voltage: PhaseVector) -> tuple[tuple[float, float], float, float]:
+        normalised = normalise_abc(voltage)
+        alpha_beta = abc_to_alpha_beta(normalised)
+        dphi = alpha_beta[1] * self.previous_cos_sin[0] - alpha_beta[0] * self.previous_cos_sin[1]
+        frequency = self.pi.step(dphi) + self.f_nom
+        theta = self.dds.step(frequency)
+        self.previous_cos_sin = cos_sin(theta)
+        return self.previous_cos_sin, frequency, theta
+
+
+def save_lcl1_plot(samples: tuple[VoltageSample, ...], output: Path) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    time = [row[0] for row in samples]
+    v1 = [row[1] for row in samples]
+    v2 = [row[2] for row in samples]
+    v3 = [row[3] for row in samples]
+
+    fig, ax = plt.subplots(figsize=(6.4, 4.8), dpi=100)
+    ax.plot(time, v1, label="lcl1.capacitor1.v")
+    ax.plot(time, v2, label="lcl1.capacitor2.v")
+    ax.plot(time, v3, label="lcl1.capacitor3.v")
+    ax.set_xlim(0, 0.05)
+    ax.legend()
+    fig.savefig(output)
+    plt.close(fig)
 
 
 class ODEAPIDroopController(Node):
