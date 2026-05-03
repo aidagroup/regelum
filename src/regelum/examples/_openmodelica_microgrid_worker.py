@@ -8,10 +8,10 @@ import traceback
 from functools import partial
 from pathlib import Path
 
-import gym
+import gym  # ty: ignore[unresolved-import]
 import numpy as np
-from openmodelica_microgrid_gym.agents import StaticControlAgent
-from openmodelica_microgrid_gym.aux_ctl import (
+from openmodelica_microgrid_gym.agents import StaticControlAgent  # ty: ignore[unresolved-import]
+from openmodelica_microgrid_gym.aux_ctl import (  # ty: ignore[unresolved-import]
     DroopParams,
     InverseDroopParams,
     MultiPhaseDQ0PIPIController,
@@ -19,7 +19,7 @@ from openmodelica_microgrid_gym.aux_ctl import (
     PI_params,
     PLLParams,
 )
-from openmodelica_microgrid_gym.net import Network
+from openmodelica_microgrid_gym.net import Network  # ty: ignore[unresolved-import]
 
 
 def load_step(t, gain):

@@ -26,6 +26,8 @@ different phases, and move between phases with explicit transitions.
 - **Nodes** declare typed inputs and outputs.
 - **Phases** decide which node instances are active together and how control
   moves between phases.
+- **Continuous nodes** declare ODE state and are integrated through
+  `ODESystem` phases.
 - **Compilation** resolves links, schedules nodes, and catches structural
   mistakes before runtime.
 
@@ -75,8 +77,8 @@ system = rg.PhasedReactiveSystem(
     ],
 )
 
-snapshot = system.step()
-print(snapshot["heater_controller.heater_on"])
+system.step()
+print(system.read(controller.Outputs.heater_on))
 ```
 
 ## Installation

@@ -38,7 +38,7 @@ The graph has four phases:
 
 | Phase | Nodes | What happens |
 |---|---|---|
-| <span class="phase-label phase-label--measure">measure</span> | `Clock`, `Network` | Advance the tick counter; sample the current bandwidth. |
+| <span class="phase-label phase-label--measure">measure</span> | `Network` | Sample the current bandwidth from the system clock. |
 | <span class="phase-label phase-label--decide">decide</span> | `QualityPolicy` | Compare projected drain rate against the buffer; set `stalling`. |
 | <span class="phase-label phase-label--drop-quality">drop_quality</span> | `BitrateController` | Drop the target bitrate by one rung. |
 | <span class="phase-label phase-label--play">play</span> | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
@@ -51,19 +51,16 @@ The node colors correspond to the phase colors in the table above:
 
 ```mermaid
 flowchart LR
-    clock["Clock"]
     network["Network"]
     policy["QualityPolicy"]
     controller["BitrateController"]
     decoder["Decoder"]
     session["MediaSession"]
     logger["Logger"]
-    clock_state(("state"))
     controller_state(("state"))
     session_state(("state"))
     logger_state(("state"))
 
-    clock --> network
     network --> policy
     network --> decoder
     network --> logger
@@ -74,9 +71,6 @@ flowchart LR
     session --> logger
     session --> policy
     policy --> logger
-    clock --> logger
-
-    clock_state -.-> clock
     controller_state -.-> controller
     session_state -.-> session
     logger_state -.-> logger
@@ -87,11 +81,11 @@ flowchart LR
     classDef play fill:#15803d22,stroke:#15803d;
     classDef state fill:#94a3b822,stroke:#94a3b8,stroke-dasharray:3 3;
 
-    class clock,network measure;
+    class network measure;
     class policy decide;
     class controller dropQuality;
     class decoder,session,logger play;
-    class clock_state,controller_state,session_state,logger_state state;
+    class controller_state,session_state,logger_state state;
 ```
 
 ??? example "Full code listing: `examples/video_player.py`"
@@ -144,8 +138,8 @@ A phase declaration has three main parts:
 
 It may also set `is_initial=True`.
 The initial phase is where every tick enters the phase graph.
-For the player, that is `measure`: a tick begins by sampling the clock and the
-network before any decision is taken.
+For the player, that is `measure`: a tick begins by sampling the network
+before any decision is taken.
 
 Phase names must be unique inside one `PhasedReactiveSystem`, because
 transitions target phases by name.
@@ -171,14 +165,14 @@ and state paths are unambiguous.
 ```python
 rg.Phase(
     "measure",
-    nodes=(clock, network),
+    nodes=(network,),
     transitions=(rg.Goto("decide"),),
     is_initial=True,
 )
 ```
 
-Here `nodes=(clock, network)` is the set of node instances active in the
-`measure` phase.
+Here `nodes=(network,)` is the set of node instances active in the `measure`
+phase.
 `transitions=(rg.Goto("decide"),)` is the phase's transition rule set: in this
 case, the rule is unconditional and sends control to `decide` after `measure`
 finishes.
@@ -208,7 +202,7 @@ Pass one of three target forms to `Goto`:
 ```{.python .annotate}
 rg.Phase(
     "measure",
-    nodes=(clock, network),
+    nodes=(network,),
     transitions=(rg.Goto("decide"),),  # (1)
     is_initial=True,
 )

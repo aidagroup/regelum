@@ -163,7 +163,7 @@ nodes:
 
 | Phase | Nodes | What happens |
 |---|---|---|
-| <span class="phase-label phase-label--measure">measure</span> | `Clock`, `Network` | Advance the tick counter; sample the current bandwidth. |
+| <span class="phase-label phase-label--measure">measure</span> | `Network` | Sample the current bandwidth from the system clock. |
 | <span class="phase-label phase-label--decide">decide</span> | `QualityPolicy` | Compare projected drain rate against the buffer; set `stalling`. |
 | <span class="phase-label phase-label--drop-quality">drop_quality</span> | `BitrateController` | Drop the target bitrate by one rung. |
 | <span class="phase-label phase-label--play">play</span> | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
@@ -176,19 +176,16 @@ The node colors correspond to the phase colors in the table above:
 
 ```mermaid
 flowchart LR
-    clock["Clock"]
     network["Network"]
     policy["QualityPolicy"]
     controller["BitrateController"]
     decoder["Decoder"]
     session["MediaSession"]
     logger["Logger"]
-    clock_state(("state"))
     controller_state(("state"))
     session_state(("state"))
     logger_state(("state"))
 
-    clock --> network
     network --> policy
     network --> decoder
     network --> logger
@@ -199,9 +196,6 @@ flowchart LR
     session --> logger
     session --> policy
     policy --> logger
-    clock --> logger
-
-    clock_state -.-> clock
     controller_state -.-> controller
     session_state -.-> session
     logger_state -.-> logger
@@ -212,11 +206,11 @@ flowchart LR
     classDef play fill:#15803d22,stroke:#15803d;
     classDef state fill:#94a3b822,stroke:#94a3b8,stroke-dasharray:3 3;
 
-    class clock,network measure;
+    class network measure;
     class policy decide;
     class controller dropQuality;
     class decoder,session,logger play;
-    class clock_state,controller_state,session_state,logger_state state;
+    class controller_state,session_state,logger_state state;
 ```
 
 This is where the framework's actual work happens: writing node classes,
@@ -238,5 +232,7 @@ up — same model, opposite direction:
    initialization, and a `run` method.
 2. **Phases** — assembling node instances into phases, declaring transitions,
    and reading the compiled schedule.
-3. **Create, compile, and run** — constructing `rg.PhasedReactiveSystem`,
+3. **Continuous dynamics** — declaring `ODENode` state, grouping ODE systems,
+   and understanding how continuous phases update time.
+4. **Create, compile, and run** — constructing `rg.PhasedReactiveSystem`,
    reading the compile report, and executing ticks.

@@ -13,7 +13,6 @@ from examples.native_two_inverter_microgrid import (
     InverseDroopController,
     MultiPhasePIController,
     PhaseVector,
-    SimulationClock,
     VoltageSample,
     abc_to_dq0,
     abc_to_dq0_cos_sin,
@@ -32,6 +31,7 @@ from examples.native_two_inverter_microgrid import (
     zeros3,
 )
 from regelum import (
+    Clock,
     Goto,
     Input,
     Node,
@@ -57,13 +57,19 @@ class ODEAPIDroopController(Node):
     ) -> None:
         self.v_dc = v_dc
         self.i_lim = i_lim
-        self.master_voltage_pi = MultiPhasePIController(kp=0.025, ki=60.0, limits=(-i_lim, i_lim), dt=dt)
-        self.master_current_pi = MultiPhasePIController(kp=0.012, ki=90.0, limits=(-1.0, 1.0), dt=dt)
+        self.master_voltage_pi = MultiPhasePIController(
+            kp=0.025, ki=60.0, limits=(-i_lim, i_lim), dt=dt
+        )
+        self.master_current_pi = MultiPhasePIController(
+            kp=0.012, ki=90.0, limits=(-1.0, 1.0), dt=dt
+        )
         self.master_p_droop = DroopController(gain=40000.0, tau=0.005, nominal=freq_nom, dt=dt)
         self.master_q_droop = DroopController(gain=1000.0, tau=0.002, nominal=v_nom, dt=dt)
         self.master_phase = DDS(dt=dt)
 
-        self.slave_current_pi = MultiPhasePIController(kp=0.005, ki=200.0, limits=(-1.0, 1.0), dt=dt)
+        self.slave_current_pi = MultiPhasePIController(
+            kp=0.005, ki=200.0, limits=(-1.0, 1.0), dt=dt
+        )
         self.slave_pll = PLL(kp=10.0, ki=200.0, f_nom=freq_nom, dt=dt)
         self.slave_p_droop = InverseDroopController(
             gain=40000.0,
@@ -112,7 +118,9 @@ class ODEAPIDroopController(Node):
             slave_frequency_hz=slave_frequency,
         )
 
-    def _master_control(self, *, current: PhaseVector, voltage: PhaseVector) -> tuple[PhaseVector, float]:
+    def _master_control(
+        self, *, current: PhaseVector, voltage: PhaseVector
+    ) -> tuple[PhaseVector, float]:
         instant_power = -inst_power(voltage, current)
         frequency = self.master_p_droop.step(instant_power)
         phase = self.master_phase.step(frequency)
@@ -126,7 +134,9 @@ class ODEAPIDroopController(Node):
         modulation_dq0 = self.master_current_pi.step(current_setpoint_dq0, current_dq0)
         return clip3(dq0_to_abc(modulation_dq0, phase), -1.0, 1.0), frequency
 
-    def _slave_control(self, *, current: PhaseVector, voltage: PhaseVector) -> tuple[PhaseVector, float]:
+    def _slave_control(
+        self, *, current: PhaseVector, voltage: PhaseVector
+    ) -> tuple[PhaseVector, float]:
         v_inst = inst_rms(voltage)
         cos_sin_pair, frequency, _theta = self.slave_pll.step(voltage)
         current_dq0 = abc_to_dq0_cos_sin(current, *cos_sin_pair)
@@ -268,14 +278,13 @@ class Rl1Load(ODENode):
         self.inductance = inductance
 
     class Inputs(NodeInputs):
-        time_s: float = Input(source=SimulationClock.Outputs.time_s)
         capacitor_v: PhaseVector = Input(source=Lc2Filter.State.capacitor_v)
 
     class State(NodeState):
         load_i: PhaseVector = StateVar(initial=zeros3)
 
-    def dstate(self, inputs: Inputs, state: State) -> State:
-        resistance = ca.if_else(inputs.time_s < 0.2, self.resistance, 2.0 * self.resistance)
+    def dstate(self, inputs: Inputs, state: State, *, time: float) -> State:
+        resistance = ca.if_else(time < 0.2, self.resistance, 2.0 * self.resistance)
         return self.State(
             load_i=scale3(
                 sub3(inputs.capacitor_v, scale3(state.load_i, resistance)),
@@ -286,7 +295,7 @@ class Rl1Load(ODENode):
 
 class ODEAPIMicrogridLogger(Node):
     class Inputs(NodeInputs):
-        time_s: float = Input(source=SimulationClock.Outputs.time_s)
+        time_s: float = Input(source=Clock.time)
         lcl1_capacitor_v: PhaseVector = Input(source=Lcl1Filter.State.capacitor_v)
         samples: tuple[VoltageSample, ...] = Input(source="ODEAPIMicrogridLogger.Outputs.samples")
 
@@ -313,22 +322,18 @@ def build_system() -> PhasedReactiveSystem:
     rl1 = Rl1Load()
     electrical = ODESystem(
         nodes=(lc1, lcl1, lc2, rl1),
-        dt=0.5e-4,
+        dt="0.00005",
         method="LSODA",
     )
-    clock = SimulationClock()
     logger = ODEAPIMicrogridLogger()
 
     return PhasedReactiveSystem(
         phases=[
-            Phase("control", nodes=(controller,), transitions=(Goto("inverters"),), is_initial=True),
+            Phase(
+                "control", nodes=(controller,), transitions=(Goto("inverters"),), is_initial=True
+            ),
             Phase("inverters", nodes=(inverter1, inverter2), transitions=(Goto("electrical"),)),
-            Phase("electrical", nodes=(electrical,), transitions=(Goto("export-lc1"),)),
-            Phase("export-lc1", nodes=(lc1,), transitions=(Goto("export-lcl1"),)),
-            Phase("export-lcl1", nodes=(lcl1,), transitions=(Goto("export-lc2"),)),
-            Phase("export-lc2", nodes=(lc2,), transitions=(Goto("export-load"),)),
-            Phase("export-load", nodes=(rl1,), transitions=(Goto("clock"),)),
-            Phase("clock", nodes=(clock,), transitions=(Goto("log"),)),
+            Phase("electrical", nodes=(electrical,), transitions=(Goto("log"),)),
             Phase("log", nodes=(logger,), transitions=(Goto(terminate),)),
         ],
     )

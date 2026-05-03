@@ -29,6 +29,8 @@ The framework is built around four surface ideas:
 - nodes declare typed inputs and outputs;
 - phases define which node instances are active together;
 - transitions decide how one phase hands control to the next;
+- continuous nodes can be grouped into ODE systems and integrated inside a
+  phase;
 - compilation resolves links, schedules nodes, and catches mistakes early.
 
 Install from PyPI with `uv`:
