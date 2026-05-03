@@ -1097,7 +1097,7 @@ class PhasedReactiveSystem:
             for node_id in self._phase_schedules[phase.name]:
                 node = self._nodes_by_id[node_id]
                 inputs = self._build_inputs(node)
-                result = _run_node(node, inputs)
+                result = _run_node(node, inputs, state_snapshot=self.snapshot())
                 outputs = self._normalize_outputs(node, result)
                 for name, value in outputs.items():
                     output = node.__class__._outputs[name]
@@ -1412,12 +1412,20 @@ class PhasedReactiveSystem:
         return outputs
 
 
-def _run_node(node: Node, inputs: NodeInputs) -> Any:
+def _run_node(
+    node: Node,
+    inputs: NodeInputs,
+    *,
+    state_snapshot: StateSnapshot | None = None,
+) -> Any:
+    kwargs: dict[str, Any] = {}
+    if state_snapshot is not None and _accepts_keyword(node.run, "state_snapshot"):
+        kwargs["state_snapshot"] = state_snapshot
     if node.__class__._run_input_mode == "parameters":
-        return node.run(**vars(inputs))
+        return node.run(**vars(inputs), **kwargs)
     if node.__class__._inputs or _run_requires_inputs(node):
-        return node.run(inputs)
-    return node.run()
+        return node.run(inputs, **kwargs)
+    return node.run(**kwargs)
 
 
 def _required_initial_issues(

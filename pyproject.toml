@@ -8,7 +8,9 @@ authors = [
 requires-python = ">=3.13"
 dynamic = ["version"]
 dependencies = [
+    "casadi>=3.7.2",
     "matplotlib>=3.10.0",
+    "scipy>=1.17.1",
     "z3-solver>=4.16.0.0",
 ]
 
@@ -20,6 +22,11 @@ regelum-dubuisson2019 = "regelum.examples.dubuisson2019_water_treatment:main"
 regelum-dubuisson2019-calibrate = "regelum.examples.dubuisson2019_calibration:main"
 regelum-dubuisson2019-digitize = "regelum.examples.dubuisson2019_digitize_pdf:main"
 regelum-video-player = "regelum.examples.video_player:main"
+regelum-openmodelica-static-droop = "regelum.examples.openmodelica_microgrid_static_droop:main"
+regelum-native-two-inverter-microgrid = "regelum.examples.native_two_inverter_microgrid:main"
+regelum-native-one-to-one-microgrid = "regelum.examples.native_one_to_one_microgrid:main"
+regelum-native-one-to-one-microgrid-ode-api = "regelum.examples.native_one_to_one_microgrid_ode_api:main"
+regelum-compare-one-to-one-microgrid = "regelum.examples.compare_one_to_one_microgrid:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/regelum", "examples"]
