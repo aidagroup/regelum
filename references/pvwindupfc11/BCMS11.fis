@@ -1,0 +1,37 @@
+[System]
+Name='BCMS11'
+Type='sugeno'
+Version=2.0
+NumInputs=1
+NumOutputs=2
+NumRules=2
+AndMethod='prod'
+OrMethod='probor'
+ImpMethod='prod'
+AggMethod='sum'
+DefuzzMethod='wtaver'
+
+[Input1]
+Name='Error'
+Range=[-60000 60000]
+NumMFs=2
+MF1='lowError':'trapmf',[-60000 -60000 -30000 0]
+MF2='mf3':'trapmf',[0 30000 60000 60000]
+
+[Output1]
+Name='BC'
+Range=[0 1]
+NumMFs=2
+MF1='mf1':'constant',[0]
+MF2='mf3':'constant',[1]
+
+[Output2]
+Name='BD'
+Range=[0 1]
+NumMFs=2
+MF1='mf1':'constant',[0]
+MF2='mf3':'constant',[1]
+
+[Rules]
+1, 1 2 (1) : 1
+2, 2 1 (1) : 1

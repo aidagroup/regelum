@@ -1,0 +1,47 @@
+[System]
+Name='pv11k1'
+Type='mamdani'
+Version=2.0
+NumInputs=2
+NumOutputs=1
+NumRules=9
+AndMethod='min'
+OrMethod='max'
+ImpMethod='min'
+AggMethod='max'
+DefuzzMethod='centroid'
+
+[Input1]
+Name='Voltage'
+Range=[0 218]
+NumMFs=3
+MF1='LV':'trapmf',[0 0 29.73 59.44]
+MF2='MV':'trapmf',[53.67 93.3 133 172.6]
+MF3='HV':'trapmf',[165.7 186.4 218 218]
+
+[Input2]
+Name='Current'
+Range=[0 42]
+NumMFs=3
+MF1='LI':'trapmf',[0 0 4.5 8.281]
+MF2='MI':'trapmf',[7.679 13.08 21.83 26.52]
+MF3='HI':'trapmf',[25.56 33.72 42 42]
+
+[Output1]
+Name='DutyCycle'
+Range=[0.4 1]
+NumMFs=3
+MF1='LD':'trapmf',[0.4 0.4 0.5 0.6]
+MF2='MD':'trapmf',[0.578 0.628 0.7865 0.834]
+MF3='HD':'trapmf',[0.8 0.85 1 1]
+
+[Rules]
+1 1, 3 (1) : 1
+1 2, 2 (1) : 1
+1 3, 2 (1) : 1
+2 1, 3 (1) : 1
+2 2, 2 (1) : 1
+2 3, 2 (1) : 1
+3 1, 2 (1) : 1
+3 2, 1 (1) : 1
+3 3, 1 (1) : 1

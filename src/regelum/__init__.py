@@ -26,6 +26,14 @@ from regelum.core import (
     port,
     terminate,
 )
+from regelum.ode import (
+    CasadiTraceError,
+    NodeState,
+    ODENode,
+    ODESystem,
+    StateVar,
+    StateVarPort,
+)
 
 try:
     from ._version import __version__
@@ -37,6 +45,7 @@ __all__ = [
     "CompileIssue",
     "CompileReport",
     "Connection",
+    "CasadiTraceError",
     "Elif",
     "Else",
     "ElseIf",
@@ -47,11 +56,16 @@ __all__ = [
     "Node",
     "NodeInputs",
     "NodeOutputs",
+    "NodeState",
+    "ODENode",
+    "ODESystem",
     "Output",
     "OutputPort",
     "Phase",
     "PhasedReactiveSystem",
     "StepRecord",
+    "StateVar",
+    "StateVarPort",
     "Transition",
     "V",
     "always",
