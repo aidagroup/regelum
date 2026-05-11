@@ -112,6 +112,9 @@ This is what lets the compiler resolve a deterministic topological order for
 the phase.
 Across the whole system there must also be exactly one initial phase, so every
 tick has a single unambiguous entry point.
+Every non-initial phase must be reachable from that initial phase through
+transition targets; otherwise the compiler reports it as unreachable phase
+graph structure.
 
 When a tick runs, it starts at the initial phase, executes that phase's nodes,
 and then evaluates the phase's transitions.

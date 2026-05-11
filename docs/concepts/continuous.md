@@ -134,8 +134,8 @@ When the runtime reaches a continuous phase:
 
 1. it builds the current input snapshot;
 2. it traces or reuses the CasADi graph `f(t, x, p)` and its Jacobian;
-3. it integrates each due `ODESystem` from the current clock time to
-   `time + ODESystem.dt`;
+3. it integrates each `ODESystem` from the current clock time to
+   `time + base_dt`;
 4. it writes every internal `ODENode.State` value into system state;
 5. it advances `Clock.time` immediately, before the next phase runs.
 
@@ -157,6 +157,16 @@ state dependencies across `ODESystem` boundaries would imply operator
 splitting/sample-and-hold semantics, so `regelum` currently rejects them
 instead of silently choosing an execution order.
 
+If a system contains a continuous phase, the compiler also checks that the
+phase route reaches a continuous phase exactly once per tick. This is a
+symbolic feasibility check over transition guards: `update` implementations
+are treated as arbitrary Python, so after each phase every state variable
+written by that phase is modeled as a fresh symbolic value. A conditional route
+that can terminate without the continuous phase, or can reach it twice, is a
+compile error. Integrate continuous dynamics every base tick; use ordinary
+`Node.dt` for slower discrete controllers whose state is sampled and held by
+the plant.
+
 ## Base Time And Scheduling
 
 Every system has a base time step.
@@ -168,7 +178,8 @@ compiler emits an idle-tick warning and suggests an explicit `base_dt`.
 
 For a system with continuous dynamics, `auto` computes the greatest common
 divisor of all explicit discrete node `dt` values and all `ODESystem.dt`
-values.
+values. `ODESystem.dt` contributes to the common time grid; runtime integration
+still happens every tick over `base_dt`.
 Every node period must be an integer multiple of `base_dt`.
 
 ```python
@@ -190,8 +201,11 @@ fast = Sensor()          # due every base tick
 slow = Controller(dt=2)  # due on ticks 0, 2, 4, ...
 ```
 
-The same scheduling rule applies to continuous systems: `period_ticks` is
-`dt / base_dt`, and due checks use `Clock.tick % period_ticks == 0`.
+Continuous systems are not skipped by their own `dt`.
+Each `ODESystem` in the continuous phase integrates every tick on `base_dt`.
+This models sample-and-hold: slower discrete nodes update only on their
+schedule, and continuous dynamics read their held state values between those
+updates.
 
 ## System Clock
 
