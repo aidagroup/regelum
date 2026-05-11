@@ -655,6 +655,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#define-the-plant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Define The Plant
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#add-observer-controller-and-logger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add Observer, Controller, And Logger
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-the-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build The System
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#phase-graph" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -692,6 +725,17 @@
     <span class="md-ellipsis">
       
         Node Table
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run-the-simulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run The Simulation
       
     </span>
   </a>
@@ -790,6 +834,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#define-the-plant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Define The Plant
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#add-observer-controller-and-logger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add Observer, Controller, And Logger
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-the-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build The System
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#phase-graph" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -834,6 +911,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#run-the-simulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run The Simulation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#open-in-marimo" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -866,74 +954,202 @@
 
 <h1 id="controlled-pendulum">Controlled Pendulum</h1>
 <p><a class="md-button" href="https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/controlled_pendulum/rg-examples-controlled-pendulum.py" target="_blank">Open in molab</a></p>
-<p>This example keeps the pendulum plant explicit, then adds a controller as a
-separate stateful node. The important timing detail is sample-and-hold: the
-plant integrates at <code>dt=0.01</code>, while the controller updates at <code>dt=0.05</code>.
-Between controller updates the plant reads the held torque state.</p>
-<p><img alt="Pendulum plant with torque" src="../../assets/examples/pendulum/pendulum.svg" /></p>
+<p>This example starts from the same rigid-rod pendulum, but now the plant has an
+external torque input at the pivot. We add an observer, a swing-up controller,
+and a logger. The plant runs on the base integration grid <code>dt=0.01</code>, while the
+controller runs every <code>0.05</code> seconds. Between controller updates, the controller
+torque is held in <code>SwingUpController.State.torque</code>, so the plant sees a
+sample-and-hold control signal.</p>
+<p><img alt="Rigid rod pendulum plant with torque" src="../../assets/examples/pendulum/rod_pendulum.png" /></p>
 <h2 id="dynamics">Dynamics</h2>
-<p>The controlled plant has the same <span class="arithmatex">\(\theta, \omega\)</span> state and adds torque
-<span class="arithmatex">\(\tau\)</span> from <code>SwingUpController.State.torque</code>:</p>
+<p>The controlled plant is still a uniform rod with
+<span class="arithmatex">\(I = m\ell^2 / 3\)</span>. It has the same <span class="arithmatex">\(\theta, \omega\)</span> state and adds pivot
+torque <span class="arithmatex">\(\tau\)</span>:</p>
 <div class="arithmatex">\[
 \dot{\theta} = \omega,
 \qquad
 \dot{\omega} =
--\frac{g}{\ell}\sin(\theta) - d\omega + \frac{\tau}{m\ell^2}.
+-\frac{3g}{2\ell}\sin(\theta) - d\omega + \frac{3\tau}{m\ell^2}.
 \]</div>
+<h2 id="define-the-plant">Define The Plant</h2>
+<p>First we define the torque-driven plant. The plant reads torque from
+<code>SwingUpController.State.torque</code>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ControlledPendulum</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">ODENode</span><span class="p">):</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="n">torque</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">SwingUpController</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">torque</span><span class="p">)</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span> <span class="bp">self</span><span class="p">:</span> <span class="n">cast</span><span class="p">(</span><span class="n">ControlledPendulum</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">theta0</span><span class="p">)</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span> <span class="bp">self</span><span class="p">:</span> <span class="n">cast</span><span class="p">(</span><span class="n">ControlledPendulum</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">omega0</span><span class="p">)</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">dstate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Inputs</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        <span class="n">inertia</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        <span class="n">theta_dot</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">omega</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="n">omega_dot</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>            <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">gravity</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">*</span> <span class="n">ca</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">theta</span><span class="p">)</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>            <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">damping</span> <span class="o">*</span> <span class="n">state</span><span class="o">.</span><span class="n">omega</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>            <span class="o">+</span> <span class="n">inputs</span><span class="o">.</span><span class="n">torque</span> <span class="o">/</span> <span class="n">inertia</span>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>        <span class="p">)</span>
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">theta</span><span class="o">=</span><span class="n">theta_dot</span><span class="p">,</span> <span class="n">omega</span><span class="o">=</span><span class="n">omega_dot</span><span class="p">)</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>        <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="n">theta0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="n">omega0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">gravity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">GRAVITY</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="n">length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">LENGTH</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        <span class="n">mass</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">MASS</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        <span class="n">damping</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DAMPING</span><span class="p">,</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">theta0</span> <span class="o">=</span> <span class="n">theta0</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">omega0</span> <span class="o">=</span> <span class="n">omega0</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">gravity</span> <span class="o">=</span> <span class="n">gravity</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">=</span> <span class="n">length</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="n">mass</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">damping</span> <span class="o">=</span> <span class="n">damping</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span> <span class="bp">self</span><span class="p">:</span> <span class="n">cast</span><span class="p">(</span><span class="n">ControlledPendulum</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">theta0</span><span class="p">)</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span> <span class="bp">self</span><span class="p">:</span> <span class="n">cast</span><span class="p">(</span><span class="n">ControlledPendulum</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">omega0</span><span class="p">)</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">dstate</span><span class="p">(</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>        <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>        <span class="n">torque</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">SwingUpController</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">torque</span><span class="p">),</span>
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>        <span class="n">inertia</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">/</span> <span class="mf">3.0</span>
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>        <span class="n">theta_dot</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">omega</span>
+<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>        <span class="n">omega_dot</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>            <span class="o">-</span><span class="p">(</span><span class="mf">3.0</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">gravity</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span><span class="p">)</span> <span class="o">*</span> <span class="n">ca</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">theta</span><span class="p">)</span>
+<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>            <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">damping</span> <span class="o">*</span> <span class="n">state</span><span class="o">.</span><span class="n">omega</span>
+<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>            <span class="o">+</span> <span class="n">torque</span> <span class="o">/</span> <span class="n">inertia</span>
+<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>        <span class="p">)</span>
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">theta</span><span class="o">=</span><span class="n">theta_dot</span><span class="p">,</span> <span class="n">omega</span><span class="o">=</span><span class="n">omega_dot</span><span class="p">)</span>
 </code></pre></div>
-<p><code>SwingUpController</code> runs every five base ticks because its <code>dt</code> is <code>0.05</code> and
-the system <code>base_dt</code> is <code>0.01</code>. Its <code>torque</code> state remains available to the
-plant on every base integration step.</p>
+<p>The plant is still just the physical system. It does not know how the torque is
+computed; it only declares where torque comes from.</p>
+<h2 id="add-observer-controller-and-logger">Add Observer, Controller, And Logger</h2>
+<p><code>Observer</code> reads the plant state and publishes angle features.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Observer</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="n">sin_angle</span><span class="p">:</span> <span class="nb">float</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        <span class="n">cos_angle</span><span class="p">:</span> <span class="nb">float</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="n">angular_velocity</span><span class="p">:</span> <span class="nb">float</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">theta</span><span class="p">),</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">omega</span><span class="p">),</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>            <span class="n">sin_angle</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>            <span class="n">cos_angle</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>            <span class="n">angular_velocity</span><span class="o">=</span><span class="n">omega</span><span class="p">,</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>        <span class="p">)</span>
+</code></pre></div>
+<p><code>SwingUpController</code> reads the observer state and writes a torque. The controller
+has <code>dt="0.05"</code>, so it only updates every five base ticks.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">SwingUpController</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>        <span class="n">torque</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CONTROL_DT</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>        <span class="n">sin_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Observer</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">sin_angle</span><span class="p">),</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="n">cos_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Observer</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">cos_angle</span><span class="p">),</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>        <span class="n">angular_velocity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Observer</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">angular_velocity</span><span class="p">),</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>        <span class="n">theta</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">atan2</span><span class="p">(</span><span class="n">sin_angle</span><span class="p">,</span> <span class="n">cos_angle</span><span class="p">)</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>        <span class="n">error</span> <span class="o">=</span> <span class="n">wrap_angle</span><span class="p">(</span><span class="n">theta</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>        <span class="n">raw</span> <span class="o">=</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">kp</span> <span class="o">*</span> <span class="n">error</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">kd</span> <span class="o">*</span> <span class="n">angular_velocity</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>        <span class="n">torque</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">torque_limit</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">torque_limit</span><span class="p">,</span> <span class="n">raw</span><span class="p">))</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">torque</span><span class="o">=</span><span class="n">torque</span><span class="p">)</span>
+</code></pre></div>
+<p><code>Logger</code> records plant state and held torque:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Logger</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>        <span class="n">samples</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>        <span class="n">prev_state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">time</span><span class="p">),</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">theta</span><span class="p">),</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">omega</span><span class="p">),</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="n">torque</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">SwingUpController</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">torque</span><span class="p">),</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>        <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="n">theta</span><span class="p">,</span> <span class="n">omega</span><span class="p">,</span> <span class="n">torque</span><span class="p">)</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>        <span class="n">prev_state</span><span class="o">.</span><span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">samples</span><span class="o">=</span><span class="n">prev_state</span><span class="o">.</span><span class="n">samples</span><span class="p">)</span>
+</code></pre></div>
+<p>For variety, and to demonstrate the flexibility of regelum's API, this example
+uses direct <code>update(...)</code> input parameters instead of nested <code>Inputs</code>
+namespaces. The <code>rg.Input(src=...)</code> defaults are the links: they tell regelum
+where each argument comes from. The observer variables use bare state
+annotations because the phase graph guarantees that <code>Observer</code> runs before
+<code>SwingUpController</code> reads those values. The annotations still declare state
+ports that the controller can reference through <code>Observer.State.*</code>.</p>
+<p><code>SwingUpController.State.torque</code> still has <code>init=0.0</code>: on base ticks where the
+controller is not scheduled, the plant reads the last held torque value.</p>
+<h2 id="build-the-system">Build The System</h2>
+<p>First we create the physical plant and wrap it in an <code>ODESystem</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">pendulum</span> <span class="o">=</span> <span class="n">ControlledPendulum</span><span class="p">()</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">plant</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">ODESystem</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">pendulum</span><span class="p">,),</span> <span class="n">dt</span><span class="o">=</span><span class="n">BASE_DT</span><span class="p">)</span>
+</code></pre></div>
+<p><code>BASE_DT = "0.01"</code>, so this phase integrates the differential equation every
+10 ms. Then we add the discrete nodes:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">observer</span> <span class="o">=</span> <span class="n">Observer</span><span class="p">()</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">controller</span> <span class="o">=</span> <span class="n">SwingUpController</span><span class="p">()</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+</code></pre></div>
+<p>Finally we build the PRS:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">system</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">phases</span><span class="o">=</span><span class="p">[</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>        <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>            <span class="s2">&quot;observe_and_control&quot;</span><span class="p">,</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>            <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">observer</span><span class="p">,</span> <span class="n">controller</span><span class="p">,</span> <span class="n">logger</span><span class="p">),</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>            <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;plant&quot;</span><span class="p">),),</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>            <span class="n">is_initial</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>        <span class="p">),</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>        <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>            <span class="s2">&quot;plant&quot;</span><span class="p">,</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>            <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">plant</span><span class="p">,),</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>            <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">terminate</span><span class="p">),),</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>        <span class="p">),</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="p">],</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>    <span class="n">base_dt</span><span class="o">=</span><span class="n">BASE_DT</span><span class="p">,</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="p">)</span>
+</code></pre></div>
+<p>One tick starts in <code>observe_and_control</code>. Inside that phase the compiler
+resolves the dataflow as <code>Observer -&gt; SwingUpController -&gt; Logger</code>: the
+observer publishes angle features, the controller writes torque, and the logger
+records the current plant state plus the torque that will be held by the plant.
+Then the <code>plant</code> phase integrates the rigid rod and the tick terminates.</p>
+<p>Because the controller period is <code>0.05</code>, the controller state is updated only
+on controller ticks. On the other base ticks, its last torque value is still
+available to the plant. That is the sample-and-hold behavior.</p>
 <h2 id="phase-graph">Phase Graph</h2>
 <pre class="mermaid"><code>flowchart LR
-    control["control&lt;br/&gt;SwingUpController(dt = 0.05)"] --&gt; plant["plant&lt;br/&gt;ODESystem(dt = 0.01)"]
-    plant --&gt; observe["observe&lt;br/&gt;observer + logger"]
-    observe --&gt; stop["terminate"]
+    init([init]) --&gt; observeControl["observe_and_control&lt;br/&gt;Observer + SwingUpController + Logger"]
+    observeControl --&gt; plant["plant&lt;br/&gt;ODESystem(dt = 0.01)"]
+    plant --&gt; done([⊥])
 
-    classDef control fill:#d9770622,stroke:#d97706,color:#111318
+    classDef observeControl fill:#15803d22,stroke:#15803d,color:#111318
     classDef plant fill:#2f6fed22,stroke:#2f6fed,color:#111318
-    classDef observe fill:#15803d22,stroke:#15803d,color:#111318
-    classDef stop fill:#64748b22,stroke:#64748b,color:#111318
-    class control control
-    class plant plant
-    class observe observe
-    class stop stop</code></pre>
+    class observeControl observeControl
+    class plant plant</code></pre>
 <h2 id="node-graph">Node Graph</h2>
+<p>The controller reads observer features and writes torque. The plant reads that
+torque, and the logger records both the plant state and the held torque. Dashed
+<code>state</code> arrows show previous-state reads: <code>ControlledPendulum</code> reads its
+physical state in <code>dstate(...)</code>, and <code>Logger</code> appends to its previous
+sample tuple. Node colors follow phase colors: green for <code>observe_and_control</code>
+and blue for <code>plant</code>.</p>
 <pre class="mermaid"><code>flowchart LR
-    clock["Clock"] --&gt; logger["ControlledLogger"]
-    pendulum["ControlledPendulum"] --&gt; observer["ControlledObserver"]
+    clock["Clock"] --&gt; logger["Logger"]
+    pendulum["ControlledPendulum"] --&gt; observer["Observer"]
     observer --&gt; controller["SwingUpController"]
     controller --&gt; pendulum
     pendulum --&gt; logger
     controller --&gt; logger
+    pendulum_state(("state")) -.-&gt; pendulum
+    logger_state(("state")) -.-&gt; logger
 
-    classDef pendulum fill:#7c3aed1f,stroke:#7c3aed,color:#111318
-    classDef observer fill:#0891b21f,stroke:#0891b2,color:#111318
-    classDef controller fill:#dc26261f,stroke:#dc2626,color:#111318
-    classDef logger fill:#64748b1f,stroke:#64748b,color:#111318
-    classDef clock fill:#2f6fed1f,stroke:#2f6fed,color:#111318
-    class pendulum pendulum
-    class observer observer
-    class controller controller
-    class logger logger
-    class clock clock</code></pre>
+    classDef observeControl fill:#15803d22,stroke:#15803d,color:#111318
+    classDef plant fill:#2f6fed22,stroke:#2f6fed,color:#111318
+    classDef clock fill:transparent,stroke:currentColor,stroke-dasharray:6 4
+    classDef state fill:#94a3b822,stroke:#94a3b8,stroke-dasharray:3 3,color:#111318
+    class observer,controller,logger observeControl
+    class pendulum plant
+    class clock clock
+    class pendulum_state,logger_state state</code></pre>
 <h2 id="phase-table">Phase Table</h2>
 <table>
 <thead>
@@ -945,19 +1161,14 @@ plant on every base integration step.</p>
 </thead>
 <tbody>
 <tr>
-<td><span class="phase-label phase-label--control">control</span></td>
-<td><code>SwingUpController(dt="0.05")</code></td>
-<td>Computes a new torque on controller ticks.</td>
+<td><span class="phase-label phase-label--observe">observe_and_control</span></td>
+<td><code>Observer</code>, <code>SwingUpController(dt="0.05")</code>, <code>Logger</code></td>
+<td>Publishes angle features, computes held torque, and records a sample.</td>
 </tr>
 <tr>
 <td><span class="phase-label phase-label--plant">plant</span></td>
 <td><code>ODESystem(ControlledPendulum, dt="0.01")</code></td>
 <td>Integrates the torque-driven differential equation on every base tick.</td>
-</tr>
-<tr>
-<td><span class="phase-label phase-label--observe">observe</span></td>
-<td><code>ControlledObserver</code>, <code>ControlledLogger</code></td>
-<td>Publishes observer signals and records state plus held torque.</td>
 </tr>
 </tbody>
 </table>
@@ -972,27 +1183,38 @@ plant on every base integration step.</p>
 </thead>
 <tbody>
 <tr>
-<td><span class="node-label node-label--pendulum">ControlledPendulum</span></td>
+<td><span class="node-label node-label--plant-phase">ControlledPendulum</span></td>
 <td><code>theta</code>, <code>omega</code></td>
 <td><code>SwingUpController.State.torque</code></td>
 </tr>
 <tr>
-<td><span class="node-label node-label--observer">ControlledObserver</span></td>
+<td><span class="node-label node-label--observe-phase">Observer</span></td>
 <td><code>sin_angle</code>, <code>cos_angle</code>, <code>angular_velocity</code></td>
 <td><code>ControlledPendulum.State.theta</code>, <code>ControlledPendulum.State.omega</code></td>
 </tr>
 <tr>
-<td><span class="node-label node-label--controller">SwingUpController</span></td>
+<td><span class="node-label node-label--observe-phase">SwingUpController</span></td>
 <td><code>torque</code></td>
-<td>observer state from the previous observed tick</td>
+<td>observer state from the current tick when scheduled</td>
 </tr>
 <tr>
-<td><span class="node-label node-label--logger">ControlledLogger</span></td>
+<td><span class="node-label node-label--observe-phase">Logger</span></td>
 <td><code>samples</code></td>
 <td><code>Clock.time</code>, plant state, held torque</td>
 </tr>
 </tbody>
 </table>
+<h2 id="run-the-simulation">Run The Simulation</h2>
+<p>The notebook runs the system and reads <code>Logger.State.samples</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">system</span> <span class="o">=</span> <span class="n">build_system</span><span class="p">()</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">system</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">samples</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">Logger</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">samples</span><span class="p">)</span>
+</code></pre></div>
+<p>Then it plots angle, angular velocity, and torque. The torque plot uses a
+step-style line, so the sample-and-hold behavior is visible: the controller
+changes torque every <code>0.05</code> seconds while the plant continues integrating every
+<code>0.01</code> seconds.</p>
+<p><img alt="Controlled pendulum simulation result" src="../../assets/examples/pendulum/controlled_pendulum_response_torque4.svg" /></p>
 <h2 id="open-in-marimo">Open In Marimo</h2>
 <p>Open the notebook in molab:</p>
 <p><a class="md-button" href="https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/controlled_pendulum/rg-examples-controlled-pendulum.py" target="_blank">Open in molab</a></p>
@@ -1001,174 +1223,173 @@ plant on every base integration step.</p>
 dependency metadata.</p>
 <details class="example">
 <summary>Standalone Python listing</summary>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">cast</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="kn">import</span><span class="w"> </span><span class="nn">casadi</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ca</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="kn">import</span><span class="w"> </span><span class="nn">regelum</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rg</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">BASE_DT</span> <span class="o">=</span> <span class="s2">&quot;0.01&quot;</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">CONTROL_DT</span> <span class="o">=</span> <span class="s2">&quot;0.05&quot;</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">GRAVITY</span> <span class="o">=</span> <span class="mf">9.81</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">LENGTH</span> <span class="o">=</span> <span class="mf">1.0</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">MASS</span> <span class="o">=</span> <span class="mf">1.0</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="n">DAMPING</span> <span class="o">=</span> <span class="mf">0.08</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="k">def</span><span class="w"> </span><span class="nf">wrap_angle</span><span class="p">(</span><span class="n">angle</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>    <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">atan2</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">))</span>
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>
-<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="k">class</span><span class="w"> </span><span class="nc">ControlledPendulum</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">ODENode</span><span class="p">):</span>
-<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>        <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>        <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>        <span class="n">theta0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
-<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>        <span class="n">omega0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>        <span class="n">gravity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">GRAVITY</span><span class="p">,</span>
-<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>        <span class="n">length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">LENGTH</span><span class="p">,</span>
-<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>        <span class="n">mass</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">MASS</span><span class="p">,</span>
-<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>        <span class="n">damping</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DAMPING</span><span class="p">,</span>
-<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">theta0</span> <span class="o">=</span> <span class="n">theta0</span>
-<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">omega0</span> <span class="o">=</span> <span class="n">omega0</span>
-<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">gravity</span> <span class="o">=</span> <span class="n">gravity</span>
-<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">=</span> <span class="n">length</span>
-<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="n">mass</span>
-<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">damping</span> <span class="o">=</span> <span class="n">damping</span>
-<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>
-<a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
-<a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a>        <span class="n">torque</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">SwingUpController</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">torque</span><span class="p">)</span>
-<a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a>
-<a id="__codelineno-1-43" name="__codelineno-1-43" href="#__codelineno-1-43"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
-<a id="__codelineno-1-44" name="__codelineno-1-44" href="#__codelineno-1-44"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span> <span class="bp">self</span><span class="p">:</span> <span class="n">cast</span><span class="p">(</span><span class="n">ControlledPendulum</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">theta0</span><span class="p">)</span>
-<a id="__codelineno-1-45" name="__codelineno-1-45" href="#__codelineno-1-45"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span> <span class="bp">self</span><span class="p">:</span> <span class="n">cast</span><span class="p">(</span><span class="n">ControlledPendulum</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">omega0</span><span class="p">)</span>
-<a id="__codelineno-1-46" name="__codelineno-1-46" href="#__codelineno-1-46"></a>
-<a id="__codelineno-1-47" name="__codelineno-1-47" href="#__codelineno-1-47"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">dstate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Inputs</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>  <span class="c1"># ty: ignore[invalid-method-override]</span>
-<a id="__codelineno-1-48" name="__codelineno-1-48" href="#__codelineno-1-48"></a>        <span class="n">inertia</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span>
-<a id="__codelineno-1-49" name="__codelineno-1-49" href="#__codelineno-1-49"></a>        <span class="n">theta_dot</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">omega</span>
-<a id="__codelineno-1-50" name="__codelineno-1-50" href="#__codelineno-1-50"></a>        <span class="n">omega_dot</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-1-51" name="__codelineno-1-51" href="#__codelineno-1-51"></a>            <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">gravity</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">*</span> <span class="n">ca</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">theta</span><span class="p">)</span>
-<a id="__codelineno-1-52" name="__codelineno-1-52" href="#__codelineno-1-52"></a>            <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">damping</span> <span class="o">*</span> <span class="n">state</span><span class="o">.</span><span class="n">omega</span>
-<a id="__codelineno-1-53" name="__codelineno-1-53" href="#__codelineno-1-53"></a>            <span class="o">+</span> <span class="n">inputs</span><span class="o">.</span><span class="n">torque</span> <span class="o">/</span> <span class="n">inertia</span>
-<a id="__codelineno-1-54" name="__codelineno-1-54" href="#__codelineno-1-54"></a>        <span class="p">)</span>
-<a id="__codelineno-1-55" name="__codelineno-1-55" href="#__codelineno-1-55"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">theta</span><span class="o">=</span><span class="n">theta_dot</span><span class="p">,</span> <span class="n">omega</span><span class="o">=</span><span class="n">omega_dot</span><span class="p">)</span>
-<a id="__codelineno-1-56" name="__codelineno-1-56" href="#__codelineno-1-56"></a>
-<a id="__codelineno-1-57" name="__codelineno-1-57" href="#__codelineno-1-57"></a>
-<a id="__codelineno-1-58" name="__codelineno-1-58" href="#__codelineno-1-58"></a><span class="k">class</span><span class="w"> </span><span class="nc">ControlledObserver</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-1-59" name="__codelineno-1-59" href="#__codelineno-1-59"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
-<a id="__codelineno-1-60" name="__codelineno-1-60" href="#__codelineno-1-60"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">theta</span><span class="p">)</span>
-<a id="__codelineno-1-61" name="__codelineno-1-61" href="#__codelineno-1-61"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">omega</span><span class="p">)</span>
-<a id="__codelineno-1-62" name="__codelineno-1-62" href="#__codelineno-1-62"></a>
-<a id="__codelineno-1-63" name="__codelineno-1-63" href="#__codelineno-1-63"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
-<a id="__codelineno-1-64" name="__codelineno-1-64" href="#__codelineno-1-64"></a>        <span class="n">sin_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mf">0.2</span><span class="p">))</span>
-<a id="__codelineno-1-65" name="__codelineno-1-65" href="#__codelineno-1-65"></a>        <span class="n">cos_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="mf">0.2</span><span class="p">))</span>
-<a id="__codelineno-1-66" name="__codelineno-1-66" href="#__codelineno-1-66"></a>        <span class="n">angular_velocity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
-<a id="__codelineno-1-67" name="__codelineno-1-67" href="#__codelineno-1-67"></a>
-<a id="__codelineno-1-68" name="__codelineno-1-68" href="#__codelineno-1-68"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Inputs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<a id="__codelineno-1-69" name="__codelineno-1-69" href="#__codelineno-1-69"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span>
-<a id="__codelineno-1-70" name="__codelineno-1-70" href="#__codelineno-1-70"></a>            <span class="n">sin_angle</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">inputs</span><span class="o">.</span><span class="n">theta</span><span class="p">),</span>
-<a id="__codelineno-1-71" name="__codelineno-1-71" href="#__codelineno-1-71"></a>            <span class="n">cos_angle</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">inputs</span><span class="o">.</span><span class="n">theta</span><span class="p">),</span>
-<a id="__codelineno-1-72" name="__codelineno-1-72" href="#__codelineno-1-72"></a>            <span class="n">angular_velocity</span><span class="o">=</span><span class="n">inputs</span><span class="o">.</span><span class="n">omega</span><span class="p">,</span>
-<a id="__codelineno-1-73" name="__codelineno-1-73" href="#__codelineno-1-73"></a>        <span class="p">)</span>
-<a id="__codelineno-1-74" name="__codelineno-1-74" href="#__codelineno-1-74"></a>
-<a id="__codelineno-1-75" name="__codelineno-1-75" href="#__codelineno-1-75"></a>
-<a id="__codelineno-1-76" name="__codelineno-1-76" href="#__codelineno-1-76"></a><span class="k">class</span><span class="w"> </span><span class="nc">SwingUpController</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-1-77" name="__codelineno-1-77" href="#__codelineno-1-77"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
-<a id="__codelineno-1-78" name="__codelineno-1-78" href="#__codelineno-1-78"></a>        <span class="n">sin_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledObserver</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">sin_angle</span><span class="p">)</span>
-<a id="__codelineno-1-79" name="__codelineno-1-79" href="#__codelineno-1-79"></a>        <span class="n">cos_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledObserver</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">cos_angle</span><span class="p">)</span>
-<a id="__codelineno-1-80" name="__codelineno-1-80" href="#__codelineno-1-80"></a>        <span class="n">angular_velocity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledObserver</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">angular_velocity</span><span class="p">)</span>
-<a id="__codelineno-1-81" name="__codelineno-1-81" href="#__codelineno-1-81"></a>
-<a id="__codelineno-1-82" name="__codelineno-1-82" href="#__codelineno-1-82"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
-<a id="__codelineno-1-83" name="__codelineno-1-83" href="#__codelineno-1-83"></a>        <span class="n">torque</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
-<a id="__codelineno-1-84" name="__codelineno-1-84" href="#__codelineno-1-84"></a>
-<a id="__codelineno-1-85" name="__codelineno-1-85" href="#__codelineno-1-85"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-<a id="__codelineno-1-86" name="__codelineno-1-86" href="#__codelineno-1-86"></a>        <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-1-87" name="__codelineno-1-87" href="#__codelineno-1-87"></a>        <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-1-88" name="__codelineno-1-88" href="#__codelineno-1-88"></a>        <span class="n">kp</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">14.0</span><span class="p">,</span>
-<a id="__codelineno-1-89" name="__codelineno-1-89" href="#__codelineno-1-89"></a>        <span class="n">kd</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">4.0</span><span class="p">,</span>
-<a id="__codelineno-1-90" name="__codelineno-1-90" href="#__codelineno-1-90"></a>        <span class="n">torque_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">8.0</span><span class="p">,</span>
-<a id="__codelineno-1-91" name="__codelineno-1-91" href="#__codelineno-1-91"></a>        <span class="n">dt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CONTROL_DT</span><span class="p">,</span>
-<a id="__codelineno-1-92" name="__codelineno-1-92" href="#__codelineno-1-92"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-1-93" name="__codelineno-1-93" href="#__codelineno-1-93"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">)</span>
-<a id="__codelineno-1-94" name="__codelineno-1-94" href="#__codelineno-1-94"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">kp</span> <span class="o">=</span> <span class="n">kp</span>
-<a id="__codelineno-1-95" name="__codelineno-1-95" href="#__codelineno-1-95"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">kd</span> <span class="o">=</span> <span class="n">kd</span>
-<a id="__codelineno-1-96" name="__codelineno-1-96" href="#__codelineno-1-96"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">torque_limit</span> <span class="o">=</span> <span class="n">torque_limit</span>
-<a id="__codelineno-1-97" name="__codelineno-1-97" href="#__codelineno-1-97"></a>
-<a id="__codelineno-1-98" name="__codelineno-1-98" href="#__codelineno-1-98"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Inputs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<a id="__codelineno-1-99" name="__codelineno-1-99" href="#__codelineno-1-99"></a>        <span class="n">theta</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">atan2</span><span class="p">(</span><span class="n">inputs</span><span class="o">.</span><span class="n">sin_angle</span><span class="p">,</span> <span class="n">inputs</span><span class="o">.</span><span class="n">cos_angle</span><span class="p">)</span>
-<a id="__codelineno-1-100" name="__codelineno-1-100" href="#__codelineno-1-100"></a>        <span class="n">error</span> <span class="o">=</span> <span class="n">wrap_angle</span><span class="p">(</span><span class="n">theta</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
-<a id="__codelineno-1-101" name="__codelineno-1-101" href="#__codelineno-1-101"></a>        <span class="n">raw</span> <span class="o">=</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">kp</span> <span class="o">*</span> <span class="n">error</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">kd</span> <span class="o">*</span> <span class="n">inputs</span><span class="o">.</span><span class="n">angular_velocity</span>
-<a id="__codelineno-1-102" name="__codelineno-1-102" href="#__codelineno-1-102"></a>        <span class="n">torque</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">torque_limit</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">torque_limit</span><span class="p">,</span> <span class="n">raw</span><span class="p">))</span>
-<a id="__codelineno-1-103" name="__codelineno-1-103" href="#__codelineno-1-103"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">torque</span><span class="o">=</span><span class="n">torque</span><span class="p">)</span>
-<a id="__codelineno-1-104" name="__codelineno-1-104" href="#__codelineno-1-104"></a>
-<a id="__codelineno-1-105" name="__codelineno-1-105" href="#__codelineno-1-105"></a>
-<a id="__codelineno-1-106" name="__codelineno-1-106" href="#__codelineno-1-106"></a><span class="k">class</span><span class="w"> </span><span class="nc">ControlledLogger</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-1-107" name="__codelineno-1-107" href="#__codelineno-1-107"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
-<a id="__codelineno-1-108" name="__codelineno-1-108" href="#__codelineno-1-108"></a>        <span class="n">samples</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span>
-<a id="__codelineno-1-109" name="__codelineno-1-109" href="#__codelineno-1-109"></a>            <span class="n">src</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">ControlledLogger</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">samples</span>
-<a id="__codelineno-1-110" name="__codelineno-1-110" href="#__codelineno-1-110"></a>        <span class="p">)</span>
-<a id="__codelineno-1-111" name="__codelineno-1-111" href="#__codelineno-1-111"></a>        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
-<a id="__codelineno-1-112" name="__codelineno-1-112" href="#__codelineno-1-112"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">theta</span><span class="p">)</span>
-<a id="__codelineno-1-113" name="__codelineno-1-113" href="#__codelineno-1-113"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">omega</span><span class="p">)</span>
-<a id="__codelineno-1-114" name="__codelineno-1-114" href="#__codelineno-1-114"></a>        <span class="n">torque</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">SwingUpController</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">torque</span><span class="p">)</span>
-<a id="__codelineno-1-115" name="__codelineno-1-115" href="#__codelineno-1-115"></a>
-<a id="__codelineno-1-116" name="__codelineno-1-116" href="#__codelineno-1-116"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
-<a id="__codelineno-1-117" name="__codelineno-1-117" href="#__codelineno-1-117"></a>        <span class="n">samples</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="p">())</span>
-<a id="__codelineno-1-118" name="__codelineno-1-118" href="#__codelineno-1-118"></a>
-<a id="__codelineno-1-119" name="__codelineno-1-119" href="#__codelineno-1-119"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Inputs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<a id="__codelineno-1-120" name="__codelineno-1-120" href="#__codelineno-1-120"></a>        <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="n">inputs</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="n">inputs</span><span class="o">.</span><span class="n">theta</span><span class="p">,</span> <span class="n">inputs</span><span class="o">.</span><span class="n">omega</span><span class="p">,</span> <span class="n">inputs</span><span class="o">.</span><span class="n">torque</span><span class="p">)</span>
-<a id="__codelineno-1-121" name="__codelineno-1-121" href="#__codelineno-1-121"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">samples</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="n">inputs</span><span class="o">.</span><span class="n">samples</span><span class="p">,</span> <span class="n">sample</span><span class="p">))</span>
-<a id="__codelineno-1-122" name="__codelineno-1-122" href="#__codelineno-1-122"></a>
-<a id="__codelineno-1-123" name="__codelineno-1-123" href="#__codelineno-1-123"></a>
-<a id="__codelineno-1-124" name="__codelineno-1-124" href="#__codelineno-1-124"></a><span class="k">def</span><span class="w"> </span><span class="nf">build_system</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">:</span>
-<a id="__codelineno-1-125" name="__codelineno-1-125" href="#__codelineno-1-125"></a>    <span class="n">pendulum</span> <span class="o">=</span> <span class="n">ControlledPendulum</span><span class="p">()</span>
-<a id="__codelineno-1-126" name="__codelineno-1-126" href="#__codelineno-1-126"></a>    <span class="n">observer</span> <span class="o">=</span> <span class="n">ControlledObserver</span><span class="p">()</span>
-<a id="__codelineno-1-127" name="__codelineno-1-127" href="#__codelineno-1-127"></a>    <span class="n">controller</span> <span class="o">=</span> <span class="n">SwingUpController</span><span class="p">()</span>
-<a id="__codelineno-1-128" name="__codelineno-1-128" href="#__codelineno-1-128"></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">ControlledLogger</span><span class="p">()</span>
-<a id="__codelineno-1-129" name="__codelineno-1-129" href="#__codelineno-1-129"></a>    <span class="n">plant</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">ODESystem</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">pendulum</span><span class="p">,),</span> <span class="n">dt</span><span class="o">=</span><span class="n">BASE_DT</span><span class="p">)</span>
-<a id="__codelineno-1-130" name="__codelineno-1-130" href="#__codelineno-1-130"></a>    <span class="k">return</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span>
-<a id="__codelineno-1-131" name="__codelineno-1-131" href="#__codelineno-1-131"></a>        <span class="n">phases</span><span class="o">=</span><span class="p">[</span>
-<a id="__codelineno-1-132" name="__codelineno-1-132" href="#__codelineno-1-132"></a>            <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
-<a id="__codelineno-1-133" name="__codelineno-1-133" href="#__codelineno-1-133"></a>                <span class="s2">&quot;control&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-134" name="__codelineno-1-134" href="#__codelineno-1-134"></a>                <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">controller</span><span class="p">,),</span>
-<a id="__codelineno-1-135" name="__codelineno-1-135" href="#__codelineno-1-135"></a>                <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;plant&quot;</span><span class="p">),),</span>
-<a id="__codelineno-1-136" name="__codelineno-1-136" href="#__codelineno-1-136"></a>                <span class="n">is_initial</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-1-137" name="__codelineno-1-137" href="#__codelineno-1-137"></a>            <span class="p">),</span>
-<a id="__codelineno-1-138" name="__codelineno-1-138" href="#__codelineno-1-138"></a>            <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span><span class="s2">&quot;plant&quot;</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">plant</span><span class="p">,),</span> <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;observe&quot;</span><span class="p">),)),</span>
-<a id="__codelineno-1-139" name="__codelineno-1-139" href="#__codelineno-1-139"></a>            <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
-<a id="__codelineno-1-140" name="__codelineno-1-140" href="#__codelineno-1-140"></a>                <span class="s2">&quot;observe&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-141" name="__codelineno-1-141" href="#__codelineno-1-141"></a>                <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">observer</span><span class="p">,</span> <span class="n">logger</span><span class="p">),</span>
-<a id="__codelineno-1-142" name="__codelineno-1-142" href="#__codelineno-1-142"></a>                <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">terminate</span><span class="p">),),</span>
-<a id="__codelineno-1-143" name="__codelineno-1-143" href="#__codelineno-1-143"></a>            <span class="p">),</span>
-<a id="__codelineno-1-144" name="__codelineno-1-144" href="#__codelineno-1-144"></a>        <span class="p">],</span>
-<a id="__codelineno-1-145" name="__codelineno-1-145" href="#__codelineno-1-145"></a>        <span class="n">base_dt</span><span class="o">=</span><span class="n">BASE_DT</span><span class="p">,</span>
-<a id="__codelineno-1-146" name="__codelineno-1-146" href="#__codelineno-1-146"></a>    <span class="p">)</span>
-<a id="__codelineno-1-147" name="__codelineno-1-147" href="#__codelineno-1-147"></a>
-<a id="__codelineno-1-148" name="__codelineno-1-148" href="#__codelineno-1-148"></a>
-<a id="__codelineno-1-149" name="__codelineno-1-149" href="#__codelineno-1-149"></a><span class="k">def</span><span class="w"> </span><span class="nf">run_response</span><span class="p">(</span><span class="n">steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="o">...</span><span class="p">]:</span>
-<a id="__codelineno-1-150" name="__codelineno-1-150" href="#__codelineno-1-150"></a>    <span class="n">system</span> <span class="o">=</span> <span class="n">build_system</span><span class="p">()</span>
-<a id="__codelineno-1-151" name="__codelineno-1-151" href="#__codelineno-1-151"></a>    <span class="n">system</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">steps</span><span class="p">)</span>
-<a id="__codelineno-1-152" name="__codelineno-1-152" href="#__codelineno-1-152"></a>    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
-<a id="__codelineno-1-153" name="__codelineno-1-153" href="#__codelineno-1-153"></a>        <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="o">...</span><span class="p">],</span>
-<a id="__codelineno-1-154" name="__codelineno-1-154" href="#__codelineno-1-154"></a>        <span class="n">system</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">ControlledLogger</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">samples</span><span class="p">),</span>
-<a id="__codelineno-1-155" name="__codelineno-1-155" href="#__codelineno-1-155"></a>    <span class="p">)</span>
-<a id="__codelineno-1-156" name="__codelineno-1-156" href="#__codelineno-1-156"></a>
-<a id="__codelineno-1-157" name="__codelineno-1-157" href="#__codelineno-1-157"></a>
-<a id="__codelineno-1-158" name="__codelineno-1-158" href="#__codelineno-1-158"></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-1-159" name="__codelineno-1-159" href="#__codelineno-1-159"></a>    <span class="n">samples</span> <span class="o">=</span> <span class="n">run_response</span><span class="p">()</span>
-<a id="__codelineno-1-160" name="__codelineno-1-160" href="#__codelineno-1-160"></a>    <span class="n">time</span><span class="p">,</span> <span class="n">theta</span><span class="p">,</span> <span class="n">omega</span><span class="p">,</span> <span class="n">torque</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-<a id="__codelineno-1-161" name="__codelineno-1-161" href="#__codelineno-1-161"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;time=</span><span class="si">{</span><span class="n">time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-1-162" name="__codelineno-1-162" href="#__codelineno-1-162"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;theta=</span><span class="si">{</span><span class="n">theta</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-1-163" name="__codelineno-1-163" href="#__codelineno-1-163"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;omega=</span><span class="si">{</span><span class="n">omega</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-1-164" name="__codelineno-1-164" href="#__codelineno-1-164"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;torque=</span><span class="si">{</span><span class="n">torque</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-1-165" name="__codelineno-1-165" href="#__codelineno-1-165"></a>
-<a id="__codelineno-1-166" name="__codelineno-1-166" href="#__codelineno-1-166"></a>
-<a id="__codelineno-1-167" name="__codelineno-1-167" href="#__codelineno-1-167"></a><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
-<a id="__codelineno-1-168" name="__codelineno-1-168" href="#__codelineno-1-168"></a>    <span class="n">main</span><span class="p">()</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">cast</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="kn">import</span><span class="w"> </span><span class="nn">casadi</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ca</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="kn">import</span><span class="w"> </span><span class="nn">regelum</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rg</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="n">BASE_DT</span> <span class="o">=</span> <span class="s2">&quot;0.01&quot;</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="n">CONTROL_DT</span> <span class="o">=</span> <span class="s2">&quot;0.05&quot;</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="n">GRAVITY</span> <span class="o">=</span> <span class="mf">9.81</span>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="n">LENGTH</span> <span class="o">=</span> <span class="mf">1.0</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="n">MASS</span> <span class="o">=</span> <span class="mf">1.0</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="n">DAMPING</span> <span class="o">=</span> <span class="mf">0.08</span>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="k">def</span><span class="w"> </span><span class="nf">wrap_angle</span><span class="p">(</span><span class="n">angle</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>    <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">atan2</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">))</span>
+<a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a>
+<a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a>
+<a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a><span class="k">class</span><span class="w"> </span><span class="nc">ControlledPendulum</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">ODENode</span><span class="p">):</span>
+<a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<a id="__codelineno-8-24" name="__codelineno-8-24" href="#__codelineno-8-24"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-8-25" name="__codelineno-8-25" href="#__codelineno-8-25"></a>        <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-8-26" name="__codelineno-8-26" href="#__codelineno-8-26"></a>        <span class="n">theta0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+<a id="__codelineno-8-27" name="__codelineno-8-27" href="#__codelineno-8-27"></a>        <span class="n">omega0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+<a id="__codelineno-8-28" name="__codelineno-8-28" href="#__codelineno-8-28"></a>        <span class="n">gravity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">GRAVITY</span><span class="p">,</span>
+<a id="__codelineno-8-29" name="__codelineno-8-29" href="#__codelineno-8-29"></a>        <span class="n">length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">LENGTH</span><span class="p">,</span>
+<a id="__codelineno-8-30" name="__codelineno-8-30" href="#__codelineno-8-30"></a>        <span class="n">mass</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">MASS</span><span class="p">,</span>
+<a id="__codelineno-8-31" name="__codelineno-8-31" href="#__codelineno-8-31"></a>        <span class="n">damping</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">DAMPING</span><span class="p">,</span>
+<a id="__codelineno-8-32" name="__codelineno-8-32" href="#__codelineno-8-32"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-8-33" name="__codelineno-8-33" href="#__codelineno-8-33"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">theta0</span> <span class="o">=</span> <span class="n">theta0</span>
+<a id="__codelineno-8-34" name="__codelineno-8-34" href="#__codelineno-8-34"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">omega0</span> <span class="o">=</span> <span class="n">omega0</span>
+<a id="__codelineno-8-35" name="__codelineno-8-35" href="#__codelineno-8-35"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">gravity</span> <span class="o">=</span> <span class="n">gravity</span>
+<a id="__codelineno-8-36" name="__codelineno-8-36" href="#__codelineno-8-36"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">=</span> <span class="n">length</span>
+<a id="__codelineno-8-37" name="__codelineno-8-37" href="#__codelineno-8-37"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="n">mass</span>
+<a id="__codelineno-8-38" name="__codelineno-8-38" href="#__codelineno-8-38"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">damping</span> <span class="o">=</span> <span class="n">damping</span>
+<a id="__codelineno-8-39" name="__codelineno-8-39" href="#__codelineno-8-39"></a>
+<a id="__codelineno-8-40" name="__codelineno-8-40" href="#__codelineno-8-40"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
+<a id="__codelineno-8-41" name="__codelineno-8-41" href="#__codelineno-8-41"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span> <span class="bp">self</span><span class="p">:</span> <span class="n">cast</span><span class="p">(</span><span class="n">ControlledPendulum</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">theta0</span><span class="p">)</span>
+<a id="__codelineno-8-42" name="__codelineno-8-42" href="#__codelineno-8-42"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span> <span class="bp">self</span><span class="p">:</span> <span class="n">cast</span><span class="p">(</span><span class="n">ControlledPendulum</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">omega0</span><span class="p">)</span>
+<a id="__codelineno-8-43" name="__codelineno-8-43" href="#__codelineno-8-43"></a>
+<a id="__codelineno-8-44" name="__codelineno-8-44" href="#__codelineno-8-44"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">dstate</span><span class="p">(</span>  <span class="c1"># ty: ignore[invalid-method-override]</span>
+<a id="__codelineno-8-45" name="__codelineno-8-45" href="#__codelineno-8-45"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-8-46" name="__codelineno-8-46" href="#__codelineno-8-46"></a>        <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span>
+<a id="__codelineno-8-47" name="__codelineno-8-47" href="#__codelineno-8-47"></a>        <span class="n">torque</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">SwingUpController</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">torque</span><span class="p">),</span>
+<a id="__codelineno-8-48" name="__codelineno-8-48" href="#__codelineno-8-48"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<a id="__codelineno-8-49" name="__codelineno-8-49" href="#__codelineno-8-49"></a>        <span class="n">inertia</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">/</span> <span class="mf">3.0</span>
+<a id="__codelineno-8-50" name="__codelineno-8-50" href="#__codelineno-8-50"></a>        <span class="n">theta_dot</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">omega</span>
+<a id="__codelineno-8-51" name="__codelineno-8-51" href="#__codelineno-8-51"></a>        <span class="n">omega_dot</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-8-52" name="__codelineno-8-52" href="#__codelineno-8-52"></a>            <span class="o">-</span><span class="p">(</span><span class="mf">3.0</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">gravity</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">length</span><span class="p">)</span> <span class="o">*</span> <span class="n">ca</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">theta</span><span class="p">)</span>
+<a id="__codelineno-8-53" name="__codelineno-8-53" href="#__codelineno-8-53"></a>            <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">damping</span> <span class="o">*</span> <span class="n">state</span><span class="o">.</span><span class="n">omega</span>
+<a id="__codelineno-8-54" name="__codelineno-8-54" href="#__codelineno-8-54"></a>            <span class="o">+</span> <span class="n">torque</span> <span class="o">/</span> <span class="n">inertia</span>
+<a id="__codelineno-8-55" name="__codelineno-8-55" href="#__codelineno-8-55"></a>        <span class="p">)</span>
+<a id="__codelineno-8-56" name="__codelineno-8-56" href="#__codelineno-8-56"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">theta</span><span class="o">=</span><span class="n">theta_dot</span><span class="p">,</span> <span class="n">omega</span><span class="o">=</span><span class="n">omega_dot</span><span class="p">)</span>
+<a id="__codelineno-8-57" name="__codelineno-8-57" href="#__codelineno-8-57"></a>
+<a id="__codelineno-8-58" name="__codelineno-8-58" href="#__codelineno-8-58"></a>
+<a id="__codelineno-8-59" name="__codelineno-8-59" href="#__codelineno-8-59"></a><span class="k">class</span><span class="w"> </span><span class="nc">Observer</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-8-60" name="__codelineno-8-60" href="#__codelineno-8-60"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
+<a id="__codelineno-8-61" name="__codelineno-8-61" href="#__codelineno-8-61"></a>        <span class="n">sin_angle</span><span class="p">:</span> <span class="nb">float</span>
+<a id="__codelineno-8-62" name="__codelineno-8-62" href="#__codelineno-8-62"></a>        <span class="n">cos_angle</span><span class="p">:</span> <span class="nb">float</span>
+<a id="__codelineno-8-63" name="__codelineno-8-63" href="#__codelineno-8-63"></a>        <span class="n">angular_velocity</span><span class="p">:</span> <span class="nb">float</span>
+<a id="__codelineno-8-64" name="__codelineno-8-64" href="#__codelineno-8-64"></a>
+<a id="__codelineno-8-65" name="__codelineno-8-65" href="#__codelineno-8-65"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span>
+<a id="__codelineno-8-66" name="__codelineno-8-66" href="#__codelineno-8-66"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-8-67" name="__codelineno-8-67" href="#__codelineno-8-67"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">theta</span><span class="p">),</span>
+<a id="__codelineno-8-68" name="__codelineno-8-68" href="#__codelineno-8-68"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">omega</span><span class="p">),</span>
+<a id="__codelineno-8-69" name="__codelineno-8-69" href="#__codelineno-8-69"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<a id="__codelineno-8-70" name="__codelineno-8-70" href="#__codelineno-8-70"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span>
+<a id="__codelineno-8-71" name="__codelineno-8-71" href="#__codelineno-8-71"></a>            <span class="n">sin_angle</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span>
+<a id="__codelineno-8-72" name="__codelineno-8-72" href="#__codelineno-8-72"></a>            <span class="n">cos_angle</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span>
+<a id="__codelineno-8-73" name="__codelineno-8-73" href="#__codelineno-8-73"></a>            <span class="n">angular_velocity</span><span class="o">=</span><span class="n">omega</span><span class="p">,</span>
+<a id="__codelineno-8-74" name="__codelineno-8-74" href="#__codelineno-8-74"></a>        <span class="p">)</span>
+<a id="__codelineno-8-75" name="__codelineno-8-75" href="#__codelineno-8-75"></a>
+<a id="__codelineno-8-76" name="__codelineno-8-76" href="#__codelineno-8-76"></a>
+<a id="__codelineno-8-77" name="__codelineno-8-77" href="#__codelineno-8-77"></a><span class="k">class</span><span class="w"> </span><span class="nc">SwingUpController</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-8-78" name="__codelineno-8-78" href="#__codelineno-8-78"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
+<a id="__codelineno-8-79" name="__codelineno-8-79" href="#__codelineno-8-79"></a>        <span class="n">torque</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+<a id="__codelineno-8-80" name="__codelineno-8-80" href="#__codelineno-8-80"></a>
+<a id="__codelineno-8-81" name="__codelineno-8-81" href="#__codelineno-8-81"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<a id="__codelineno-8-82" name="__codelineno-8-82" href="#__codelineno-8-82"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-8-83" name="__codelineno-8-83" href="#__codelineno-8-83"></a>        <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-8-84" name="__codelineno-8-84" href="#__codelineno-8-84"></a>        <span class="n">kp</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">14.0</span><span class="p">,</span>
+<a id="__codelineno-8-85" name="__codelineno-8-85" href="#__codelineno-8-85"></a>        <span class="n">kd</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">4.0</span><span class="p">,</span>
+<a id="__codelineno-8-86" name="__codelineno-8-86" href="#__codelineno-8-86"></a>        <span class="n">torque_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">4.0</span><span class="p">,</span>
+<a id="__codelineno-8-87" name="__codelineno-8-87" href="#__codelineno-8-87"></a>        <span class="n">dt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CONTROL_DT</span><span class="p">,</span>
+<a id="__codelineno-8-88" name="__codelineno-8-88" href="#__codelineno-8-88"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-8-89" name="__codelineno-8-89" href="#__codelineno-8-89"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">)</span>
+<a id="__codelineno-8-90" name="__codelineno-8-90" href="#__codelineno-8-90"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">kp</span> <span class="o">=</span> <span class="n">kp</span>
+<a id="__codelineno-8-91" name="__codelineno-8-91" href="#__codelineno-8-91"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">kd</span> <span class="o">=</span> <span class="n">kd</span>
+<a id="__codelineno-8-92" name="__codelineno-8-92" href="#__codelineno-8-92"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">torque_limit</span> <span class="o">=</span> <span class="n">torque_limit</span>
+<a id="__codelineno-8-93" name="__codelineno-8-93" href="#__codelineno-8-93"></a>
+<a id="__codelineno-8-94" name="__codelineno-8-94" href="#__codelineno-8-94"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span>
+<a id="__codelineno-8-95" name="__codelineno-8-95" href="#__codelineno-8-95"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-8-96" name="__codelineno-8-96" href="#__codelineno-8-96"></a>        <span class="n">sin_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Observer</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">sin_angle</span><span class="p">),</span>
+<a id="__codelineno-8-97" name="__codelineno-8-97" href="#__codelineno-8-97"></a>        <span class="n">cos_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Observer</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">cos_angle</span><span class="p">),</span>
+<a id="__codelineno-8-98" name="__codelineno-8-98" href="#__codelineno-8-98"></a>        <span class="n">angular_velocity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Observer</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">angular_velocity</span><span class="p">),</span>
+<a id="__codelineno-8-99" name="__codelineno-8-99" href="#__codelineno-8-99"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<a id="__codelineno-8-100" name="__codelineno-8-100" href="#__codelineno-8-100"></a>        <span class="n">theta</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">atan2</span><span class="p">(</span><span class="n">sin_angle</span><span class="p">,</span> <span class="n">cos_angle</span><span class="p">)</span>
+<a id="__codelineno-8-101" name="__codelineno-8-101" href="#__codelineno-8-101"></a>        <span class="n">error</span> <span class="o">=</span> <span class="n">wrap_angle</span><span class="p">(</span><span class="n">theta</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+<a id="__codelineno-8-102" name="__codelineno-8-102" href="#__codelineno-8-102"></a>        <span class="n">raw</span> <span class="o">=</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">kp</span> <span class="o">*</span> <span class="n">error</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">kd</span> <span class="o">*</span> <span class="n">angular_velocity</span>
+<a id="__codelineno-8-103" name="__codelineno-8-103" href="#__codelineno-8-103"></a>        <span class="n">torque</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">torque_limit</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">torque_limit</span><span class="p">,</span> <span class="n">raw</span><span class="p">))</span>
+<a id="__codelineno-8-104" name="__codelineno-8-104" href="#__codelineno-8-104"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">torque</span><span class="o">=</span><span class="n">torque</span><span class="p">)</span>
+<a id="__codelineno-8-105" name="__codelineno-8-105" href="#__codelineno-8-105"></a>
+<a id="__codelineno-8-106" name="__codelineno-8-106" href="#__codelineno-8-106"></a>
+<a id="__codelineno-8-107" name="__codelineno-8-107" href="#__codelineno-8-107"></a><span class="k">class</span><span class="w"> </span><span class="nc">Logger</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-8-108" name="__codelineno-8-108" href="#__codelineno-8-108"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
+<a id="__codelineno-8-109" name="__codelineno-8-109" href="#__codelineno-8-109"></a>        <span class="n">samples</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+<a id="__codelineno-8-110" name="__codelineno-8-110" href="#__codelineno-8-110"></a>
+<a id="__codelineno-8-111" name="__codelineno-8-111" href="#__codelineno-8-111"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span>
+<a id="__codelineno-8-112" name="__codelineno-8-112" href="#__codelineno-8-112"></a>        <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-8-113" name="__codelineno-8-113" href="#__codelineno-8-113"></a>        <span class="n">prev_state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span>
+<a id="__codelineno-8-114" name="__codelineno-8-114" href="#__codelineno-8-114"></a>        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">time</span><span class="p">),</span>
+<a id="__codelineno-8-115" name="__codelineno-8-115" href="#__codelineno-8-115"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">theta</span><span class="p">),</span>
+<a id="__codelineno-8-116" name="__codelineno-8-116" href="#__codelineno-8-116"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">ControlledPendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">omega</span><span class="p">),</span>
+<a id="__codelineno-8-117" name="__codelineno-8-117" href="#__codelineno-8-117"></a>        <span class="n">torque</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">SwingUpController</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">torque</span><span class="p">),</span>
+<a id="__codelineno-8-118" name="__codelineno-8-118" href="#__codelineno-8-118"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<a id="__codelineno-8-119" name="__codelineno-8-119" href="#__codelineno-8-119"></a>        <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="n">theta</span><span class="p">,</span> <span class="n">omega</span><span class="p">,</span> <span class="n">torque</span><span class="p">)</span>
+<a id="__codelineno-8-120" name="__codelineno-8-120" href="#__codelineno-8-120"></a>        <span class="n">prev_state</span><span class="o">.</span><span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>
+<a id="__codelineno-8-121" name="__codelineno-8-121" href="#__codelineno-8-121"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">samples</span><span class="o">=</span><span class="n">prev_state</span><span class="o">.</span><span class="n">samples</span><span class="p">)</span>
+<a id="__codelineno-8-122" name="__codelineno-8-122" href="#__codelineno-8-122"></a>
+<a id="__codelineno-8-123" name="__codelineno-8-123" href="#__codelineno-8-123"></a>
+<a id="__codelineno-8-124" name="__codelineno-8-124" href="#__codelineno-8-124"></a><span class="k">def</span><span class="w"> </span><span class="nf">build_system</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">:</span>
+<a id="__codelineno-8-125" name="__codelineno-8-125" href="#__codelineno-8-125"></a>    <span class="n">pendulum</span> <span class="o">=</span> <span class="n">ControlledPendulum</span><span class="p">()</span>
+<a id="__codelineno-8-126" name="__codelineno-8-126" href="#__codelineno-8-126"></a>    <span class="n">observer</span> <span class="o">=</span> <span class="n">Observer</span><span class="p">()</span>
+<a id="__codelineno-8-127" name="__codelineno-8-127" href="#__codelineno-8-127"></a>    <span class="n">controller</span> <span class="o">=</span> <span class="n">SwingUpController</span><span class="p">()</span>
+<a id="__codelineno-8-128" name="__codelineno-8-128" href="#__codelineno-8-128"></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+<a id="__codelineno-8-129" name="__codelineno-8-129" href="#__codelineno-8-129"></a>    <span class="n">plant</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">ODESystem</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">pendulum</span><span class="p">,),</span> <span class="n">dt</span><span class="o">=</span><span class="n">BASE_DT</span><span class="p">)</span>
+<a id="__codelineno-8-130" name="__codelineno-8-130" href="#__codelineno-8-130"></a>    <span class="k">return</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span>
+<a id="__codelineno-8-131" name="__codelineno-8-131" href="#__codelineno-8-131"></a>        <span class="n">phases</span><span class="o">=</span><span class="p">[</span>
+<a id="__codelineno-8-132" name="__codelineno-8-132" href="#__codelineno-8-132"></a>            <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
+<a id="__codelineno-8-133" name="__codelineno-8-133" href="#__codelineno-8-133"></a>                <span class="s2">&quot;observe_and_control&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-134" name="__codelineno-8-134" href="#__codelineno-8-134"></a>                <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">observer</span><span class="p">,</span> <span class="n">controller</span><span class="p">,</span> <span class="n">logger</span><span class="p">),</span>
+<a id="__codelineno-8-135" name="__codelineno-8-135" href="#__codelineno-8-135"></a>                <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;plant&quot;</span><span class="p">),),</span>
+<a id="__codelineno-8-136" name="__codelineno-8-136" href="#__codelineno-8-136"></a>                <span class="n">is_initial</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-8-137" name="__codelineno-8-137" href="#__codelineno-8-137"></a>            <span class="p">),</span>
+<a id="__codelineno-8-138" name="__codelineno-8-138" href="#__codelineno-8-138"></a>            <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
+<a id="__codelineno-8-139" name="__codelineno-8-139" href="#__codelineno-8-139"></a>                <span class="s2">&quot;plant&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-140" name="__codelineno-8-140" href="#__codelineno-8-140"></a>                <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">plant</span><span class="p">,),</span>
+<a id="__codelineno-8-141" name="__codelineno-8-141" href="#__codelineno-8-141"></a>                <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">terminate</span><span class="p">),),</span>
+<a id="__codelineno-8-142" name="__codelineno-8-142" href="#__codelineno-8-142"></a>            <span class="p">),</span>
+<a id="__codelineno-8-143" name="__codelineno-8-143" href="#__codelineno-8-143"></a>        <span class="p">],</span>
+<a id="__codelineno-8-144" name="__codelineno-8-144" href="#__codelineno-8-144"></a>        <span class="n">base_dt</span><span class="o">=</span><span class="n">BASE_DT</span><span class="p">,</span>
+<a id="__codelineno-8-145" name="__codelineno-8-145" href="#__codelineno-8-145"></a>    <span class="p">)</span>
+<a id="__codelineno-8-146" name="__codelineno-8-146" href="#__codelineno-8-146"></a>
+<a id="__codelineno-8-147" name="__codelineno-8-147" href="#__codelineno-8-147"></a>
+<a id="__codelineno-8-148" name="__codelineno-8-148" href="#__codelineno-8-148"></a><span class="k">def</span><span class="w"> </span><span class="nf">run_response</span><span class="p">(</span><span class="n">steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<a id="__codelineno-8-149" name="__codelineno-8-149" href="#__codelineno-8-149"></a>    <span class="n">system</span> <span class="o">=</span> <span class="n">build_system</span><span class="p">()</span>
+<a id="__codelineno-8-150" name="__codelineno-8-150" href="#__codelineno-8-150"></a>    <span class="n">system</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">steps</span><span class="p">)</span>
+<a id="__codelineno-8-151" name="__codelineno-8-151" href="#__codelineno-8-151"></a>    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
+<a id="__codelineno-8-152" name="__codelineno-8-152" href="#__codelineno-8-152"></a>        <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]],</span>
+<a id="__codelineno-8-153" name="__codelineno-8-153" href="#__codelineno-8-153"></a>        <span class="n">system</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">Logger</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">samples</span><span class="p">),</span>
+<a id="__codelineno-8-154" name="__codelineno-8-154" href="#__codelineno-8-154"></a>    <span class="p">)</span>
+<a id="__codelineno-8-155" name="__codelineno-8-155" href="#__codelineno-8-155"></a>
+<a id="__codelineno-8-156" name="__codelineno-8-156" href="#__codelineno-8-156"></a>
+<a id="__codelineno-8-157" name="__codelineno-8-157" href="#__codelineno-8-157"></a><span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-8-158" name="__codelineno-8-158" href="#__codelineno-8-158"></a>    <span class="n">samples</span> <span class="o">=</span> <span class="n">run_response</span><span class="p">()</span>
+<a id="__codelineno-8-159" name="__codelineno-8-159" href="#__codelineno-8-159"></a>    <span class="n">time</span><span class="p">,</span> <span class="n">theta</span><span class="p">,</span> <span class="n">omega</span><span class="p">,</span> <span class="n">torque</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+<a id="__codelineno-8-160" name="__codelineno-8-160" href="#__codelineno-8-160"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;time=</span><span class="si">{</span><span class="n">time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-8-161" name="__codelineno-8-161" href="#__codelineno-8-161"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;theta=</span><span class="si">{</span><span class="n">theta</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-8-162" name="__codelineno-8-162" href="#__codelineno-8-162"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;omega=</span><span class="si">{</span><span class="n">omega</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-8-163" name="__codelineno-8-163" href="#__codelineno-8-163"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;torque=</span><span class="si">{</span><span class="n">torque</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-8-164" name="__codelineno-8-164" href="#__codelineno-8-164"></a>
+<a id="__codelineno-8-165" name="__codelineno-8-165" href="#__codelineno-8-165"></a>
+<a id="__codelineno-8-166" name="__codelineno-8-166" href="#__codelineno-8-166"></a><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+<a id="__codelineno-8-167" name="__codelineno-8-167" href="#__codelineno-8-167"></a>    <span class="n">main</span><span class="p">()</span>
 </code></pre></div>
 </details>
 
