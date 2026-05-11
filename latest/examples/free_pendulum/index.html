@@ -896,7 +896,7 @@ derivatives on the base simulation grid.</p>
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>        <span class="p">)</span>
 <a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">theta</span><span class="o">=</span><span class="n">theta_dot</span><span class="p">,</span> <span class="n">omega</span><span class="o">=</span><span class="n">omega_dot</span><span class="p">)</span>
 </code></pre></div>
-<p><code>FreeObserver</code> reads plant state and publishes <span class="arithmatex">\(\sin(\theta)\)</span>,
+<p><code>Observer</code> reads plant state and publishes <span class="arithmatex">\(\sin(\theta)\)</span>,
 <span class="arithmatex">\(\cos(\theta)\)</span>, and <span class="arithmatex">\(\omega\)</span>.</p>
 <h2 id="phase-graph">Phase Graph</h2>
 <pre class="mermaid"><code>flowchart LR
@@ -911,8 +911,8 @@ derivatives on the base simulation grid.</p>
     class stop stop</code></pre>
 <h2 id="node-graph">Node Graph</h2>
 <pre class="mermaid"><code>flowchart LR
-    clock["Clock"] --&gt; logger["FreeLogger"]
-    pendulum["FreePendulum"] --&gt; observer["FreeObserver"]
+    clock["Clock"] --&gt; logger["Logger"]
+    pendulum["FreePendulum"] --&gt; observer["Observer"]
     pendulum --&gt; logger
     observer --&gt; logger
 
@@ -941,7 +941,7 @@ derivatives on the base simulation grid.</p>
 </tr>
 <tr>
 <td><span class="phase-label phase-label--observe">observe</span></td>
-<td><code>FreeObserver</code>, <code>FreeLogger</code></td>
+<td><code>Observer</code>, <code>Logger</code></td>
 <td>Publishes observer signals and records samples for plotting.</td>
 </tr>
 </tbody>
@@ -962,12 +962,12 @@ derivatives on the base simulation grid.</p>
 <td>none</td>
 </tr>
 <tr>
-<td><span class="node-label node-label--observer">FreeObserver</span></td>
+<td><span class="node-label node-label--observer">Observer</span></td>
 <td><code>sin_angle</code>, <code>cos_angle</code>, <code>angular_velocity</code></td>
 <td><code>FreePendulum.State.theta</code>, <code>FreePendulum.State.omega</code></td>
 </tr>
 <tr>
-<td><span class="node-label node-label--logger">FreeLogger</span></td>
+<td><span class="node-label node-label--logger">Logger</span></td>
 <td><code>samples</code></td>
 <td><code>Clock.time</code>, plant state, observer state</td>
 </tr>
@@ -1030,7 +1030,7 @@ not been pushed to GitHub yet.</p>
 <a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">theta</span><span class="o">=</span><span class="n">theta_dot</span><span class="p">,</span> <span class="n">omega</span><span class="o">=</span><span class="n">omega_dot</span><span class="p">)</span>
 <a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a>
 <a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a>
-<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a><span class="k">class</span><span class="w"> </span><span class="nc">FreeObserver</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a><span class="k">class</span><span class="w"> </span><span class="nc">Observer</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
 <a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
 <a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">FreePendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">theta</span><span class="p">)</span>
 <a id="__codelineno-3-48" name="__codelineno-3-48" href="#__codelineno-3-48"></a>        <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">FreePendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">omega</span><span class="p">)</span>
@@ -1048,16 +1048,16 @@ not been pushed to GitHub yet.</p>
 <a id="__codelineno-3-60" name="__codelineno-3-60" href="#__codelineno-3-60"></a>        <span class="p">)</span>
 <a id="__codelineno-3-61" name="__codelineno-3-61" href="#__codelineno-3-61"></a>
 <a id="__codelineno-3-62" name="__codelineno-3-62" href="#__codelineno-3-62"></a>
-<a id="__codelineno-3-63" name="__codelineno-3-63" href="#__codelineno-3-63"></a><span class="k">class</span><span class="w"> </span><span class="nc">FreeLogger</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-3-63" name="__codelineno-3-63" href="#__codelineno-3-63"></a><span class="k">class</span><span class="w"> </span><span class="nc">Logger</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
 <a id="__codelineno-3-64" name="__codelineno-3-64" href="#__codelineno-3-64"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
 <a id="__codelineno-3-65" name="__codelineno-3-65" href="#__codelineno-3-65"></a>        <span class="n">samples</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span>
-<a id="__codelineno-3-66" name="__codelineno-3-66" href="#__codelineno-3-66"></a>            <span class="n">src</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">FreeLogger</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">samples</span>
+<a id="__codelineno-3-66" name="__codelineno-3-66" href="#__codelineno-3-66"></a>            <span class="n">src</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">Logger</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">samples</span>
 <a id="__codelineno-3-67" name="__codelineno-3-67" href="#__codelineno-3-67"></a>        <span class="p">)</span>
 <a id="__codelineno-3-68" name="__codelineno-3-68" href="#__codelineno-3-68"></a>        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
 <a id="__codelineno-3-69" name="__codelineno-3-69" href="#__codelineno-3-69"></a>        <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">FreePendulum</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">theta</span><span class="p">)</span>
-<a id="__codelineno-3-70" name="__codelineno-3-70" href="#__codelineno-3-70"></a>        <span class="n">sin_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">FreeObserver</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">sin_angle</span><span class="p">)</span>
-<a id="__codelineno-3-71" name="__codelineno-3-71" href="#__codelineno-3-71"></a>        <span class="n">cos_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">FreeObserver</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">cos_angle</span><span class="p">)</span>
-<a id="__codelineno-3-72" name="__codelineno-3-72" href="#__codelineno-3-72"></a>        <span class="n">angular_velocity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">FreeObserver</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">angular_velocity</span><span class="p">)</span>
+<a id="__codelineno-3-70" name="__codelineno-3-70" href="#__codelineno-3-70"></a>        <span class="n">sin_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Observer</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">sin_angle</span><span class="p">)</span>
+<a id="__codelineno-3-71" name="__codelineno-3-71" href="#__codelineno-3-71"></a>        <span class="n">cos_angle</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Observer</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">cos_angle</span><span class="p">)</span>
+<a id="__codelineno-3-72" name="__codelineno-3-72" href="#__codelineno-3-72"></a>        <span class="n">angular_velocity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Observer</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">angular_velocity</span><span class="p">)</span>
 <a id="__codelineno-3-73" name="__codelineno-3-73" href="#__codelineno-3-73"></a>
 <a id="__codelineno-3-74" name="__codelineno-3-74" href="#__codelineno-3-74"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
 <a id="__codelineno-3-75" name="__codelineno-3-75" href="#__codelineno-3-75"></a>        <span class="n">samples</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="p">())</span>
@@ -1075,8 +1075,8 @@ not been pushed to GitHub yet.</p>
 <a id="__codelineno-3-87" name="__codelineno-3-87" href="#__codelineno-3-87"></a>
 <a id="__codelineno-3-88" name="__codelineno-3-88" href="#__codelineno-3-88"></a><span class="k">def</span><span class="w"> </span><span class="nf">build_system</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">:</span>
 <a id="__codelineno-3-89" name="__codelineno-3-89" href="#__codelineno-3-89"></a>    <span class="n">pendulum</span> <span class="o">=</span> <span class="n">FreePendulum</span><span class="p">()</span>
-<a id="__codelineno-3-90" name="__codelineno-3-90" href="#__codelineno-3-90"></a>    <span class="n">observer</span> <span class="o">=</span> <span class="n">FreeObserver</span><span class="p">()</span>
-<a id="__codelineno-3-91" name="__codelineno-3-91" href="#__codelineno-3-91"></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">FreeLogger</span><span class="p">()</span>
+<a id="__codelineno-3-90" name="__codelineno-3-90" href="#__codelineno-3-90"></a>    <span class="n">observer</span> <span class="o">=</span> <span class="n">Observer</span><span class="p">()</span>
+<a id="__codelineno-3-91" name="__codelineno-3-91" href="#__codelineno-3-91"></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
 <a id="__codelineno-3-92" name="__codelineno-3-92" href="#__codelineno-3-92"></a>    <span class="n">plant</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">ODESystem</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">pendulum</span><span class="p">,),</span> <span class="n">dt</span><span class="o">=</span><span class="n">BASE_DT</span><span class="p">)</span>
 <a id="__codelineno-3-93" name="__codelineno-3-93" href="#__codelineno-3-93"></a>    <span class="k">return</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span>
 <a id="__codelineno-3-94" name="__codelineno-3-94" href="#__codelineno-3-94"></a>        <span class="n">phases</span><span class="o">=</span><span class="p">[</span>
@@ -1101,7 +1101,7 @@ not been pushed to GitHub yet.</p>
 <a id="__codelineno-3-113" name="__codelineno-3-113" href="#__codelineno-3-113"></a>    <span class="n">system</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">steps</span><span class="p">)</span>
 <a id="__codelineno-3-114" name="__codelineno-3-114" href="#__codelineno-3-114"></a>    <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
 <a id="__codelineno-3-115" name="__codelineno-3-115" href="#__codelineno-3-115"></a>        <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="o">...</span><span class="p">],</span>
-<a id="__codelineno-3-116" name="__codelineno-3-116" href="#__codelineno-3-116"></a>        <span class="n">system</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">FreeLogger</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">samples</span><span class="p">),</span>
+<a id="__codelineno-3-116" name="__codelineno-3-116" href="#__codelineno-3-116"></a>        <span class="n">system</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">Logger</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">samples</span><span class="p">),</span>
 <a id="__codelineno-3-117" name="__codelineno-3-117" href="#__codelineno-3-117"></a>    <span class="p">)</span>
 <a id="__codelineno-3-118" name="__codelineno-3-118" href="#__codelineno-3-118"></a>
 <a id="__codelineno-3-119" name="__codelineno-3-119" href="#__codelineno-3-119"></a>
