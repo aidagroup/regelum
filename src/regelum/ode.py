@@ -2,24 +2,23 @@ from __future__ import annotations
 
 import inspect
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, cast, dataclass_transform, get_type_hints
+from typing import Any, cast, get_type_hints
 
 import casadi as ca
 from scipy.integrate import solve_ivp
 
 from regelum.core import (
     _MISSING,
-    BoundOutputPort,
-    InitialValue,
+    BoundVarPort,
     InputPort,
     Node,
     NodeInputs,
-    NodeOutputs,
-    OutputPort,
+    NodeState,
     StateSnapshot,
     SystemSource,
+    VarPort,
     _parse_time_step,
 )
 
@@ -31,72 +30,21 @@ class CasadiTraceError(RuntimeError):
     pass
 
 
-class StateVarPort(OutputPort[Any]):
-    pass
-
-
-def StateVar(
-    *,
-    initial: InitialValue = _MISSING,
-    domain: Iterable[Any] | None = None,
-) -> Any:
-    return StateVarPort(initial=initial, domain=domain)
-
-
-@dataclass_transform(field_specifiers=(StateVar,))
-class NodeState:
-    def __init__(self, **values: Any) -> None:
-        for name, value in values.items():
-            setattr(self, name, value)
-
-
-class _BoundStateNamespace:
-    def __init__(
-        self,
-        node: ODENode,
-        nested_cls: type[NodeState],
-        ports: dict[str, StateVarPort],
-    ) -> None:
-        self._node = node
-        self._nested_cls = nested_cls
-        self._ports = ports
-
-    def __getattr__(self, name: str) -> BoundOutputPort[Any]:
-        try:
-            port = self._ports[name]
-        except KeyError as exc:
-            raise AttributeError(name) from exc
-        return BoundOutputPort(self._node, port)
-
-    def __call__(self, **values: Any) -> NodeState:
-        return self._nested_cls(**values)
-
-
 class ODENode(Node):
+    _allow_schedule_dt = False
     State = NodeState
 
     def __init_subclass__(cls) -> None:
-        state_namespace_name, state_namespace_cls = _find_state_namespace(cls)
-        state_vars = _collect_state_vars(state_namespace_cls)
-        if state_vars:
-            existing_outputs = _collect_existing_outputs(cls)
-            cls.Outputs = type("Outputs", (NodeOutputs,), {**existing_outputs, **state_vars})
+        if "dt" in cls.__dict__:
+            raise TypeError(f"{cls.__name__} cannot define dt; set dt on ODESystem instead.")
         super().__init_subclass__()
         _install_dstate_input_ports(cls)
-        cls._state_namespace_name = state_namespace_name
-        cls._state_namespace_cls = state_namespace_cls
-        cls._state_vars = state_vars
+        cls._state_namespace_name = cls._output_namespace_name
+        cls._state_namespace_cls = cls._output_namespace_cls
+        cls._state_vars = cls._outputs
 
     def _bind_ports(self) -> None:
         super()._bind_ports()
-        state_namespace_name = self.__class__._state_namespace_name
-        state_namespace_cls = self.__class__._state_namespace_cls
-        if state_namespace_name is not None and state_namespace_cls is not None:
-            setattr(
-                self,
-                state_namespace_name,
-                _BoundStateNamespace(self, state_namespace_cls, self.__class__._state_vars),
-            )
         self._ode_state_values = {
             name: port.initial_value(self) for name, port in self.__class__._state_vars.items()
         }
@@ -109,7 +57,7 @@ class ODENode(Node):
     def dstate(self, inputs: Any, state: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
-    def run(self, _inputs: NodeInputs | None = None) -> dict[str, Any]:
+    def update(self, _inputs: NodeInputs | None = None) -> dict[str, Any]:
         return dict(self._ode_state_values)
 
 
@@ -156,7 +104,7 @@ class ODESystem(Node):
             for name, value in node._ode_state_values.items()
         )
 
-    def run(
+    def update(
         self,
         _inputs: NodeInputs | None = None,
         *,
@@ -303,38 +251,6 @@ class ODESystem(Node):
         for field in fields:
             values.extend(float(value) for value in _flatten(state_snapshot[field.path]))
         return values
-
-
-def _find_state_namespace(node_cls: type[ODENode]) -> tuple[str | None, type[NodeState] | None]:
-    own_namespaces = [
-        (name, value)
-        for name, value in node_cls.__dict__.items()
-        if isinstance(value, type) and issubclass(value, NodeState) and value is not NodeState
-    ]
-    if len(own_namespaces) > 1:
-        names = ", ".join(name for name, _ in own_namespaces)
-        raise TypeError(
-            f"{node_cls.__name__} may define zero or one state namespace; "
-            f"found {len(own_namespaces)}: {names}."
-        )
-    if own_namespaces:
-        return own_namespaces[0]
-    return None, None
-
-
-def _collect_state_vars(nested_cls: type[NodeState] | None) -> dict[str, StateVarPort]:
-    if nested_cls is None:
-        return {}
-    return {
-        name: value for name, value in vars(nested_cls).items() if isinstance(value, StateVarPort)
-    }
-
-
-def _collect_existing_outputs(node_cls: type[ODENode]) -> dict[str, OutputPort[Any]]:
-    outputs = node_cls.__dict__.get("Outputs")
-    if not isinstance(outputs, type) or not issubclass(outputs, NodeOutputs):
-        return {}
-    return {name: value for name, value in vars(outputs).items() if isinstance(value, OutputPort)}
 
 
 def _install_dstate_input_ports(node_cls: type[ODENode]) -> None:
@@ -513,17 +429,17 @@ def _annotation_name(annotation: Any) -> str | None:
 
 
 def _source_path(source: Any) -> str:
-    if callable(source) and not isinstance(source, OutputPort):
+    if callable(source) and not isinstance(source, VarPort):
         source = source()
-    if isinstance(source, BoundOutputPort):
+    if isinstance(source, BoundVarPort):
         return source.path
-    if isinstance(source, OutputPort):
+    if isinstance(source, VarPort):
         return source.path
     if isinstance(source, SystemSource):
         return source.path
     if not isinstance(source, str):
         raise TypeError(
-            "ODE input source must be an OutputPort, a string reference, "
+            "ODE input source must be an VarPort, a string reference, "
             "or a zero-argument callable returning one."
         )
     return _normalize_path(source)

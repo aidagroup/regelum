@@ -43,8 +43,8 @@ flowchart LR
 | <span class="phase-label phase-label--play">play</span> | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
 
 At node level, the same model looks like this.
-Solid arrows show that one node reads another node's output; dashed
-arrows from `state` show self-reads, where a node reads its own output from
+Solid arrows show that one node reads another node's state variable; dashed
+arrows from `state` show self-reads, where a node reads its own state variable from
 the previous tick.
 The node colors correspond to the phase colors in the table above:
 
@@ -124,7 +124,7 @@ def build_system() -> rg.PhasedReactiveSystem:
                 nodes=(policy,),
                 transitions=(
                     rg.If(
-                        rg.V(policy.Outputs.stalling),
+                        rg.V(policy.State.stalling),
                         "drop_quality",
                         name="stalling",
                     ),
@@ -158,7 +158,7 @@ system = rg.PhasedReactiveSystem(phases=phases)
 ```
 
 During construction, `regelum` compiles the system.
-If compilation succeeds, the returned object is ready for `step()`, `run()`,
+If compilation succeeds, the returned object is ready for `step()`, `update()`,
 `snapshot()`, `read(...)`, and `reset(...)`.
 If compilation fails, the default behavior is to raise `CompileError`.
 
@@ -181,15 +181,15 @@ Compilation resolves:
 - node names;
 - input sources;
 - instance connections;
-- output paths;
+- state paths;
 - phase targets;
 - guard references;
 - phase schedules;
 - dependency edges;
-- required initial outputs.
+- required initial state variables.
 
 For the video player, the report's `phase_schedules` shows the topologically
-ordered nodes per phase and `minimal_initial_outputs` lists the six outputs
+ordered nodes per phase and `minimal_initial_state_vars` lists the six state variables
 that need initial state
 (`Network.bandwidth_kbps`, `BitrateController.value`,
 `QualityPolicy.stalling`, `MediaSession.buffer_seconds`, `Logger.history`).
@@ -208,35 +208,35 @@ print(report.ok)
 print(report.issues)
 print(report.warnings)
 print(report.phase_schedules)
-print(report.minimal_initial_outputs)
-print(report.required_initial_outputs)
+print(report.minimal_initial_state_vars)
+print(report.required_initial_state_vars)
 ```
 
-`minimal_initial_outputs` is the smallest set of outputs that must have a
+`minimal_initial_state_vars` is the smallest set of state variables that must have a
 tick-zero value for this compiled graph.
-Those values may come from `rg.Output(initial=...)`, from a callable
+Those values may come from `rg.Var(init=...)`, from a callable
 initializer, or from a runtime `initial_state` override.
 
-`required_initial_outputs` is the subset that still has no declared initial
+`required_initial_state_vars` is the subset that still has no declared initial
 value.
-If it is non-empty, the system is telling you exactly which outputs must be
+If it is non-empty, the system is telling you exactly which state variables must be
 provided before execution.
 You can use that list to build an `initial_state` mapping:
 
 ```python
-missing = system.compile_report.required_initial_outputs
+missing = system.compile_report.required_initial_state_vars
 print(missing)
 
 system.reset(
     initial_state={
-        MediaSession.Outputs.buffer_seconds: 5.0,
-        BitrateController.Outputs.value: 720,
+        MediaSession.State.buffer_seconds: 5.0,
+        BitrateController.State.value: 720,
     }
 )
 ```
 
-In the video player, `required_initial_outputs` is empty because every
-required tick-zero output has either a static initial value or a callable
+In the video player, `required_initial_state_vars` is empty because every
+required tick-zero state variable has either a static initial value or a callable
 initializer.
 
 Use `format()` for a compact text report.
@@ -252,9 +252,9 @@ Typical issues include:
 - input source is not connected;
 - input source is unknown;
 - class-level reference is ambiguous;
-- output path is duplicated;
+- state path is duplicated;
 - explicit node names are duplicated;
-- output without initial value is read too early;
+- state variable without initial value is read too early;
 - phase graph is incomplete;
 - transition target is unknown;
 - transition chain is malformed.
@@ -266,9 +266,9 @@ This is the C1 check.
 For the video player, the only non-trivial intra-phase dependency chain is
 `Decoder → MediaSession → Logger` in `play`, which is acyclic.
 
-For finite output domains, compilation also checks C3 by requiring exactly one
+For finite state variable domains, compilation also checks C3 by requiring exactly one
 enabled transition per sampled state.
-The branching in `decide` is `If(V(QualityPolicy.Outputs.stalling),
+The branching in `decide` is `If(V(QualityPolicy.State.stalling),
 "drop_quality")` plus `Else("play")`, with `stalling: bool` — boolean has a
 finite domain, so C3 is verified statically.
 
@@ -307,21 +307,21 @@ For each phase:
 
 1. run active nodes in the compiled schedule;
 2. build each node input namespace;
-3. call `run`;
-4. normalize returned outputs;
-5. write outputs into state;
+3. call `update`;
+4. normalize returned state variables;
+5. write state variables into state;
 6. choose the next phase from transitions.
 
 ```python
 records = system.step()
 ```
 
-Each record contains the phase, node, inputs, and outputs.
+Each record contains the phase, node, inputs, and state variables.
 A 30-tick run of the player produces records like:
 
 ```python
 for record in records:
-    print(record.phase, record.node, record.outputs)
+    print(record.phase, record.node, record.state)
 # measure Network {'bandwidth_kbps': 600.0}
 # decide  QualityPolicy {'stalling': False}
 # play    Decoder {'fetched_seconds': 0.278}
@@ -331,7 +331,7 @@ for record in records:
 
 ### Running multiple ticks
 
-Use `run(steps=...)` to execute several ticks.
+Use `update(steps=...)` to execute several ticks.
 
 ```python
 system.run(steps=30)
@@ -343,7 +343,7 @@ State persists across ticks unless `reset()` is called.
 ### State access
 
 Use `snapshot()` to inspect current state.
-It returns user node outputs and committed ODE state values; system clock
+It returns user node state variables and committed ODE state values; system clock
 fields are read explicitly.
 
 ```python
@@ -352,10 +352,10 @@ print(snapshot["MediaSession.buffer_seconds"])
 print(snapshot["BitrateController.value"])
 ```
 
-Use `read(...)` when code has an output reference.
+Use `read(...)` when code has a state reference.
 
 ```python
-buffer = system.read(session.Outputs.buffer_seconds)
+buffer = system.read(session.State.buffer_seconds)
 tick = system.read(rg.Clock.tick)
 time = system.read(rg.Clock.time)
 ```
@@ -367,7 +367,7 @@ It then applies declared initial values and optional overrides.
 
 ```python
 system.reset()
-system.reset(initial_state={MediaSession.Outputs.buffer_seconds: 5.0})
+system.reset(initial_state={MediaSession.State.buffer_seconds: 5.0})
 ```
 
 ### Logging nodes
@@ -383,7 +383,7 @@ update from `MediaSession` and the freshly committed bitrate.
 - Create systems with `rg.PhasedReactiveSystem(phases=[...])`.
 - Use `strict=False` for diagnostics.
 - Resolve ambiguous class references with instance connections.
-- Add initial values only for outputs that must exist before execution.
+- Add initial values only for state variables that must exist before execution.
 - Runtime follows compiled phase schedules.
 - State persists between ticks.
 - `reset()` clears state and history.

@@ -7,11 +7,11 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
-    OutputPort,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
+    Var,
+    VarPort,
     terminate,
 )
 
@@ -19,11 +19,11 @@ JsonDoc = dict[str, Any]
 
 
 class JsonSource(Node):
-    class Outputs(NodeOutputs):
-        doc: JsonDoc = Output(initial=lambda: {})
+    class State(NodeState):
+        doc: JsonDoc = Var(init=lambda: {})
 
-    def run(self) -> Outputs:
-        return self.Outputs(
+    def update(self) -> State:
+        return self.State(
             doc={
                 "request_id": "r-001",
                 "raw": {"text": "hello"},
@@ -33,12 +33,12 @@ class JsonSource(Node):
 
 class FeatureEnricher(Node):
     class Inputs(NodeInputs):
-        doc: JsonDoc = Input(source=lambda: JsonSource.Outputs.doc)
+        doc: JsonDoc = Input(src=lambda: JsonSource.State.doc)
 
-    class Outputs(NodeOutputs):
-        doc: JsonDoc = Output(initial=lambda: {})
+    class State(NodeState):
+        doc: JsonDoc = Var(init=lambda: {})
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         doc = inputs.doc
         raw = doc["raw"]
         if not isinstance(raw, dict):
@@ -47,17 +47,17 @@ class FeatureEnricher(Node):
         if not isinstance(text, str):
             raise TypeError("Expected raw text to be a string.")
         doc["features"] = {"length": len(text), "uppercase": text.upper()}
-        return self.Outputs(doc=doc)
+        return self.State(doc=doc)
 
 
 class DecisionEnricher(Node):
     class Inputs(NodeInputs):
-        doc: JsonDoc = Input(source=lambda: FeatureEnricher.Outputs.doc)
+        doc: JsonDoc = Input(src=lambda: FeatureEnricher.State.doc)
 
-    class Outputs(NodeOutputs):
-        doc: JsonDoc = Output(initial=lambda: {})
+    class State(NodeState):
+        doc: JsonDoc = Var(init=lambda: {})
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         doc = inputs.doc
         features = doc["features"]
         if not isinstance(features, dict):
@@ -66,7 +66,7 @@ class DecisionEnricher(Node):
         if not isinstance(length, int):
             raise TypeError("Expected feature length to be an int.")
         doc["decision"] = {"label": "short" if length < 8 else "long"}
-        return self.Outputs(doc=doc)
+        return self.State(doc=doc)
 
 
 def build_system() -> PhasedReactiveSystem:
@@ -88,8 +88,8 @@ def build_system() -> PhasedReactiveSystem:
 def main() -> None:
     system = build_system()
     system.step()
-    source_doc_port = cast(OutputPort[JsonDoc], JsonSource.Outputs.doc)
-    final_doc_port = cast(OutputPort[JsonDoc], DecisionEnricher.Outputs.doc)
+    source_doc_port = cast(VarPort[JsonDoc], JsonSource.State.doc)
+    final_doc_port = cast(VarPort[JsonDoc], DecisionEnricher.State.doc)
     source_doc = system.read(source_doc_port)
     final_doc = system.read(final_doc_port)
     print(f"same_object={source_doc is final_doc}")

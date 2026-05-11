@@ -8,10 +8,10 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
+    Var,
     terminate,
 )
 
@@ -35,23 +35,23 @@ class PendulumPlant(Node):
         self.length = length
         self.damping = damping
 
-    class Outputs(NodeOutputs):
-        theta: float = Output(initial=lambda self: cast(PendulumPlant, self).init_theta)
-        omega: float = Output(initial=lambda self: cast(PendulumPlant, self).init_omega)
-        time: float = Output(initial=lambda self: cast(PendulumPlant, self).init_time)
+    class State(NodeState):
+        theta: float = Var(init=lambda self: cast(PendulumPlant, self).init_theta)
+        omega: float = Var(init=lambda self: cast(PendulumPlant, self).init_omega)
+        time: float = Var(init=lambda self: cast(PendulumPlant, self).init_time)
 
-    def run(
+    def update(
         self,
-        torque: float = Input(source=lambda: PDController.Outputs.torque),
-        theta: float = Input(source=lambda: PendulumPlant.Outputs.theta),
-        omega: float = Input(source=lambda: PendulumPlant.Outputs.omega),
-        time: float = Input(source=lambda: PendulumPlant.Outputs.time),
-    ) -> Outputs:
+        torque: float = Input(src=lambda: PDController.State.torque),
+        theta: float = Input(src=lambda: PendulumPlant.State.theta),
+        omega: float = Input(src=lambda: PendulumPlant.State.omega),
+        time: float = Input(src=lambda: PendulumPlant.State.time),
+    ) -> State:
         acceleration = torque - self.gravity / self.length * sin(theta) - self.damping * omega
         omega_next = omega + self.dt * acceleration
         theta_next = theta + self.dt * omega_next
         time_next = time + self.dt
-        return self.Outputs(theta=theta_next, omega=omega_next, time=time_next)
+        return self.State(theta=theta_next, omega=omega_next, time=time_next)
 
 
 class PDController(Node):
@@ -61,32 +61,32 @@ class PDController(Node):
         self.torque_limit = torque_limit
 
     class Inputs(NodeInputs):
-        theta: float = Input(source=PendulumPlant.Outputs.theta)
-        omega: float = Input(source=PendulumPlant.Outputs.omega)
+        theta: float = Input(src=PendulumPlant.State.theta)
+        omega: float = Input(src=PendulumPlant.State.omega)
 
-    class Outputs(NodeOutputs):
+    class State(NodeState):
         torque: float
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         raw = -self.kp * inputs.theta - self.kd * inputs.omega
         torque = max(-self.torque_limit, min(self.torque_limit, raw))
-        return self.Outputs(torque=torque)
+        return self.State(torque=torque)
 
 
 class Logger(Node):
-    class Outputs(NodeOutputs):
-        samples: list[tuple[float, float, float, float]] = Output(initial=lambda: list())
+    class State(NodeState):
+        samples: list[tuple[float, float, float, float]] = Var(init=lambda: list())
 
-    def run(
+    def update(
         self,
-        time: float = Input(source=PendulumPlant.Outputs.time),
-        theta: float = Input(source=PendulumPlant.Outputs.theta),
-        omega: float = Input(source=PendulumPlant.Outputs.omega),
-        torque: float = Input(source=PDController.Outputs.torque),
+        time: float = Input(src=PendulumPlant.State.time),
+        theta: float = Input(src=PendulumPlant.State.theta),
+        omega: float = Input(src=PendulumPlant.State.omega),
+        torque: float = Input(src=PDController.State.torque),
         samples: list[tuple[float, float, float, float]] = Input(
-            source=lambda: Logger.Outputs.samples
+            src=lambda: Logger.State.samples
         ),
-    ) -> Outputs:
+    ) -> State:
         print(
             f"time={time:.6f}, "
             f"state=(theta={theta:.6f}, omega={omega:.6f}), "
@@ -94,7 +94,7 @@ class Logger(Node):
         )
 
         samples.append((time, theta, omega, torque))
-        return self.Outputs(samples=samples)
+        return self.State(samples=samples)
 
 
 def build_system() -> PhasedReactiveSystem:

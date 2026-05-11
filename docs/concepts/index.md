@@ -140,22 +140,22 @@ A node is an atomic unit of computation.
 Every node has two kinds of variables:
 
 - **inputs** — variables the node *reads*.
-  An input is always the output of *some other* node (or the node's own
-  output from a previous tick — that is how persistent state and feedback
+  An input is always the state variable of *some other* node (or the node's own
+  state variable from a previous tick — that is how persistent state and feedback
   are expressed).
-- **outputs** — variables the node *writes*.
-  Each output is owned by exactly one node, so there is never any ambiguity
+- **state variables** — variables the node *writes*.
+  Each state variable is owned by exactly one node, so there is never any ambiguity
   about who produced a given value.
 
-Alongside inputs and outputs, a node defines a `run` method.
+Alongside inputs and state variables, a node defines a `update` method.
 This method is the node's basic computation: it receives the node's inputs as
-arguments and returns the node's outputs.
-In other words, inputs and outputs describe the data boundary, while `run`
+arguments and returns the node's state variables.
+In other words, inputs and state variables describe the data boundary, while `update`
 contains the logic that transforms the current input values into the next
-output values.
+state variable values.
 
 Inside a phase, several nodes can be active.
-They are scheduled in topological order from their input/output dependencies,
+They are scheduled in topological order from their input/state dependencies,
 so that every read sees a freshly written value when there is one.
 
 For the video player, here is how the high-level phases decompose into
@@ -169,8 +169,8 @@ nodes:
 | <span class="phase-label phase-label--play">play</span> | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
 
 The same system at node level looks like this.
-Solid arrows show that one node reads another node's output; dashed
-arrows from `state` show self-reads, where a node reads its own output from
+Solid arrows show that one node reads another node's state variable; dashed
+arrows from `state` show self-reads, where a node reads its own state variable from
 the previous tick.
 The node colors correspond to the phase colors in the table above:
 
@@ -214,7 +214,7 @@ flowchart LR
 ```
 
 This is where the framework's actual work happens: writing node classes,
-declaring their inputs and outputs, assigning instances to phases, and
+declaring their inputs and state variables, assigning instances to phases, and
 attaching predicates to transitions.
 
 ??? example "Full code listing: `examples/video_player.py`"
@@ -228,8 +228,8 @@ attaching predicates to transitions.
 The remaining pages in this section walk through the model from the bottom
 up — same model, opposite direction:
 
-1. **Nodes** — declaring typed inputs, typed outputs, connections,
-   initialization, and a `run` method.
+1. **Nodes** — declaring typed inputs, typed state variables, connections,
+   initialization, and a `update` method.
 2. **Phases** — assembling node instances into phases, declaring transitions,
    and reading the compiled schedule.
 3. **Continuous dynamics** — declaring `ODENode` state, grouping ODE systems,

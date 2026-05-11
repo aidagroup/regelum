@@ -14,15 +14,13 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
     NodeState,
     ODENode,
     ODESystem,
-    Output,
     Phase,
     PhasedReactiveSystem,
-    StateVar,
     V,
+    Var,
     terminate,
 )
 
@@ -46,13 +44,13 @@ def _one_phase_system(
 
 class Counter(Node):
     class Inputs(NodeInputs):
-        previous: int = Input(source=lambda: Counter.Outputs.value)
+        previous: int = Input(src=lambda: Counter.State.value)
 
-    class Outputs(NodeOutputs):
-        value: int = Output(initial=0)
+    class State(NodeState):
+        value: int = Var(init=0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(value=inputs.previous + 1)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(value=inputs.previous + 1)
 
 
 class ScheduledCounter(Node):
@@ -60,27 +58,27 @@ class ScheduledCounter(Node):
         super().__init__(name=name, dt=dt)
         self.count = 0
 
-    class Outputs(NodeOutputs):
-        value: int = Output(initial=0)
+    class State(NodeState):
+        value: int = Var(init=0)
 
-    def run(self) -> Outputs:
+    def update(self) -> State:
         self.count += 1
-        return self.Outputs(value=self.count)
+        return self.State(value=self.count)
 
 
 class ClockLog(Node):
     class Inputs(NodeInputs):
-        previous_ticks: tuple[int, ...] = Input(source=lambda: ClockLog.Outputs.ticks)
-        previous_times: tuple[float, ...] = Input(source=lambda: ClockLog.Outputs.times)
-        tick: int = Input(source=Clock.tick)
-        time: float = Input(source=Clock.time)
+        previous_ticks: tuple[int, ...] = Input(src=lambda: ClockLog.State.ticks)
+        previous_times: tuple[float, ...] = Input(src=lambda: ClockLog.State.times)
+        tick: int = Input(src=Clock.tick)
+        time: float = Input(src=Clock.time)
 
-    class Outputs(NodeOutputs):
-        ticks: tuple[int, ...] = Output(initial=())
-        times: tuple[float, ...] = Output(initial=())
+    class State(NodeState):
+        ticks: tuple[int, ...] = Var(init=())
+        times: tuple[float, ...] = Var(init=())
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
+    def update(self, inputs: Inputs) -> State:
+        return self.State(
             ticks=(*inputs.previous_ticks, inputs.tick),
             times=(*inputs.previous_times, inputs.time),
         )
@@ -88,7 +86,7 @@ class ClockLog(Node):
 
 class TimeDrivenIntegrator(ODENode):
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(  # ty: ignore[invalid-method-override]
         self,
@@ -102,7 +100,7 @@ class TimeDrivenIntegrator(ODENode):
 
 class ConstantIntegrator(ODENode):
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(self, inputs: NodeInputs, state: State) -> State:  # ty: ignore[invalid-method-override]
         return self.State(x=1.0)
@@ -110,7 +108,7 @@ class ConstantIntegrator(ODENode):
 
 class CoupledSourceIntegrator(ODENode):
     class State(NodeState):
-        x: float = StateVar(initial=1.0)
+        x: float = Var(init=1.0)
 
     def dstate(self, state: State) -> State:  # ty: ignore[invalid-method-override]
         return self.State(x=0.0 * state.x)
@@ -118,10 +116,10 @@ class CoupledSourceIntegrator(ODENode):
 
 class CoupledSinkIntegrator(ODENode):
     class Inputs(NodeInputs):
-        source_x: float = Input(source=lambda: CoupledSourceIntegrator.State.x)
+        source_x: float = Input(src=lambda: CoupledSourceIntegrator.State.x)
 
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(self, inputs: Inputs) -> State:  # ty: ignore[invalid-method-override]
         return self.State(x=inputs.source_x)
@@ -148,11 +146,11 @@ def test_system_clock_inputs_do_not_require_user_initial_state() -> None:
 
     assert system.compile_report.inputs["ClockLog.tick"] == "Clock.tick"
     assert system.compile_report.inputs["ClockLog.time"] == "Clock.time"
-    assert "Clock.tick" not in system.compile_report.required_initial_outputs
-    assert "Clock.time" not in system.compile_report.required_initial_outputs
+    assert "Clock.tick" not in system.compile_report.required_initial_state_vars
+    assert "Clock.time" not in system.compile_report.required_initial_state_vars
 
 
-def test_discrete_node_dt_runs_on_period_and_holds_output_between_runs() -> None:
+def test_discrete_node_dt_runs_on_period_and_holds_state_between_updates() -> None:
     counter = Counter(dt=2)
     system = _one_phase_system(counter, base_dt=1)
 
@@ -196,6 +194,24 @@ def test_float_dt_is_rejected_for_discrete_and_ode_nodes() -> None:
 
     with pytest.raises(TypeError, match="must not be a float"):
         ODESystem(nodes=(ConstantIntegrator(),), dt=cast(Any, 0.1))
+
+
+def test_ode_node_rejects_instance_dt() -> None:
+    with pytest.raises(TypeError, match="set dt on ODESystem"):
+        ConstantIntegrator(dt="0.1")
+
+
+def test_ode_node_rejects_class_dt() -> None:
+    with pytest.raises(TypeError, match="set dt on ODESystem"):
+
+        class BadIntegrator(ODENode):
+            dt = "0.1"
+
+            class State(NodeState):
+                x: float = Var(init=0.0)
+
+            def dstate(self, state: State) -> State:  # ty: ignore[invalid-method-override]
+                return self.State(x=state.x)
 
 
 def test_clock_is_reserved_node_name() -> None:
@@ -277,6 +293,39 @@ def test_continuous_phase_rejects_coupled_ode_systems() -> None:
 
     assert any(
         "Put continuously coupled ODENodes into the same ODESystem" in issue.message
+        for issue in exc_info.value.report.issues
+    )
+
+
+def test_ode_system_rejects_unlisted_ode_node_dependency() -> None:
+    source = CoupledSourceIntegrator(name="source")
+
+    class BoundSinkIntegrator(ODENode):
+        class Inputs(NodeInputs):
+            source_x: float = Input(src=source.State.x)
+
+        class State(NodeState):
+            x: float = Var(init=0.0)
+
+        def dstate(self, inputs: Inputs) -> State:  # ty: ignore[invalid-method-override]
+            return self.State(x=inputs.source_x)
+
+    sink_ode = ODESystem(nodes=(BoundSinkIntegrator(name="sink"),), dt="0.1")
+
+    with pytest.raises(CompileError) as exc_info:
+        PhasedReactiveSystem(
+            phases=[
+                Phase(
+                    "plant",
+                    nodes=(sink_ode,),
+                    transitions=(Goto(terminate),),
+                    is_initial=True,
+                )
+            ]
+        )
+
+    assert any(
+        "source is not assigned to any phase" in issue.message
         for issue in exc_info.value.report.issues
     )
 

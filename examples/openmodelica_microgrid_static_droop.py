@@ -14,11 +14,11 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
@@ -160,19 +160,19 @@ class OpenModelicaStaticDroopGymNode(Node):
 
     class Inputs(NodeInputs):
         samples: tuple[VoltageSample, ...] = Input(
-            source="OpenModelicaStaticDroopGymNode.Outputs.samples"
+            src="OpenModelicaStaticDroopGymNode.State.samples"
         )
 
-    class Outputs(NodeOutputs):
-        step: int = Output(initial=0)
-        time: float = Output(initial=0.0)
-        lcl1_capacitor1_v: float = Output(initial=0.0)
-        lcl1_capacitor2_v: float = Output(initial=0.0)
-        lcl1_capacitor3_v: float = Output(initial=0.0)
-        done: bool = Output(initial=False)
-        samples: tuple[VoltageSample, ...] = Output(initial=())
+    class State(NodeState):
+        step: int = Var(init=0)
+        time: float = Var(init=0.0)
+        lcl1_capacitor1_v: float = Var(init=0.0)
+        lcl1_capacitor2_v: float = Var(init=0.0)
+        lcl1_capacitor3_v: float = Var(init=0.0)
+        done: bool = Var(init=False)
+        samples: tuple[VoltageSample, ...] = Var(init=())
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         samples = inputs.samples
         if not self._started:
             initial = self.bridge.reset()
@@ -183,7 +183,7 @@ class OpenModelicaStaticDroopGymNode(Node):
         self._completed_steps = int(sample["step"])
         samples = samples + (self._as_tuple(sample),)
 
-        return self.Outputs(
+        return self.State(
             step=self._completed_steps,
             time=float(sample["time"]),
             lcl1_capacitor1_v=float(sample["lcl1_capacitor1_v"]),

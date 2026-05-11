@@ -11,7 +11,7 @@ the second traversal demands y = 0 at psi1 while psi2 has just locked
 y = 1 and psi1 cannot rewrite y. So C2*(2) holds (in fact C2*(4) which
 is the |D|^|R_C| collapse bound from `thm:collapse`).
 
-Node `run` implementations are independent Bernoulli draws into {0, 1}.
+Node `update` implementations are independent Bernoulli draws into {0, 1}.
 Under F_max the framework treats nodes adversarially anyway -- the
 Bernoulli sampler is just one concrete inhabitant of F_max chosen at
 runtime.
@@ -26,11 +26,11 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
@@ -43,15 +43,15 @@ class XWriter(Node):
         self._rng = random.Random(seed)
 
     class Inputs(NodeInputs):
-        x: int = Input(source="XWriter.x")
-        y: int = Input(source="YWriter.y")
+        x: int = Input(src="XWriter.x")
+        y: int = Input(src="YWriter.y")
 
-    class Outputs(NodeOutputs):
-        x: int = Output(initial=0, domain=(0, 1))
+    class State(NodeState):
+        x: int = Var(init=0, domain=(0, 1))
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         sample = 1 if self._rng.random() < self.p else 0
-        return self.Outputs(x=sample)
+        return self.State(x=sample)
 
 
 class YWriter(Node):
@@ -62,15 +62,15 @@ class YWriter(Node):
         self._rng = random.Random(seed)
 
     class Inputs(NodeInputs):
-        x: int = Input(source="XWriter.x")
-        y: int = Input(source="YWriter.y")
+        x: int = Input(src="XWriter.x")
+        y: int = Input(src="YWriter.y")
 
-    class Outputs(NodeOutputs):
-        y: int = Output(initial=0, domain=(0, 1))
+    class State(NodeState):
+        y: int = Var(init=0, domain=(0, 1))
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         sample = 1 if self._rng.random() < self.p else 0
-        return self.Outputs(y=sample)
+        return self.State(y=sample)
 
 
 def build_system(
@@ -111,7 +111,7 @@ def main() -> None:
     report = system.compile_report
     print("=== compile report ===")
     print(f"  ok      = {report.ok}")
-    print(f"  outputs = {report.outputs}")
+    print(f"  state_vars = {report.state_vars}")
     print(f"  issues  = {len(report.issues)}")
     for issue in report.issues:
         print(f"    [{issue.location}] {issue.message}")

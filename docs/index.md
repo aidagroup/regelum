@@ -26,7 +26,7 @@ different phases, and move between phases with explicit transitions.
 
 The framework is built around four surface ideas:
 
-- nodes declare typed inputs and outputs;
+- nodes declare typed inputs and state variables;
 - phases define which node instances are active together;
 - transitions decide how one phase hands control to the next;
 - continuous nodes can be grouped into ODE systems and integrated inside a
@@ -44,24 +44,24 @@ import regelum as rg
 
 
 class TemperatureSensor(rg.Node):
-    class Outputs(rg.NodeOutputs):
-        temperature: float = rg.Output(initial=19.0)
+    class State(rg.NodeState):
+        temperature: float = rg.Var(init=19.0)
 
-    def run(self) -> Outputs:
-        return self.Outputs(temperature=21.5)
+    def update(self) -> State:
+        return self.State(temperature=21.5)
 
 
 class HeaterController(rg.Node):
     class Inputs(rg.NodeInputs):
         temperature: float = rg.Input(
-            source=TemperatureSensor.Outputs.temperature,
+            src=TemperatureSensor.State.temperature,
         )
 
-    class Outputs(rg.NodeOutputs):
+    class State(rg.NodeState):
         heater_on: bool
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(heater_on=inputs.temperature < 22.0)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(heater_on=inputs.temperature < 22.0)
 
 
 sensor = TemperatureSensor(name="room_sensor")

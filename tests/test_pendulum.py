@@ -12,12 +12,12 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
-    OutputPort,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
+    VarPort,
     port,
     terminate,
 )
@@ -102,8 +102,8 @@ def test_pendulum_compiles() -> None:
     assert report.phase_schedules["control"] == ("PDController", "Logger")
     assert report.phase_schedules["plant"] == ("PendulumPlant",)
     assert report.phase_dependency_edges["control"] == (("PDController", "Logger"),)
-    assert "PDController.torque" not in report.minimal_initial_outputs
-    assert "PendulumPlant.theta" in report.minimal_initial_outputs
+    assert "PDController.torque" not in report.minimal_initial_state_vars
+    assert "PendulumPlant.theta" in report.minimal_initial_state_vars
 
 
 def test_pendulum_runs_and_logs_samples() -> None:
@@ -127,10 +127,10 @@ def test_pendulum_runs_and_logs_samples() -> None:
 def test_compile_rejects_unknown_input_source() -> None:
     class Broken(Node):
         class Inputs(NodeInputs):
-            value: float = Input("Missing.Outputs.value")
+            value: float = Input("Missing.State.value")
 
-        class Outputs(NodeOutputs):
-            result: float = Output(initial=0.0)
+        class State(NodeState):
+            result: float = Var(init=0.0)
 
     with pytest.raises(CompileError) as exc_info:
         _tick_system([Broken()])
@@ -144,8 +144,8 @@ def test_compile_rejects_unconnected_input() -> None:
         class Inputs(NodeInputs):
             value: float = Input()
 
-        class Outputs(NodeOutputs):
-            result: float = Output(initial=0.0)
+        class State(NodeState):
+            result: float = Var(init=0.0)
 
     with pytest.raises(CompileError) as exc_info:
         _tick_system([Broken()])
@@ -154,10 +154,10 @@ def test_compile_rejects_unconnected_input() -> None:
     assert exc_info.value.report.issues[0].location == "Broken.value"
 
 
-def test_compile_rejects_duplicate_output_paths() -> None:
+def test_compile_rejects_duplicate_state_paths() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: float = Output(initial=0.0)
+        class State(NodeState):
+            value: float = Var(init=0.0)
 
     with pytest.raises(CompileError) as exc_info:
         _tick_system([Source(name="source"), Source(name="source")])
@@ -166,47 +166,47 @@ def test_compile_rejects_duplicate_output_paths() -> None:
     assert exc_info.value.report.issues[0].location == "source.value"
 
 
-def test_compile_rejects_missing_output_initial_value_before_first_read() -> None:
+def test_compile_rejects_missing_state_initial_value_before_first_read() -> None:
     class Source(Node):
         class Inputs(NodeInputs):
-            previous: float = Input(source=lambda: Source.Outputs.value)
+            previous: float = Input(src=lambda: Source.State.value)
 
-        class Outputs(NodeOutputs):
-            value: float = Output()
+        class State(NodeState):
+            value: float = Var()
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(value=inputs.previous + 1)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(value=inputs.previous + 1)
 
     with pytest.raises(CompileError) as exc_info:
         _tick_system([Source()])
 
     assert not exc_info.value.report.ok
     assert exc_info.value.report.issues[0].location == "Source.value"
-    assert exc_info.value.report.outputs_without_initial == ("Source.value",)
-    assert exc_info.value.report.required_initial_outputs == {"Source.value": ("Source.previous",)}
+    assert exc_info.value.report.state_vars_without_initial == ("Source.value",)
+    assert exc_info.value.report.required_initial_state_vars == {"Source.value": ("Source.previous",)}
     assert (
         exc_info.value.report.issues[0].message
-        == "output initial value is required before first read by ('Source.previous',)"
+        == "state variable initial value is required before first read by ('Source.previous',)"
     )
 
 
-def test_output_without_initial_is_allowed_when_written_before_read() -> None:
+def test_state_var_without_initial_is_allowed_when_written_before_read() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output()
+        class State(NodeState):
+            value: int = Var()
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=5)
+        def update(self) -> State:
+            return self.State(value=5)
 
     class Sink(Node):
         class Inputs(NodeInputs):
-            value: int = Input(source=lambda: Source.Outputs.value)
+            value: int = Input(src=lambda: Source.State.value)
 
-        class Outputs(NodeOutputs):
-            seen: int = Output(initial=0)
+        class State(NodeState):
+            seen: int = Var(init=0)
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(seen=inputs.value)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(seen=inputs.value)
 
     source = Source()
     sink = Sink()
@@ -222,9 +222,9 @@ def test_output_without_initial_is_allowed_when_written_before_read() -> None:
     )
 
     assert "Source.value" not in system.snapshot()
-    assert system.compile_report.outputs_without_initial == ("Source.value",)
-    assert "Source.value" not in system.compile_report.minimal_initial_outputs
-    assert system.compile_report.required_initial_outputs == {}
+    assert system.compile_report.state_vars_without_initial == ("Source.value",)
+    assert "Source.value" not in system.compile_report.minimal_initial_state_vars
+    assert system.compile_report.required_initial_state_vars == {}
     assert system.compile_report.phase_schedules["copy"] == ("Source", "Sink")
     assert system.compile_report.phase_dependency_edges["copy"] == (("Source", "Sink"),)
 
@@ -239,31 +239,31 @@ def test_system_can_be_created_with_compile_issues_in_non_strict_mode() -> None:
         class Inputs(NodeInputs):
             value: int
 
-        class Outputs(NodeOutputs):
+        class State(NodeState):
             seen: int
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(seen=inputs.value)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(seen=inputs.value)
 
     system = _tick_system([Broken()], strict=False)
 
     assert not system.compile_report.ok
     assert system.compile_report.unlinked_inputs == ("Broken.value",)
-    assert system.compile_report.minimal_initial_outputs == ()
-    assert system.compile_report.outputs_without_initial == ("Broken.seen",)
+    assert system.compile_report.minimal_initial_state_vars == ()
+    assert system.compile_report.state_vars_without_initial == ("Broken.seen",)
 
 
-def test_initial_state_overrides_default_output_initial_values() -> None:
+def test_initial_state_overrides_default_state_initial_values() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=1)
+        class State(NodeState):
+            value: int = Var(init=1)
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=5)
+        def update(self) -> State:
+            return self.State(value=5)
 
     system = _tick_system(
         [Source()],
-        initial_state={Source.Outputs.value: 3},
+        initial_state={Source.State.value: 3},
     )
 
     assert system.snapshot()["Source.value"] == 3
@@ -272,29 +272,29 @@ def test_initial_state_overrides_default_output_initial_values() -> None:
 
     assert system.snapshot()["Source.value"] == 5
 
-    system.reset(initial_state={Source.Outputs.value: 7})
+    system.reset(initial_state={Source.State.value: 7})
 
     assert system.snapshot()["Source.value"] == 7
 
 
-def test_initial_state_can_supply_required_output_without_output_initial() -> None:
+def test_initial_state_can_supply_required_state_var_without_initial() -> None:
     class Source(Node):
         class Inputs(NodeInputs):
-            previous: int = Input(source=lambda: Source.Outputs.value)
+            previous: int = Input(src=lambda: Source.State.value)
 
-        class Outputs(NodeOutputs):
+        class State(NodeState):
             value: int
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(value=inputs.previous + 1)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(value=inputs.previous + 1)
 
     system = _tick_system(
         [Source()],
-        initial_state={Source.Outputs.value: 10},
+        initial_state={Source.State.value: 10},
     )
 
     assert system.compile_report.ok
-    assert system.compile_report.required_initial_outputs == {"Source.value": ("Source.previous",)}
+    assert system.compile_report.required_initial_state_vars == {"Source.value": ("Source.previous",)}
     assert system.snapshot()["Source.value"] == 10
 
     system.step()
@@ -302,27 +302,27 @@ def test_initial_state_can_supply_required_output_without_output_initial() -> No
     assert system.snapshot()["Source.value"] == 11
 
 
-def test_bare_annotations_install_default_input_and_output_ports() -> None:
+def test_bare_annotations_install_default_input_and_state_ports() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
+        class State(NodeState):
             value: int
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=5)
+        def update(self) -> State:
+            return self.State(value=5)
 
     class Sink(Node):
         class Inputs(NodeInputs):
             value: int
 
-        class Outputs(NodeOutputs):
+        class State(NodeState):
             seen: int
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(seen=inputs.value)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(seen=inputs.value)
 
     source = Source()
     sink = Sink()
-    port(sink.Inputs.value).connect(source.Outputs.value)
+    port(sink.Inputs.value).connect(source.State.value)
     system = PhasedReactiveSystem(
         phases=[
             Phase(
@@ -342,23 +342,23 @@ def test_bare_annotations_install_default_input_and_output_ports() -> None:
     assert system.snapshot()["Sink.seen"] == 5
 
 
-def test_run_parameters_can_declare_inputs() -> None:
+def test_update_parameters_can_declare_inputs() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
+        class State(NodeState):
             value: int
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=5)
+        def update(self) -> State:
+            return self.State(value=5)
 
     class Sink(Node):
-        class Outputs(NodeOutputs):
+        class State(NodeState):
             seen: int
 
-        def run(
+        def update(
             self,
-            value: int = Input(source=lambda: Source.Outputs.value),
-        ) -> Outputs:
-            return self.Outputs(seen=value)
+            value: int = Input(src=lambda: Source.State.value),
+        ) -> State:
+            return self.State(seen=value)
 
     source = Source()
     sink = Sink()
@@ -380,52 +380,52 @@ def test_run_parameters_can_declare_inputs() -> None:
     assert system.snapshot()["Sink.seen"] == 5
 
 
-def test_run_parameter_inputs_cannot_be_mixed_with_inputs_class() -> None:
+def test_update_parameter_inputs_cannot_be_mixed_with_inputs_class() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=1)
+        class State(NodeState):
+            value: int = Var(init=1)
 
     class Sink(Node):
         class Inputs(NodeInputs):
-            other: int = Input(source=lambda: Source.Outputs.value)
+            other: int = Input(src=lambda: Source.State.value)
 
-        class Outputs(NodeOutputs):
-            seen: int = Output(initial=0)
+        class State(NodeState):
+            seen: int = Var(init=0)
 
-        def run(
+        def update(
             self,
-            value: int = Input(source=lambda: Source.Outputs.value),
-        ) -> Outputs:
-            return self.Outputs(seen=value)
+            value: int = Input(src=lambda: Source.State.value),
+        ) -> State:
+            return self.State(seen=value)
 
     with pytest.raises(CompileError) as exc_info:
         _tick_system([Source(), Sink()])
 
     assert any(
-        issue.location == "Sink.run"
+        issue.location == "Sink.update"
         and issue.message
-        == "define inputs either as a NodeInputs namespace or as run(...) parameters, not both"
+        == "define inputs either as a NodeInputs namespace or as update(...) parameters, not both"
         for issue in exc_info.value.report.issues
     )
 
 
-def test_node_can_use_custom_input_and_output_namespace_names() -> None:
+def test_node_can_use_custom_input_and_state_namespace_names() -> None:
     class Source(Node):
-        class Vars(NodeOutputs):
-            value: int = Output(initial=1)
+        class State(NodeState):
+            value: int = Var(init=1)
 
-        def run(self) -> Vars:
-            return self.Vars(value=5)
+        def update(self) -> State:
+            return self.State(value=5)
 
     class Sink(Node):
         class In(NodeInputs):
-            value: int = Input(source=lambda: Source.Vars.value)
+            value: int = Input(src=lambda: Source.State.value)
 
-        class Out(NodeOutputs):
-            seen: int = Output()
+        class State(NodeState):
+            seen: int = Var()
 
-        def run(self, inputs: In) -> Out:
-            return self.Out(seen=inputs.value)
+        def update(self, inputs: In) -> State:
+            return self.State(seen=inputs.value)
 
     source = Source()
     sink = Sink()
@@ -440,7 +440,7 @@ def test_node_can_use_custom_input_and_output_namespace_names() -> None:
         ],
     )
 
-    assert not hasattr(Source.Outputs, "value")
+    assert hasattr(Source.State, "value")
     assert system.compile_report.phase_schedules["tick"] == ("Source", "Sink")
 
     system.step()
@@ -449,44 +449,44 @@ def test_node_can_use_custom_input_and_output_namespace_names() -> None:
     assert system.snapshot()["Sink.seen"] == 5
 
 
-def test_instance_bound_ports_use_custom_namespace_names_without_aliases() -> None:
+def test_instance_bound_ports_use_state_namespace() -> None:
     class Source(Node):
-        class Vars(NodeOutputs):
-            value: int = Output(initial=0)
+        class State(NodeState):
+            value: int = Var(init=0)
 
     class Sink(Node):
         class In(NodeInputs):
             value: int = Input()
 
-        class Out(NodeOutputs):
-            seen: int = Output(initial=0)
+        class State(NodeState):
+            seen: int = Var(init=0)
 
     source = Source()
     sink = Sink()
-    connection = port(sink.In.value).connect(source.Vars.value)
+    connection = port(sink.In.value).connect(source.State.value)
 
     assert connection.input.path == "Sink.value"
     assert connection.source.path == "Source.value"
-    assert not hasattr(source.Outputs, "value")
+    assert source.State.value.path == "Source.value"
 
 
-def test_string_source_paths_support_custom_output_namespace_names() -> None:
+def test_string_source_paths_support_custom_state_namespace_names() -> None:
     class Source(Node):
-        class Vars(NodeOutputs):
-            value: int = Output(initial=1)
+        class State(NodeState):
+            value: int = Var(init=1)
 
-        def run(self) -> Vars:
-            return self.Vars(value=8)
+        def update(self) -> State:
+            return self.State(value=8)
 
     class Sink(Node):
         class In(NodeInputs):
-            value: int = Input(source="Source.Vars.value")
+            value: int = Input(src="Source.State.value")
 
-        class Out(NodeOutputs):
-            seen: int = Output()
+        class State(NodeState):
+            seen: int = Var()
 
-        def run(self, inputs: In) -> Out:
-            return self.Out(seen=inputs.value)
+        def update(self, inputs: In) -> State:
+            return self.State(seen=inputs.value)
 
     source = Source()
     sink = Sink()
@@ -508,31 +508,31 @@ def test_string_source_paths_support_custom_output_namespace_names() -> None:
 
 def test_initial_state_supports_custom_namespace_class_and_instance_ports() -> None:
     class Source(Node):
-        class Vars(NodeOutputs):
-            value: int = Output(initial=1)
+        class State(NodeState):
+            value: int = Var(init=1)
 
     source = Source(name="source")
-    class_system = _tick_system([Source()], initial_state={Source.Vars.value: 5})
-    instance_system = _tick_system([source], initial_state={source.Vars.value: 7})
+    class_system = _tick_system([Source()], initial_state={Source.State.value: 5})
+    instance_system = _tick_system([source], initial_state={source.State.value: 7})
 
     assert class_system.snapshot()["Source.value"] == 5
     assert instance_system.snapshot()["source.value"] == 7
 
 
-def test_guards_support_custom_namespace_output_refs() -> None:
+def test_guards_support_custom_namespace_state_refs() -> None:
     class Source(Node):
-        class Vars(NodeOutputs):
-            value: int = Output(initial=2)
+        class State(NodeState):
+            value: int = Var(init=2)
 
-        def run(self) -> Vars:
-            return self.Vars(value=2)
+        def update(self) -> State:
+            return self.State(value=2)
 
     class Sink(Node):
-        class Out(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Out:
-            return self.Out(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     source = Source()
     sink = Sink()
@@ -542,7 +542,7 @@ def test_guards_support_custom_namespace_output_refs() -> None:
                 "select",
                 nodes=(source,),
                 transitions=(
-                    If(V(Source.Vars.value) > 1, "sink"),
+                    If(V(Source.State.value) > 1, "sink"),
                     Else(terminate),
                 ),
                 is_initial=True,
@@ -558,19 +558,19 @@ def test_guards_support_custom_namespace_output_refs() -> None:
 
 def test_instance_input_source_must_be_assigned_to_a_phase() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=1)
+        class State(NodeState):
+            value: int = Var(init=1)
 
     class Sink(Node):
         class In(NodeInputs):
             value: int = Input()
 
-        class Out(NodeOutputs):
-            seen: int = Output(initial=0)
+        class State(NodeState):
+            seen: int = Var(init=0)
 
     source = Source(name="source")
     sink = Sink(name="sink")
-    port(sink.In.value).connect(source.Outputs.value)
+    port(sink.In.value).connect(source.State.value)
 
     with pytest.raises(CompileError) as exc_info:
         PhasedReactiveSystem(
@@ -594,8 +594,8 @@ def test_instance_input_source_must_be_assigned_to_a_phase() -> None:
 
 def test_instance_guard_source_must_be_assigned_to_a_phase() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            ready: bool = Output(initial=True)
+        class State(NodeState):
+            ready: bool = Var(init=True)
 
     source = Source(name="source")
 
@@ -605,7 +605,7 @@ def test_instance_guard_source_must_be_assigned_to_a_phase() -> None:
                 Phase(
                     "tick",
                     nodes=(),
-                    transitions=(If(V(source.Outputs.ready), terminate, name="ready"),),
+                    transitions=(If(V(source.State.ready), terminate, name="ready"),),
                     is_initial=True,
                 )
             ]
@@ -621,30 +621,30 @@ def test_instance_guard_source_must_be_assigned_to_a_phase() -> None:
 
 def test_node_subclass_inherits_port_namespace_when_not_overridden() -> None:
     class Base(Node):
-        class Vars(NodeOutputs):
-            value: int = Output(initial=1)
+        class State(NodeState):
+            value: int = Var(init=1)
 
     class Child(Base):
         pass
 
     system = _tick_system([Child()])
 
-    assert hasattr(Child.Vars, "value")
+    assert hasattr(Child.State, "value")
     assert system.snapshot()["Child.value"] == 1
 
 
 def test_node_subclass_can_override_port_namespace() -> None:
     class Base(Node):
-        class Vars(NodeOutputs):
-            base_value: int = Output(initial=1)
+        class State(NodeState):
+            base_value: int = Var(init=1)
 
     class Child(Base):
-        class Out(NodeOutputs):
-            child_value: int = Output(initial=2)
+        class State(NodeState):
+            child_value: int = Var(init=2)
 
     system = _tick_system([Child()])
 
-    assert system.compile_report.outputs == ("Child.child_value",)
+    assert system.compile_report.state_vars == ("Child.child_value",)
     assert system.snapshot()["Child.child_value"] == 2
 
 
@@ -673,49 +673,49 @@ def test_node_rejects_three_input_namespaces() -> None:
                 third: int = Input()
 
 
-def test_node_rejects_two_output_namespaces() -> None:
-    with pytest.raises(TypeError, match="may define zero or one output namespace"):
+def test_node_rejects_two_state_namespaces() -> None:
+    with pytest.raises(TypeError, match="may define zero or one state namespace"):
 
         class Bad(Node):
-            class Vars(NodeOutputs):
-                first: int = Output(initial=1)
+            class State(NodeState):
+                first: int = Var(init=1)
 
-            class Out(NodeOutputs):
-                second: int = Output(initial=2)
+            class ExtraState(NodeState):
+                second: int = Var(init=2)
 
 
-def test_node_rejects_three_output_namespaces() -> None:
-    with pytest.raises(TypeError, match="found 3: Vars, Out, ExtraOut"):
+def test_node_rejects_three_state_namespaces() -> None:
+    with pytest.raises(TypeError, match="found 3: State, MoreState, ExtraState"):
 
         class Bad(Node):
-            class Vars(NodeOutputs):
-                first: int = Output(initial=1)
+            class State(NodeState):
+                first: int = Var(init=1)
 
-            class Out(NodeOutputs):
-                second: int = Output(initial=2)
+            class MoreState(NodeState):
+                second: int = Var(init=2)
 
-            class ExtraOut(NodeOutputs):
-                third: int = Output(initial=3)
+            class ExtraState(NodeState):
+                third: int = Var(init=3)
 
 
-def test_output_initial_accepts_zero_argument_callable() -> None:
+def test_var_initial_accepts_zero_argument_callable() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=lambda: 7)
+        class State(NodeState):
+            value: int = Var(init=lambda: 7)
 
     system = _tick_system([Source()])
 
     assert system.snapshot()["Source.value"] == 7
 
 
-def test_output_initial_accepts_node_argument_callable() -> None:
+def test_var_initial_accepts_node_argument_callable() -> None:
     class Source(Node):
         def __init__(self, value: int, *, name: str | None = None) -> None:
             super().__init__(name=name)
             self.value = value
 
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=lambda self: cast(Source, self).value)
+        class State(NodeState):
+            value: int = Var(init=lambda self: cast(Source, self).value)
 
     left = Source(3, name="left")
     right = Source(7, name="right")
@@ -728,17 +728,17 @@ def test_output_initial_accepts_node_argument_callable() -> None:
     }
 
 
-def test_output_initial_rejects_callable_with_too_many_required_arguments() -> None:
+def test_var_initial_rejects_callable_with_too_many_required_arguments() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=lambda first, second: 1)
+        class State(NodeState):
+            value: int = Var(init=lambda first, second: 1)
 
     with pytest.raises(CompileError) as exc_info:
         _tick_system([Source()])
 
     assert any(
         issue.location == "Source.value"
-        and "Output initial callable must accept zero arguments or one node argument"
+        and "Var init callable must accept zero arguments or one node argument"
         in issue.message
         for issue in exc_info.value.report.issues
     )
@@ -746,11 +746,11 @@ def test_output_initial_rejects_callable_with_too_many_required_arguments() -> N
 
 def test_node_without_inputs_can_run_without_input_argument() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=lambda: 0)
+        class State(NodeState):
+            value: int = Var(init=lambda: 0)
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=5)
+        def update(self) -> State:
+            return self.State(value=5)
 
     system = _tick_system([Source()])
 
@@ -759,13 +759,13 @@ def test_node_without_inputs_can_run_without_input_argument() -> None:
     assert system.snapshot()["Source.value"] == 5
 
 
-def test_output_can_be_enriched_by_reference() -> None:
+def test_state_var_can_be_enriched_by_reference() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            doc: dict[str, Any] = Output(initial=lambda: {})
+        class State(NodeState):
+            doc: dict[str, Any] = Var(init=lambda: {})
 
-        def run(self) -> Outputs:
-            return self.Outputs(
+        def update(self) -> State:
+            return self.State(
                 doc={
                     "request_id": "r-001",
                     "raw": {"text": "hello"},
@@ -774,19 +774,19 @@ def test_output_can_be_enriched_by_reference() -> None:
 
     class Enricher(Node):
         class Inputs(NodeInputs):
-            doc: dict[str, Any] = Input(source=lambda: Source.Outputs.doc)
+            doc: dict[str, Any] = Input(src=lambda: Source.State.doc)
 
-        class Outputs(NodeOutputs):
-            doc: dict[str, Any] = Output(initial=lambda: {})
+        class State(NodeState):
+            doc: dict[str, Any] = Var(init=lambda: {})
 
-        def run(self, inputs: Inputs) -> Outputs:
+        def update(self, inputs: Inputs) -> State:
             doc = inputs.doc
             raw = doc["raw"]
             assert isinstance(raw, dict)
             text = raw["text"]
             assert isinstance(text, str)
             doc["features"] = {"length": len(text)}
-            return self.Outputs(doc=doc)
+            return self.State(doc=doc)
 
     source = Source()
     enricher = Enricher()
@@ -801,8 +801,8 @@ def test_output_can_be_enriched_by_reference() -> None:
         ],
     )
 
-    source_doc_port = cast(OutputPort[dict[str, Any]], Source.Outputs.doc)
-    enriched_doc_port = cast(OutputPort[dict[str, Any]], Enricher.Outputs.doc)
+    source_doc_port = cast(VarPort[dict[str, Any]], Source.State.doc)
+    enriched_doc_port = cast(VarPort[dict[str, Any]], Enricher.State.doc)
 
     system.step()
 
@@ -812,24 +812,24 @@ def test_output_can_be_enriched_by_reference() -> None:
     assert enriched_doc["features"] == {"length": 5}
 
 
-def test_input_source_accepts_lazy_output_reference() -> None:
+def test_input_source_accepts_lazy_state_reference() -> None:
     class Early(Node):
         class Inputs(NodeInputs):
-            value: int = Input(source=lambda: Later.Outputs.value)
-            previous: int = Input(source=lambda: Early.Outputs.total)
+            value: int = Input(src=lambda: Later.State.value)
+            previous: int = Input(src=lambda: Early.State.total)
 
-        class Outputs(NodeOutputs):
-            total: int = Output(initial=0)
+        class State(NodeState):
+            total: int = Var(init=0)
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(total=inputs.value + inputs.previous)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(total=inputs.value + inputs.previous)
 
     class Later(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=2)
+        class State(NodeState):
+            value: int = Var(init=2)
 
-        def run(self, inputs: NodeInputs) -> Outputs:
-            return self.Outputs(value=3)
+        def update(self, inputs: NodeInputs) -> State:
+            return self.State(value=3)
 
     early = Early()
     later = Later()
@@ -850,21 +850,21 @@ def test_input_source_accepts_lazy_output_reference() -> None:
 
 def test_phase_runs_nodes_in_topological_order() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=0)
+        class State(NodeState):
+            value: int = Var(init=0)
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=3)
+        def update(self) -> State:
+            return self.State(value=3)
 
     class Sink(Node):
         class Inputs(NodeInputs):
-            value: int = Input(source=lambda: Source.Outputs.value)
+            value: int = Input(src=lambda: Source.State.value)
 
-        class Outputs(NodeOutputs):
-            seen: int = Output(initial=0)
+        class State(NodeState):
+            seen: int = Var(init=0)
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(seen=inputs.value)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(seen=inputs.value)
 
     source = Source()
     sink = Sink()
@@ -885,13 +885,13 @@ def test_phase_runs_nodes_in_topological_order() -> None:
     assert system.snapshot()["Sink.seen"] == 3
 
 
-def test_guard_variable_accepts_output_reference() -> None:
+def test_guard_variable_accepts_state_reference() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            flag: bool = Output(initial=True)
+        class State(NodeState):
+            flag: bool = Var(init=True)
 
-        def run(self) -> Outputs:
-            return self.Outputs(flag=True)
+        def update(self) -> State:
+            return self.State(flag=True)
 
     mode = Mode()
     system = PhasedReactiveSystem(
@@ -900,8 +900,8 @@ def test_guard_variable_accepts_output_reference() -> None:
                 "start",
                 nodes=(mode,),
                 transitions=(
-                    If(V(Mode.Outputs.flag), terminate, name="done"),
-                    If(~V(Mode.Outputs.flag), terminate, name="skip"),
+                    If(V(Mode.State.flag), terminate, name="done"),
+                    If(~V(Mode.State.flag), terminate, name="skip"),
                 ),
                 is_initial=True,
             )
@@ -913,27 +913,27 @@ def test_guard_variable_accepts_output_reference() -> None:
     assert system.history[0].phase == "start"
 
 
-def test_guard_expression_accepts_output_reference_compared_to_float() -> None:
+def test_guard_expression_accepts_state_reference_compared_to_float() -> None:
     class Level(Node):
-        class Outputs(NodeOutputs):
-            value: float = Output(initial=0.0)
+        class State(NodeState):
+            value: float = Var(init=0.0)
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=1.25)
+        def update(self) -> State:
+            return self.State(value=1.25)
 
     class High(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     class Low(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     level = Level()
     high = High()
@@ -944,8 +944,8 @@ def test_guard_expression_accepts_output_reference_compared_to_float() -> None:
                 "measure",
                 nodes=(level,),
                 transitions=(
-                    If(V(Level.Outputs.value) > 1.0, "high", name="high"),
-                    If(V(Level.Outputs.value) <= 1.0, "low", name="low"),
+                    If(V(Level.State.value) > 1.0, "high", name="high"),
+                    If(V(Level.State.value) <= 1.0, "low", name="low"),
                 ),
                 is_initial=True,
             ),
@@ -961,32 +961,32 @@ def test_guard_expression_accepts_output_reference_compared_to_float() -> None:
     assert system.snapshot()["Low.reached"] is False
 
 
-def test_enum_outputs_are_supported_in_symbolic_guards() -> None:
+def test_enum_state_vars_are_supported_in_symbolic_guards() -> None:
     class ModeValue(Enum):
         IDLE = "idle"
         ACTIVE = "active"
         FAILED = "failed"
 
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            value: ModeValue = Output(initial=ModeValue.IDLE)
+        class State(NodeState):
+            value: ModeValue = Var(init=ModeValue.IDLE)
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=ModeValue.ACTIVE)
+        def update(self) -> State:
+            return self.State(value=ModeValue.ACTIVE)
 
     class Active(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     class Inactive(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     mode = Mode()
     active = Active()
@@ -997,8 +997,8 @@ def test_enum_outputs_are_supported_in_symbolic_guards() -> None:
                 "mode",
                 nodes=(mode,),
                 transitions=(
-                    If(V(Mode.Outputs.value) == ModeValue.ACTIVE, "active", name="active"),
-                    If(V(Mode.Outputs.value) != ModeValue.ACTIVE, "inactive", name="inactive"),
+                    If(V(Mode.State.value) == ModeValue.ACTIVE, "active", name="active"),
+                    If(V(Mode.State.value) != ModeValue.ACTIVE, "inactive", name="inactive"),
                 ),
                 is_initial=True,
             ),
@@ -1020,18 +1020,18 @@ def test_enum_outputs_are_supported_in_symbolic_guards() -> None:
 
 def test_transition_target_accepts_phase_instance() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            ready: bool = Output(initial=True)
+        class State(NodeState):
+            ready: bool = Var(init=True)
 
-        def run(self) -> Outputs:
-            return self.Outputs(ready=True)
+        def update(self) -> State:
+            return self.State(ready=True)
 
     class Done(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     source = Source()
     done_node = Done()
@@ -1040,8 +1040,8 @@ def test_transition_target_accepts_phase_instance() -> None:
         "start",
         nodes=(source,),
         transitions=(
-            If(V(Source.Outputs.ready), done, name="ready"),
-            If(~V(Source.Outputs.ready), terminate, name="not-ready"),
+            If(V(Source.State.ready), done, name="ready"),
+            If(~V(Source.State.ready), terminate, name="not-ready"),
         ),
         is_initial=True,
     )
@@ -1053,20 +1053,20 @@ def test_transition_target_accepts_phase_instance() -> None:
     assert system.snapshot()["Done.reached"] is True
 
 
-def test_phase_transition_guards_may_read_outputs_outside_active_phase() -> None:
+def test_phase_transition_guards_may_read_state_vars_outside_active_phase() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            ready: bool = Output(initial=True)
+        class State(NodeState):
+            ready: bool = Var(init=True)
 
-        def run(self) -> Outputs:
-            return self.Outputs(ready=True)
+        def update(self) -> State:
+            return self.State(ready=True)
 
     class Other(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=0)
+        class State(NodeState):
+            value: int = Var(init=0)
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=1)
+        def update(self) -> State:
+            return self.State(value=1)
 
     source = Source()
     other = Other()
@@ -1076,8 +1076,8 @@ def test_phase_transition_guards_may_read_outputs_outside_active_phase() -> None
                 "check",
                 nodes=(other, source),
                 transitions=(
-                    If(V(Source.Outputs.ready), terminate, name="ready"),
-                    If(~V(Source.Outputs.ready), terminate, name="not-ready"),
+                    If(V(Source.State.ready), terminate, name="ready"),
+                    If(~V(Source.State.ready), terminate, name="not-ready"),
                 ),
                 is_initial=True,
             )
@@ -1089,10 +1089,10 @@ def test_phase_transition_guards_may_read_outputs_outside_active_phase() -> None
     assert system.snapshot()["Other.value"] == 1
 
 
-def test_phase_transition_guard_accepts_instance_output_reference() -> None:
+def test_phase_transition_guard_accepts_instance_state_reference() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            ready: bool = Output(initial=True)
+        class State(NodeState):
+            ready: bool = Var(init=True)
 
     source = Source(name="source_a")
     system = PhasedReactiveSystem(
@@ -1101,8 +1101,8 @@ def test_phase_transition_guard_accepts_instance_output_reference() -> None:
                 "check",
                 nodes=(source,),
                 transitions=(
-                    If(V(source.Outputs.ready), terminate, name="ready"),
-                    If(~V(source.Outputs.ready), terminate, name="not-ready"),
+                    If(V(source.State.ready), terminate, name="ready"),
+                    If(~V(source.State.ready), terminate, name="not-ready"),
                 ),
                 is_initial=True,
             )
@@ -1112,10 +1112,10 @@ def test_phase_transition_guard_accepts_instance_output_reference() -> None:
     assert system.compile_report.ok
 
 
-def test_phase_transition_guard_rejects_ambiguous_class_output_reference() -> None:
+def test_phase_transition_guard_rejects_ambiguous_class_state_reference() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            ready: bool = Output(initial=True)
+        class State(NodeState):
+            ready: bool = Var(init=True)
 
     source_a = Source(name="source_a")
     source_b = Source(name="source_b")
@@ -1127,8 +1127,8 @@ def test_phase_transition_guard_rejects_ambiguous_class_output_reference() -> No
                     "check",
                     nodes=(source_a, source_b),
                     transitions=(
-                        If(V(Source.Outputs.ready), terminate, name="ready"),
-                        If(~V(Source.Outputs.ready), terminate, name="not-ready"),
+                        If(V(Source.State.ready), terminate, name="ready"),
+                        If(~V(Source.State.ready), terminate, name="not-ready"),
                     ),
                     is_initial=True,
                 )
@@ -1146,33 +1146,33 @@ def test_phase_transition_guard_rejects_ambiguous_class_output_reference() -> No
 
 def test_connect_supports_instance_node_identity() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=0)
+        class State(NodeState):
+            value: int = Var(init=0)
 
         def __init__(self, value: int, *, name: str | None = None) -> None:
             super().__init__(name=name)
             self.value = value
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=self.value)
+        def update(self) -> State:
+            return self.State(value=self.value)
 
     class Sink(Node):
         class Inputs(NodeInputs):
             value: int = Input()
 
-        class Outputs(NodeOutputs):
-            seen: int = Output(initial=0)
+        class State(NodeState):
+            seen: int = Var(init=0)
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(seen=inputs.value)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(seen=inputs.value)
 
     source_a = Source(1, name="source_a")
     source_b = Source(2, name="source_b")
     sink_a = Sink(name="sink_a")
     sink_b = Sink(name="sink_b")
 
-    port(sink_a.Inputs.value).connect(source_a.Outputs.value)
-    port(source_b.Outputs.value).connect(sink_b.Inputs.value)
+    port(sink_a.Inputs.value).connect(source_a.State.value)
+    port(source_b.State.value).connect(sink_b.Inputs.value)
 
     system = PhasedReactiveSystem(
         phases=[
@@ -1203,23 +1203,23 @@ def test_connect_supports_instance_node_identity() -> None:
 
 def test_connect_rejects_non_input_left_side() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=0)
+        class State(NodeState):
+            value: int = Var(init=0)
 
     source = Source()
 
     with pytest.raises(TypeError, match="input port on the left side"):
-        port(source.Outputs.value).connect(source.Outputs.value)
+        port(source.State.value).connect(source.State.value)
 
 
-def test_connect_rejects_non_output_right_side() -> None:
+def test_connect_rejects_non_state_right_side() -> None:
     class Sink(Node):
         class Inputs(NodeInputs):
             value: int = Input()
 
     sink = Sink()
 
-    with pytest.raises(TypeError, match="output port or output reference"):
+    with pytest.raises(TypeError, match="state port, state reference"):
         port(sink.Inputs.value).connect(sink.Inputs.value)
 
 
@@ -1227,12 +1227,12 @@ def test_node_name_can_default_from_class_or_instance_override() -> None:
     class NamedSource(Node):
         name = "class_named_source"
 
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=1)
+        class State(NodeState):
+            value: int = Var(init=1)
 
     class PlainSource(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=2)
+        class State(NodeState):
+            value: int = Var(init=2)
 
     system = _tick_system(
         [
@@ -1253,8 +1253,8 @@ def test_node_name_can_default_from_class_or_instance_override() -> None:
 
 def test_implicit_node_names_are_deduplicated() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=1)
+        class State(NodeState):
+            value: int = Var(init=1)
 
     system = _tick_system([Source(), Source()])
 
@@ -1267,8 +1267,8 @@ def test_implicit_node_names_are_deduplicated() -> None:
 
 def test_explicit_duplicate_node_names_are_rejected() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=1)
+        class State(NodeState):
+            value: int = Var(init=1)
 
     with pytest.raises(CompileError) as exc_info:
         _tick_system([Source(name="source"), Source(name="source")])
@@ -1281,15 +1281,15 @@ def test_explicit_duplicate_node_names_are_rejected() -> None:
 
 def test_class_level_source_is_rejected_when_multiple_instances_exist() -> None:
     class Plant(Node):
-        class Outputs(NodeOutputs):
-            theta: float = Output(initial=0.0)
+        class State(NodeState):
+            theta: float = Var(init=0.0)
 
     class Controller(Node):
         class Inputs(NodeInputs):
-            theta: float = Input(source=Plant.Outputs.theta)
+            theta: float = Input(src=Plant.State.theta)
 
-        class Outputs(NodeOutputs):
-            torque: float = Output(initial=0.0)
+        class State(NodeState):
+            torque: float = Var(init=0.0)
 
     with pytest.raises(CompileError) as exc_info:
         _tick_system([Plant(), Plant(), Controller()])
@@ -1305,21 +1305,21 @@ def test_class_level_source_is_rejected_when_multiple_instances_exist() -> None:
 
 def test_phase_predicate_routing() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: float = Output(initial=1.0)
+        class State(NodeState):
+            value: float = Var(init=1.0)
 
-        def run(self, inputs: NodeInputs) -> Outputs:
-            return self.Outputs(value=2.0)
+        def update(self, inputs: NodeInputs) -> State:
+            return self.State(value=2.0)
 
     class Sink(Node):
         class Inputs(NodeInputs):
-            value: float = Input(source=Source.Outputs.value)
+            value: float = Input(src=Source.State.value)
 
-        class Outputs(NodeOutputs):
-            seen: float = Output(initial=0.0)
+        class State(NodeState):
+            seen: float = Var(init=0.0)
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(seen=inputs.value)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(seen=inputs.value)
 
     source = Source()
     sink = Sink()
@@ -1380,32 +1380,32 @@ def test_compile_rejects_c3_example() -> None:
 
 def test_if_elseif_else_chain_uses_ordered_fallback_semantics() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=2, domain=(0, 1, 2))
+        class State(NodeState):
+            value: int = Var(init=2, domain=(0, 1, 2))
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=2)
+        def update(self) -> State:
+            return self.State(value=2)
 
     class One(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     class Two(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     class Fallback(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     mode = Mode()
     one = One()
@@ -1417,8 +1417,8 @@ def test_if_elseif_else_chain_uses_ordered_fallback_semantics() -> None:
                 "select",
                 nodes=(mode,),
                 transitions=(
-                    If(V(Mode.Outputs.value) == 1, "one", name="one"),
-                    ElseIf(V(Mode.Outputs.value) == 2, "two", name="two"),
+                    If(V(Mode.State.value) == 1, "one", name="one"),
+                    ElseIf(V(Mode.State.value) == 2, "two", name="two"),
                     Else("fallback"),
                 ),
                 is_initial=True,
@@ -1438,25 +1438,25 @@ def test_if_elseif_else_chain_uses_ordered_fallback_semantics() -> None:
 
 def test_if_chain_order_gives_precedence_over_later_elseif() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=2, domain=(0, 1, 2))
+        class State(NodeState):
+            value: int = Var(init=2, domain=(0, 1, 2))
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=2)
+        def update(self) -> State:
+            return self.State(value=2)
 
     class First(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     class Second(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     mode = Mode()
     first = First()
@@ -1467,8 +1467,8 @@ def test_if_chain_order_gives_precedence_over_later_elseif() -> None:
                 "select",
                 nodes=(mode,),
                 transitions=(
-                    If(V(Mode.Outputs.value) > 0, "first", name="first"),
-                    ElseIf(V(Mode.Outputs.value) > 1, "second", name="second"),
+                    If(V(Mode.State.value) > 0, "first", name="first"),
+                    ElseIf(V(Mode.State.value) > 1, "second", name="second"),
                     Else(terminate),
                 ),
                 is_initial=True,
@@ -1486,9 +1486,9 @@ def test_if_chain_order_gives_precedence_over_later_elseif() -> None:
 
 def test_multiple_if_chains_overlap_is_c3_violation() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            a: bool = Output(initial=True)
-            b: bool = Output(initial=True)
+        class State(NodeState):
+            a: bool = Var(init=True)
+            b: bool = Var(init=True)
 
     with pytest.raises(CompileError) as exc_info:
         mode = Mode()
@@ -1498,8 +1498,8 @@ def test_multiple_if_chains_overlap_is_c3_violation() -> None:
                     "select",
                     nodes=(mode,),
                     transitions=(
-                        If(V(Mode.Outputs.a), terminate, name="a"),
-                        If(V(Mode.Outputs.b), terminate, name="b"),
+                        If(V(Mode.State.a), terminate, name="a"),
+                        If(V(Mode.State.b), terminate, name="b"),
                     ),
                     is_initial=True,
                 )
@@ -1514,11 +1514,11 @@ def test_multiple_if_chains_overlap_is_c3_violation() -> None:
 
 def test_multiple_if_chains_can_be_disjoint() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            a: bool = Output(initial=False)
+        class State(NodeState):
+            a: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(a=False)
+        def update(self) -> State:
+            return self.State(a=False)
 
     mode = Mode()
     system = PhasedReactiveSystem(
@@ -1527,8 +1527,8 @@ def test_multiple_if_chains_can_be_disjoint() -> None:
                 "select",
                 nodes=(mode,),
                 transitions=(
-                    If(V(Mode.Outputs.a), terminate, name="a"),
-                    If(~V(Mode.Outputs.a), terminate, name="not-a"),
+                    If(V(Mode.State.a), terminate, name="a"),
+                    If(~V(Mode.State.a), terminate, name="not-a"),
                 ),
                 is_initial=True,
             )
@@ -1541,18 +1541,18 @@ def test_multiple_if_chains_can_be_disjoint() -> None:
 
 def test_goto_is_unconditional() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=0)
+        class State(NodeState):
+            value: int = Var(init=0)
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=1)
+        def update(self) -> State:
+            return self.State(value=1)
 
     class Sink(Node):
-        class Outputs(NodeOutputs):
-            reached: bool = Output(initial=False)
+        class State(NodeState):
+            reached: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(reached=True)
+        def update(self) -> State:
+            return self.State(reached=True)
 
     source = Source()
     sink = Sink()
@@ -1576,8 +1576,8 @@ def test_goto_is_unconditional() -> None:
 
 def test_goto_cannot_be_mixed_with_if_chains() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            flag: bool = Output(initial=True)
+        class State(NodeState):
+            flag: bool = Var(init=True)
 
     with pytest.raises(CompileError) as exc_info:
         source = Source()
@@ -1587,7 +1587,7 @@ def test_goto_cannot_be_mixed_with_if_chains() -> None:
                     "mixed",
                     nodes=(source,),
                     transitions=(
-                        If(V(Source.Outputs.flag), terminate),
+                        If(V(Source.State.flag), terminate),
                         Goto(terminate),
                     ),
                     is_initial=True,
@@ -1603,8 +1603,8 @@ def test_goto_cannot_be_mixed_with_if_chains() -> None:
 
 def test_elseif_and_else_require_open_if_chain() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            flag: bool = Output(initial=True)
+        class State(NodeState):
+            flag: bool = Var(init=True)
 
     with pytest.raises(CompileError) as exc_info:
         source = Source()
@@ -1614,7 +1614,7 @@ def test_elseif_and_else_require_open_if_chain() -> None:
                     "bad",
                     nodes=(source,),
                     transitions=(
-                        ElseIf(V(Source.Outputs.flag), terminate),
+                        ElseIf(V(Source.State.flag), terminate),
                         Else(terminate),
                     ),
                     is_initial=True,
@@ -1629,8 +1629,8 @@ def test_elseif_and_else_require_open_if_chain() -> None:
 
 def test_elseif_after_else_is_compile_error() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            flag: bool = Output(initial=True)
+        class State(NodeState):
+            flag: bool = Var(init=True)
 
     with pytest.raises(CompileError) as exc_info:
         source = Source()
@@ -1640,9 +1640,9 @@ def test_elseif_after_else_is_compile_error() -> None:
                     "bad",
                     nodes=(source,),
                     transitions=(
-                        If(V(Source.Outputs.flag), terminate),
+                        If(V(Source.State.flag), terminate),
                         Else(terminate),
-                        ElseIf(~V(Source.Outputs.flag), terminate),
+                        ElseIf(~V(Source.State.flag), terminate),
                     ),
                     is_initial=True,
                 )
@@ -1657,8 +1657,8 @@ def test_elseif_after_else_is_compile_error() -> None:
 
 def test_second_else_is_compile_error() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            flag: bool = Output(initial=True)
+        class State(NodeState):
+            flag: bool = Var(init=True)
 
     with pytest.raises(CompileError) as exc_info:
         source = Source()
@@ -1668,7 +1668,7 @@ def test_second_else_is_compile_error() -> None:
                     "bad",
                     nodes=(source,),
                     transitions=(
-                        If(V(Source.Outputs.flag), terminate),
+                        If(V(Source.State.flag), terminate),
                         Else(terminate, name="first-else"),
                         Else(terminate, name="second-else"),
                     ),
@@ -1685,8 +1685,8 @@ def test_second_else_is_compile_error() -> None:
 
 def test_if_chain_without_total_coverage_is_c3_violation() -> None:
     class Source(Node):
-        class Outputs(NodeOutputs):
-            flag: bool = Output(initial=False)
+        class State(NodeState):
+            flag: bool = Var(init=False)
 
     with pytest.raises(CompileError) as exc_info:
         source = Source()
@@ -1695,7 +1695,7 @@ def test_if_chain_without_total_coverage_is_c3_violation() -> None:
                 Phase(
                     "select",
                     nodes=(source,),
-                    transitions=(If(V(Source.Outputs.flag), terminate),),
+                    transitions=(If(V(Source.State.flag), terminate),),
                     is_initial=True,
                 )
             ],
@@ -1710,9 +1710,9 @@ def test_if_chain_without_total_coverage_is_c3_violation() -> None:
 
 def test_if_after_else_is_reported_as_warning() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            a: bool = Output(initial=False)
-            b: bool = Output(initial=True)
+        class State(NodeState):
+            a: bool = Var(init=False)
+            b: bool = Var(init=True)
 
     mode = Mode()
     system = PhasedReactiveSystem(
@@ -1721,9 +1721,9 @@ def test_if_after_else_is_reported_as_warning() -> None:
                 "select",
                 nodes=(mode,),
                 transitions=(
-                    If(V(Mode.Outputs.a), terminate, name="a"),
+                    If(V(Mode.State.a), terminate, name="a"),
                     Else("next", name="else-a"),
-                    If(V(Mode.Outputs.b), terminate, name="b"),
+                    If(V(Mode.State.b), terminate, name="b"),
                 ),
                 is_initial=True,
             ),
@@ -1742,9 +1742,9 @@ def test_if_after_else_is_reported_as_warning() -> None:
 
 def test_if_after_else_starts_new_chain_that_can_have_else() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            a: bool = Output(initial=False)
-            b: bool = Output(initial=True)
+        class State(NodeState):
+            a: bool = Var(init=False)
+            b: bool = Var(init=True)
 
     mode = Mode()
     system = PhasedReactiveSystem(
@@ -1753,9 +1753,9 @@ def test_if_after_else_starts_new_chain_that_can_have_else() -> None:
                 "select",
                 nodes=(mode,),
                 transitions=(
-                    If(V(Mode.Outputs.a), terminate, name="a"),
+                    If(V(Mode.State.a), terminate, name="a"),
                     Else("next", name="else-a"),
-                    If(V(Mode.Outputs.b), terminate, name="b"),
+                    If(V(Mode.State.b), terminate, name="b"),
                     Else(terminate, name="else-b"),
                 ),
                 is_initial=True,
@@ -1851,8 +1851,8 @@ def test_complex_c3_bad_system_fails_partition() -> None:
 
 def test_c2_cycle_with_local_guard_node_is_rejected_when_c2star_is_feasible() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            flag: bool = Output(initial=False)
+        class State(NodeState):
+            flag: bool = Var(init=False)
 
     with pytest.raises(CompileError) as exc_info:
         mode = Mode()
@@ -1883,8 +1883,8 @@ def test_c2_cycle_with_local_guard_node_is_rejected_when_c2star_is_feasible() ->
 
 def test_c2star_rejects_feasible_cycle() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            flag: bool = Output(initial=False)
+        class State(NodeState):
+            flag: bool = Var(init=False)
 
     with pytest.raises(CompileError) as exc_info:
         mode = Mode()
@@ -1915,9 +1915,9 @@ def test_c2star_rejects_feasible_cycle() -> None:
 
 def test_c2star_uses_effective_elseif_guards() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            flag: bool = Output(initial=False)
-            gate: bool = Output(initial=False)
+        class State(NodeState):
+            flag: bool = Var(init=False)
+            gate: bool = Var(init=False)
 
     with pytest.raises(CompileError) as exc_info:
         mode = Mode()

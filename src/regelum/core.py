@@ -133,7 +133,7 @@ class ConstExpr(Expr):
 @dataclass(frozen=True, eq=False)
 class VarExpr(Expr):
     path: str
-    output_source: OutputSource[Any] | None = None
+    var_source: VarSource[Any] | None = None
 
     @property
     def variables(self) -> frozenset[str]:
@@ -247,7 +247,7 @@ class Z3Context:
         elif _is_enum_type(output_type):
             variable = z3.Int(path)
         else:
-            raise TypeError(f"Output {path!r} has no z3-supported type.")
+            raise TypeError(f"State variable {path!r} has no z3-supported type.")
         self.variables[path] = variable
         return variable
 
@@ -270,14 +270,14 @@ def _as_expr(value: Any) -> Expr:
     return ConstExpr(value)
 
 
-def V(output: Any) -> Expr:
-    return VarExpr(_source_path(output), output_source=output)
+def V(var: Any) -> Expr:
+    return VarExpr(_source_path(var), var_source=var)
 
 
 type Guard = Predicate | Expr
 
 
-class OutputPort(Generic[T]):
+class VarPort(Generic[T]):
     def __init__(
         self,
         initial: InitialValue = _MISSING,
@@ -288,29 +288,29 @@ class OutputPort(Generic[T]):
         self.name: str | None = None
         self.node_cls: type[Node] | None = None
 
-    def __set_name__(self, owner: type[NodeOutputs], name: str) -> None:
+    def __set_name__(self, owner: type[NodeState], name: str) -> None:
         self.name = name
 
     @overload
-    def __get__(self, instance: None, owner: type[NodeOutputs]) -> OutputPort[T]: ...
+    def __get__(self, instance: None, owner: type[NodeState]) -> VarPort[T]: ...
 
     @overload
-    def __get__(self, instance: NodeOutputs, owner: type[NodeOutputs]) -> T: ...
+    def __get__(self, instance: NodeState, owner: type[NodeState]) -> T: ...
 
     def __get__(
         self,
-        instance: NodeOutputs | None,
-        owner: type[NodeOutputs],
-    ) -> OutputPort[T] | T:
+        instance: NodeState | None,
+        owner: type[NodeState],
+    ) -> VarPort[T] | T:
         if instance is None:
             return self
         if self.name is None:
-            raise AttributeError("Output is not bound to an attribute name.")
+            raise AttributeError("Variable is not bound to an attribute name.")
         return instance.__dict__[self.name]
 
     def initial_value(self, node: Node) -> Any:
         if self.initial is _MISSING:
-            raise RuntimeError(f"Output {self.path} does not define an initial value.")
+            raise RuntimeError(f"Variable {self.path} does not define an initial value.")
         if callable(self.initial):
             return _call_initial_value(self.initial, node)
         return self.initial
@@ -338,12 +338,12 @@ class OutputPort(Generic[T]):
         return self.path
 
 
-type ResolvedOutputSource[T] = OutputPort[T] | BoundOutputPort[T] | SystemSource | str
-type OutputSource[T] = ResolvedOutputSource[T] | Callable[[], ResolvedOutputSource[T]]
+type ResolvedVarSource[T] = VarPort[T] | BoundVarPort[T] | SystemSource | str
+type VarSource[T] = ResolvedVarSource[T] | Callable[[], ResolvedVarSource[T]]
 
 
 @dataclass(frozen=True)
-class BoundOutputPort(Generic[T]):
+class BoundVarPort(Generic[T]):
     node: Node
     port: Any
 
@@ -370,8 +370,8 @@ class BoundInputPort(Generic[T]):
             return "<unbound>"
         return f"{self.node.node_id}.{self.port.name}"
 
-    def connect(self, output: Any) -> Connection:
-        connection = connect(self, output)
+    def connect(self, var: Any) -> Connection:
+        connection = connect(self, var)
         self.node._connections[self.path] = connection
         return connection
 
@@ -384,17 +384,17 @@ class Connection:
 
 def connect(
     input_port: Any,
-    output: Any,
+    var: Any,
 ) -> Connection:
     if not isinstance(input_port, BoundInputPort):
         raise TypeError(f"connect(...) expects an input port on the left side; got {input_port!r}.")
-    if not isinstance(output, (BoundOutputPort, OutputPort, SystemSource, str)):
+    if not isinstance(var, (BoundVarPort, VarPort, SystemSource, str)):
         raise TypeError(
-            "connect(...) expects an output port or output reference, or system source on "
+            "connect(...) expects a state port, state reference, or system source on "
             "the right side; "
-            f"got {output!r}."
+            f"got {var!r}."
         )
-    return Connection(input=input_port, source=output)
+    return Connection(input=input_port, source=var)
 
 
 def port(reference: Any) -> ConnectablePort:
@@ -404,10 +404,10 @@ def port(reference: Any) -> ConnectablePort:
 class InputPort(Generic[T]):
     def __init__(
         self,
-        source: OutputSource[T] | None = None,
+        src: VarSource[T] | None = None,
         default: T | None = None,
     ) -> None:
-        self.source = source
+        self.source = src
         self.default = default
         self.name: str | None = None
         self.node_cls: type[Node] | None = None
@@ -442,20 +442,20 @@ class InputPort(Generic[T]):
         return self.path
 
 
-def Output(
+def Var(
     *,
-    initial: InitialValue = _MISSING,
+    init: InitialValue = _MISSING,
     domain: Iterable[Any] | None = None,
 ) -> Any:
-    return OutputPort(initial=initial, domain=domain)
+    return VarPort(initial=init, domain=domain)
 
 
 def Input(
-    source: Any = None,
+    src: Any = None,
     *,
     default: Any = None,
 ) -> Any:
-    return InputPort(source=source, default=default)
+    return InputPort(src=src, default=default)
 
 
 def _call_initial_value(initial: Callable[..., Any], node: Node) -> Any:
@@ -478,7 +478,7 @@ def _call_initial_value(initial: Callable[..., Any], node: Node) -> Any:
         return initial()
     if len(required_positionals) == 1:
         return initial(node)
-    raise TypeError("Output initial callable must accept zero arguments or one node argument.")
+    raise TypeError("Var init callable must accept zero arguments or one node argument.")
 
 
 def _accepts_keyword(callable_: Callable[..., Any], keyword: str) -> bool:
@@ -537,8 +537,8 @@ class NodeInputs:
             setattr(self, name, value)
 
 
-@dataclass_transform(field_specifiers=(Output,))
-class NodeOutputs:
+@dataclass_transform(field_specifiers=(Var,))
+class NodeState:
     def __init__(self, **values: Any) -> None:
         for name, value in values.items():
             setattr(self, name, value)
@@ -548,9 +548,9 @@ class _BoundPortNamespace:
     def __init__(
         self,
         node: Node,
-        nested_cls: type[NodeInputs] | type[NodeOutputs],
-        ports: dict[str, InputPort[Any]] | dict[str, OutputPort[Any]],
-        bound_type: type[BoundInputPort[Any]] | type[BoundOutputPort[Any]],
+        nested_cls: type[NodeInputs] | type[NodeState],
+        ports: dict[str, InputPort[Any]] | dict[str, VarPort[Any]],
+        bound_type: type[BoundInputPort[Any]] | type[BoundVarPort[Any]],
     ) -> None:
         self._node = node
         self._nested_cls = nested_cls
@@ -570,7 +570,7 @@ class _BoundPortNamespace:
 
 class Node:
     Inputs = NodeInputs
-    Outputs = NodeOutputs
+    State = NodeState
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
@@ -581,39 +581,49 @@ class Node:
         )
         output_namespace_name, output_namespace_cls = _find_port_namespace(
             cls,
-            NodeOutputs,
-            "output",
+            NodeState,
+            "state",
         )
         if input_namespace_name is not None:
             _install_annotated_ports(cls, input_namespace_cls, InputPort)
         if output_namespace_name is not None:
-            _install_annotated_ports(cls, output_namespace_cls, OutputPort)
+            _install_annotated_ports(cls, output_namespace_cls, VarPort)
         nested_inputs = _collect_ports(input_namespace_cls, InputPort)
-        run_inputs = _collect_run_input_ports(cls)
+        update_inputs = _collect_update_input_ports(cls)
+        update_state_parameters = _collect_update_state_parameter_names(
+            cls,
+            input_namespace_name,
+            cast(type[NodeInputs] | None, input_namespace_cls),
+            output_namespace_name,
+            cast(type[NodeState] | None, output_namespace_cls),
+        )
         cls._input_declaration_error: str | None = None
         cls._input_namespace_name = input_namespace_name
         cls._input_namespace_cls = input_namespace_cls
         cls._output_namespace_name = output_namespace_name
         cls._output_namespace_cls = output_namespace_cls
-        if nested_inputs and run_inputs:
+        cls._state_namespace_name = output_namespace_name
+        cls._state_namespace_cls = output_namespace_cls
+        cls._update_state_parameter_names = update_state_parameters
+        if nested_inputs and update_inputs:
             cls._input_declaration_error = (
-                "define inputs either as a NodeInputs namespace or as run(...) parameters, not both"
+                "define inputs either as a NodeInputs namespace or as update(...) parameters, not both"
             )
             cls._run_input_mode = "object"
             cls._inputs = nested_inputs
-        elif run_inputs:
-            inputs_cls = type("Inputs", (NodeInputs,), dict(run_inputs))
-            for name, port in run_inputs.items():
+        elif update_inputs:
+            inputs_cls = type("Inputs", (NodeInputs,), dict(update_inputs))
+            for name, port in update_inputs.items():
                 port.__set_name__(inputs_cls, name)
             cls.Inputs = inputs_cls  # ty: ignore[invalid-assignment]
             cls._input_namespace_name = "Inputs"
             cls._input_namespace_cls = inputs_cls
             cls._run_input_mode = "parameters"
-            cls._inputs = run_inputs
+            cls._inputs = update_inputs
         else:
             cls._run_input_mode = "object" if nested_inputs else "none"
             cls._inputs = nested_inputs
-        cls._outputs = _collect_ports(output_namespace_cls, OutputPort)
+        cls._outputs = _collect_ports(output_namespace_cls, VarPort)
         for port in cls._inputs.values():
             port.node_cls = cls
         for port in cls._outputs.values():
@@ -662,6 +672,14 @@ class Node:
         self._schedule_dt = (
             _parse_time_step(dt, field_name=f"{self.node_id}.dt") if dt is not None else None
         )
+        if self._schedule_dt is not None and not getattr(
+            self.__class__,
+            "_allow_schedule_dt",
+            True,
+        ):
+            raise TypeError(
+                f"{self.__class__.__name__} cannot define dt; set dt on ODESystem instead."
+            )
         self._connections: dict[str, Connection] = {}
 
     def _bind_ports(self) -> None:
@@ -684,21 +702,21 @@ class Node:
                 output_namespace_name,
                 _BoundPortNamespace(
                     self,
-                    cast(type[NodeOutputs], self.__class__._output_namespace_cls),
+                    cast(type[NodeState], self.__class__._output_namespace_cls),
                     self.__class__._outputs,
-                    BoundOutputPort,
+                    BoundVarPort,
                 ),
             )
 
-    def run(self, *args: Any, **kwargs: Any) -> Any:
+    def update(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
 
 
 def _find_port_namespace(
     node_cls: type[Node],
-    namespace_base: type[NodeInputs] | type[NodeOutputs],
+    namespace_base: type[NodeInputs] | type[NodeState],
     namespace_role: str,
-) -> tuple[str | None, type[NodeInputs] | type[NodeOutputs] | None]:
+) -> tuple[str | None, type[NodeInputs] | type[NodeState] | None]:
     own_namespaces = [
         (name, value)
         for name, value in node_cls.__dict__.items()
@@ -725,20 +743,20 @@ def _find_port_namespace(
 
 
 def _collect_ports(
-    nested_cls: type[NodeInputs] | type[NodeOutputs] | None,
-    port_type: type[InputPort[Any]] | type[OutputPort[Any]],
+    nested_cls: type[NodeInputs] | type[NodeState] | None,
+    port_type: type[InputPort[Any]] | type[VarPort[Any]],
 ) -> dict[str, Any]:
     if nested_cls is None:
         return {}
     return {name: value for name, value in vars(nested_cls).items() if isinstance(value, port_type)}
 
 
-def _collect_run_input_ports(node_cls: type[Node]) -> dict[str, InputPort[Any]]:
-    run = node_cls.__dict__.get("run")
-    if run is None:
+def _collect_update_input_ports(node_cls: type[Node]) -> dict[str, InputPort[Any]]:
+    update = node_cls.__dict__.get("update")
+    if update is None:
         return {}
     try:
-        signature = inspect.signature(run)
+        signature = inspect.signature(update)
     except (TypeError, ValueError):
         return {}
     inputs: dict[str, InputPort[Any]] = {}
@@ -755,10 +773,62 @@ def _collect_run_input_ports(node_cls: type[Node]) -> dict[str, InputPort[Any]]:
     return inputs
 
 
+def _collect_update_state_parameter_names(
+    node_cls: type[Node],
+    input_namespace_name: str | None,
+    input_namespace_cls: type[NodeInputs] | None,
+    state_namespace_name: str | None,
+    state_cls: type[NodeState] | None,
+) -> tuple[str, ...]:
+    update = node_cls.__dict__.get("update")
+    if update is None or state_cls is None:
+        return ()
+    try:
+        signature = inspect.signature(update)
+    except (TypeError, ValueError):
+        return ()
+    module = sys.modules[node_cls.__module__]
+    localns: dict[str, Any] = {node_cls.__name__: node_cls}
+    if input_namespace_name is not None and input_namespace_cls is not None:
+        localns[input_namespace_name] = input_namespace_cls
+    if state_namespace_name is not None:
+        localns[state_namespace_name] = state_cls
+    localns["State"] = state_cls
+    try:
+        hints = get_type_hints(
+            update,
+            globalns=vars(module),
+            localns=localns,
+            include_extras=True,
+        )
+    except Exception:
+        hints = getattr(update, "__annotations__", {})
+    state_parameters: list[str] = []
+    for name, parameter in signature.parameters.items():
+        if name == "self":
+            continue
+        if parameter.kind not in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
+            continue
+        if isinstance(parameter.default, InputPort):
+            continue
+        annotation = hints.get(name)
+        if annotation is state_cls or annotation in {
+            state_namespace_name,
+            "State",
+            f"{node_cls.__name__}.{state_namespace_name}",
+            f"{node_cls.__name__}.State",
+        }:
+            state_parameters.append(name)
+    return tuple(state_parameters)
+
+
 def _install_annotated_ports(
     node_cls: type[Node],
-    nested_cls: type[NodeInputs] | type[NodeOutputs] | None,
-    port_type: type[InputPort[Any]] | type[OutputPort[Any]],
+    nested_cls: type[NodeInputs] | type[NodeState] | None,
+    port_type: type[InputPort[Any]] | type[VarPort[Any]],
 ) -> None:
     if nested_cls is None:
         return
@@ -784,8 +854,8 @@ def _install_annotated_ports(
 
 def _port_from_annotation(
     annotation: Any,
-    port_type: type[InputPort[Any]] | type[OutputPort[Any]],
-) -> InputPort[Any] | OutputPort[Any] | None:
+    port_type: type[InputPort[Any]] | type[VarPort[Any]],
+) -> InputPort[Any] | VarPort[Any] | None:
     if get_origin(annotation) is not Annotated:
         return None
     for metadata in get_args(annotation)[1:]:
@@ -799,7 +869,7 @@ class StepRecord:
     phase: str
     node: str
     inputs: dict[str, Any]
-    outputs: dict[str, Any]
+    state: dict[str, Any]
 
 
 type NodeRef = Node
@@ -903,13 +973,13 @@ class CompileIssue:
 class CompileReport:
     nodes: tuple[str, ...]
     inputs: dict[str, str]
-    outputs: tuple[str, ...]
+    state_vars: tuple[str, ...]
     issues: tuple[CompileIssue, ...]
     warnings: tuple[CompileIssue, ...] = ()
     phase_schedules: dict[str, tuple[str, ...]] = field(default_factory=dict)
     phase_dependency_edges: dict[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
-    outputs_without_initial: tuple[str, ...] = ()
-    required_initial_outputs: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    state_vars_without_initial: tuple[str, ...] = ()
+    required_initial_state_vars: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -932,17 +1002,17 @@ class CompileReport:
         return tuple(sorted(self.inputs))
 
     @property
-    def minimal_initial_outputs(self) -> tuple[str, ...]:
-        return tuple(sorted(self.required_initial_outputs))
+    def minimal_initial_state_vars(self) -> tuple[str, ...]:
+        return tuple(sorted(self.required_initial_state_vars))
 
     def format(self) -> str:
         lines = [
             f"ok = {self.ok}",
             f"issues = {_format_issue_list(self.issues)}",
             f"warnings = {_format_issue_list(self.warnings)}",
-            f"minimal_initial_outputs = {self.minimal_initial_outputs}",
-            f"outputs_without_initial = {self.outputs_without_initial}",
-            f"required_initial_outputs = {self.required_initial_outputs}",
+            f"minimal_initial_state_vars = {self.minimal_initial_state_vars}",
+            f"state_vars_without_initial = {self.state_vars_without_initial}",
+            f"required_initial_state_vars = {self.required_initial_state_vars}",
             f"phase_schedules = {self.phase_schedules}",
             f"phase_dependency_edges = {self.phase_dependency_edges}",
         ]
@@ -972,7 +1042,7 @@ def compile_nodes(
         for node in node_tuple
         for output in node.__class__._outputs.values()
     ]
-    outputs_without_initial = tuple(
+    state_vars_without_initial = tuple(
         sorted(
             _node_output_path(node, output)
             for node in node_tuple
@@ -984,12 +1054,12 @@ def compile_nodes(
     class_output_paths = _class_output_paths(node_tuple)
     inputs: dict[str, str] = {}
 
-    duplicate_outputs = {path for path in output_set if output_paths.count(path) > 1}
-    for path in sorted(duplicate_outputs):
+    duplicate_state_vars = {path for path in output_set if output_paths.count(path) > 1}
+    for path in sorted(duplicate_state_vars):
         issues.append(
             CompileIssue(
                 location=path,
-                message="output path is declared more than once",
+                message="state path is declared more than once",
             )
         )
 
@@ -1006,7 +1076,7 @@ def compile_nodes(
         if node.__class__._input_declaration_error is not None:
             issues.append(
                 CompileIssue(
-                    location=f"{node.__class__.__name__}.run",
+                    location=f"{node.__class__.__name__}.update",
                     message=node.__class__._input_declaration_error,
                 )
             )
@@ -1019,7 +1089,7 @@ def compile_nodes(
                 issues.append(
                     CompileIssue(
                         location=_node_output_path(node, output),
-                        message=f"output initial value failed: {exc}",
+                        message=f"state variable initial value failed: {exc}",
                     )
                 )
 
@@ -1048,7 +1118,7 @@ def compile_nodes(
                 continue
             inputs[location] = source
             candidates = class_output_paths.get(source, ())
-            is_class_level_output_ref = isinstance(resolved_source_ref, OutputPort)
+            is_class_level_output_ref = isinstance(resolved_source_ref, VarPort)
             if len(candidates) > 1 and (is_class_level_output_ref or source not in output_set):
                 issues.append(
                     CompileIssue(
@@ -1071,10 +1141,10 @@ def compile_nodes(
     return CompileReport(
         nodes=tuple(node.node_id for node in node_tuple),
         inputs=inputs,
-        outputs=tuple(sorted(output_set)),
+        state_vars=tuple(sorted(output_set)),
         issues=tuple(issues),
         warnings=(),
-        outputs_without_initial=outputs_without_initial,
+        state_vars_without_initial=state_vars_without_initial,
     )
 
 
@@ -1209,7 +1279,7 @@ class PhasedReactiveSystem:
         self._sync_ode_runtime_state_from_system_state()
         self._commit_clock()
 
-    def read(self, output: OutputSource[T]) -> T:
+    def read(self, output: VarSource[T]) -> T:
         path = self._resolve_output(output)
         return self._state[path]
 
@@ -1258,13 +1328,13 @@ class PhasedReactiveSystem:
     def _run_discrete_node(self, phase: Phase, node: Node) -> StepRecord:
         inputs = self._build_inputs(node)
         result = _run_node(node, inputs, state_snapshot=dict(self._state))
-        outputs = self._normalize_outputs(node, result)
-        self._commit_node_outputs(node, outputs)
+        state_vars = self._normalize_outputs(node, result)
+        self._commit_node_outputs(node, state_vars)
         return StepRecord(
             phase=phase.name,
             node=node.__class__.__name__,
             inputs=dict(vars(inputs)),
-            outputs=outputs,
+            state=state_vars,
         )
 
     def _run_continuous_phase(self, phase: Phase) -> tuple[StepRecord, ...]:
@@ -1281,14 +1351,14 @@ class PhasedReactiveSystem:
                 time_start=time_start,
                 time_stop=time_start + float(_ode_system_dt(node)),
             )
-            outputs = self._normalize_outputs(node, result)
-            self._commit_node_outputs(node, outputs)
+            state_vars = self._normalize_outputs(node, result)
+            self._commit_node_outputs(node, state_vars)
             self._commit_ode_state_outputs(node)
             record = StepRecord(
                 phase=phase.name,
                 node=node.__class__.__name__,
                 inputs=dict(vars(inputs)),
-                outputs=outputs,
+                state=state_vars,
             )
             records.append(record)
             self._history.append(record)
@@ -1480,41 +1550,41 @@ class PhasedReactiveSystem:
                 phase_schedules[phase.name] = phase_node_ids
             else:
                 phase_schedules[phase.name] = schedule
-        required_initial_outputs = self._required_initial_outputs(
+        required_initial_state_vars = self._required_initial_state_vars(
             report.inputs,
             phase_schedules,
         )
-        outputs_without_initial = set(report.outputs_without_initial)
-        initial_state_outputs = set(self._initial_state_overrides)
+        state_vars_without_initial = set(report.state_vars_without_initial)
+        initial_state_vars = set(self._initial_state_overrides)
         issues.extend(
             _required_initial_issues(
                 {
                     path: readers
-                    for path, readers in required_initial_outputs.items()
-                    if path in outputs_without_initial and path not in initial_state_outputs
+                    for path, readers in required_initial_state_vars.items()
+                    if path in state_vars_without_initial and path not in initial_state_vars
                 }
             )
         )
         return CompileReport(
             nodes=report.nodes,
             inputs=report.inputs,
-            outputs=report.outputs,
+            state_vars=report.state_vars,
             issues=tuple(issues),
             warnings=tuple(warnings),
             phase_schedules=phase_schedules,
             phase_dependency_edges=phase_dependency_edges,
-            outputs_without_initial=report.outputs_without_initial,
-            required_initial_outputs=required_initial_outputs,
+            state_vars_without_initial=report.state_vars_without_initial,
+            required_initial_state_vars=required_initial_state_vars,
         )
 
-    def _required_initial_outputs(
+    def _required_initial_state_vars(
         self,
         inputs: dict[str, str],
         phase_schedules: dict[str, tuple[str, ...]],
     ) -> dict[str, tuple[str, ...]]:
         issues: dict[str, set[str]] = {}
         phase_by_name = {phase.name: phase for phase in self.phases}
-        node_outputs = {
+        node_state_vars = {
             node.node_id: tuple(
                 _node_output_path(node, output) for output in node.__class__._outputs.values()
             )
@@ -1549,7 +1619,7 @@ class PhasedReactiveSystem:
                         and source_path not in written
                     ):
                         issues.setdefault(source_path, set()).add(input_path)
-                written.update(node_outputs.get(node_id, ()))
+                written.update(node_state_vars.get(node_id, ()))
 
             for transition in phase.transitions:
                 target = _phase_ref_name(transition.target)
@@ -1600,23 +1670,23 @@ class PhasedReactiveSystem:
     def _phase_node_ids(self, phase: Phase) -> tuple[str, ...]:
         return tuple(node.node_id for node in phase.nodes)
 
-    def _resolve_output(self, output: OutputSource[T]) -> str:
+    def _resolve_output(self, output: VarSource[T]) -> str:
         output = _resolve_lazy_source(output)
-        if isinstance(output, BoundOutputPort):
+        if isinstance(output, BoundVarPort):
             return output.path
-        if isinstance(output, OutputPort):
+        if isinstance(output, VarPort):
             output = output.path
         if isinstance(output, SystemSource):
             output = output.path
         output = _normalize_output_path(output)
         if "." not in output:
-            raise ValueError(f"Output reference must be 'Node.output', got {output!r}.")
+            raise ValueError(f"State reference must be 'Node.var', got {output!r}.")
         if output in SYSTEM_OUTPUTS:
             return output
         try:
             return self._outputs_by_path[output]
         except KeyError as exc:
-            raise KeyError(f"Unknown output reference: {output}") from exc
+            raise KeyError(f"Unknown state reference: {output}") from exc
 
     def _choose_next_phase(self, phase: Phase) -> str | None:
         snapshot = dict(self._state)
@@ -1640,7 +1710,7 @@ class PhasedReactiveSystem:
             source_ref = self._connection_map.get(input_path, input_port.source)
             if source_ref is None:
                 raise RuntimeError(f"Input {input_path} is not connected.")
-            output = self._resolve_output(cast(OutputSource[Any], source_ref))
+            output = self._resolve_output(cast(VarSource[Any], source_ref))
             value = self._state.get(output, input_port.default)
             values[name] = value
         return node.__class__.Inputs(**values)
@@ -1648,21 +1718,21 @@ class PhasedReactiveSystem:
     def _normalize_outputs(
         self,
         node: Node,
-        result: NodeOutputs | dict[str, Any],
+        result: NodeState | dict[str, Any],
     ) -> dict[str, Any]:
-        outputs = dict(result) if isinstance(result, dict) else dict(vars(result))
+        state_vars = dict(result) if isinstance(result, dict) else dict(vars(result))
         declared = node.__class__._outputs
-        unknown = set(outputs) - set(declared)
+        unknown = set(state_vars) - set(declared)
         if unknown:
             raise ValueError(
-                f"{node.__class__.__name__}.run returned undeclared outputs: {sorted(unknown)}"
+                f"{node.__class__.__name__}.update returned undeclared state variables: {sorted(unknown)}"
             )
-        missing = set(declared) - set(outputs)
+        missing = set(declared) - set(state_vars)
         if missing:
             raise ValueError(
-                f"{node.__class__.__name__}.run did not return outputs: {sorted(missing)}"
+                f"{node.__class__.__name__}.update did not return state variables: {sorted(missing)}"
             )
-        return outputs
+        return state_vars
 
 
 def _run_node(
@@ -1674,35 +1744,57 @@ def _run_node(
     time_stop: float | None = None,
 ) -> Any:
     kwargs: dict[str, Any] = {}
-    if state_snapshot is not None and _accepts_keyword(node.run, "state_snapshot"):
+    if state_snapshot is not None and _accepts_keyword(node.update, "state_snapshot"):
         kwargs["state_snapshot"] = state_snapshot
-    if time_start is not None and _accepts_keyword(node.run, "time_start"):
+    for name in node.__class__._update_state_parameter_names:
+        kwargs[name] = _previous_node_state(node, state_snapshot)
+    if time_start is not None and _accepts_keyword(node.update, "time_start"):
         kwargs["time_start"] = time_start
-    if time_stop is not None and _accepts_keyword(node.run, "time_stop"):
+    if time_stop is not None and _accepts_keyword(node.update, "time_stop"):
         kwargs["time_stop"] = time_stop
     if node.__class__._run_input_mode == "parameters":
-        return node.run(**vars(inputs), **kwargs)
+        return node.update(**vars(inputs), **kwargs)
     if node.__class__._inputs or _run_requires_inputs(node):
-        return node.run(inputs, **kwargs)
-    return node.run(**kwargs)
+        return node.update(inputs, **kwargs)
+    return node.update(**kwargs)
+
+
+def _previous_node_state(node: Node, state_snapshot: StateSnapshot | None) -> NodeState:
+    if state_snapshot is None:
+        raise RuntimeError(
+            f"{node.__class__.__name__}.update requested previous State, "
+            "but no state snapshot is available."
+        )
+    values: dict[str, Any] = {}
+    for name, port in node.__class__._outputs.items():
+        path = _node_output_path(node, port)
+        try:
+            values[name] = state_snapshot[path]
+        except KeyError as exc:
+            raise RuntimeError(
+                f"{node.__class__.__name__}.update requested previous State, "
+                f"but {path!r} is not available; define Var(init=...) or pass initial_state."
+            ) from exc
+    state_cls = cast(type[NodeState], node.__class__._output_namespace_cls)
+    return state_cls(**values)
 
 
 def _required_initial_issues(
-    required_initial_outputs: dict[str, tuple[str, ...]],
+    required_initial_state_vars: dict[str, tuple[str, ...]],
 ) -> list[CompileIssue]:
     return [
         CompileIssue(
             location=source_path,
-            message=(f"output initial value is required before first read by {readers}"),
+            message=(f"state variable initial value is required before first read by {readers}"),
         )
-        for source_path, readers in required_initial_outputs.items()
+        for source_path, readers in required_initial_state_vars.items()
     ]
 
 
 def _check_phase_graph_completeness(
     phases: tuple[Phase, ...],
     phase_nodes: tuple[Node, ...],
-    connection_map: dict[str, OutputSource[Any]],
+    connection_map: dict[str, VarSource[Any]],
 ) -> list[CompileIssue]:
     covered_node_ids = {node.node_id for node in phase_nodes}
     issues: list[CompileIssue] = []
@@ -1735,14 +1827,14 @@ def _check_phase_graph_completeness(
 def _append_missing_bound_source_issue(
     issues: list[CompileIssue],
     location: str,
-    source_ref: OutputSource[Any],
+    source_ref: VarSource[Any],
     covered_node_ids: set[str],
 ) -> None:
     try:
         resolved_source_ref = _resolve_lazy_source(source_ref)
     except Exception:
         return
-    if not isinstance(resolved_source_ref, BoundOutputPort):
+    if not isinstance(resolved_source_ref, BoundVarPort):
         return
     source_node = resolved_source_ref.node
     if source_node.node_id in covered_node_ids:
@@ -1759,11 +1851,11 @@ def _append_missing_bound_source_issue(
     )
 
 
-def _guard_sources(guard: Guard) -> tuple[OutputSource[Any], ...]:
+def _guard_sources(guard: Guard) -> tuple[VarSource[Any], ...]:
     if isinstance(guard, VarExpr):
-        output_source = cast(OutputSource[Any] | None, guard.__dict__.get("output_source"))
-        if output_source is not None:
-            return (output_source,)
+        var_source = cast(VarSource[Any] | None, guard.__dict__.get("var_source"))
+        if var_source is not None:
+            return (var_source,)
     if isinstance(guard, UnaryExpr):
         return _guard_sources(guard.operand)
     if isinstance(guard, BinaryExpr):
@@ -1974,7 +2066,7 @@ def _resolve_guard_variable_path(
         if len(candidates) > 1:
             raise ValueError(
                 f"ambiguous guard variable {variable!r}; "
-                f"candidates are {tuple(candidates)}; use instance output reference"
+                f"candidates are {tuple(candidates)}; use instance state reference"
             )
         if len(candidates) == 1:
             return candidates[0]
@@ -1983,23 +2075,25 @@ def _resolve_guard_variable_path(
 
 def _run_requires_inputs(node: Node) -> bool:
     try:
-        signature = inspect.signature(node.run)
+        signature = inspect.signature(node.update)
     except (TypeError, ValueError):
         return True
+    state_parameter_names = set(node.__class__._update_state_parameter_names)
     return any(
-        parameter.default is inspect.Parameter.empty
+        name not in state_parameter_names
+        and parameter.default is inspect.Parameter.empty
         and parameter.kind
         in (
             inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
         )
-        for parameter in signature.parameters.values()
+        for name, parameter in signature.parameters.items()
     )
 
 
 def _connection_map(
     connections: Iterable[Connection],
-) -> dict[str, OutputSource[Any]]:
+) -> dict[str, VarSource[Any]]:
     return {connection.input.path: connection.source for connection in connections}
 
 
@@ -2175,7 +2269,7 @@ def _deduplicate_implicit_node_names(nodes: tuple[Node, ...]) -> None:
         used.add(candidate)
 
 
-def _node_output_path(node: Node, output: OutputPort[Any]) -> str:
+def _node_output_path(node: Node, output: VarPort[Any]) -> str:
     if output.name is None:
         return "<unbound>"
     return f"{node.node_id}.{output.name}"
@@ -2187,24 +2281,24 @@ def _node_input_path(node: Node, input_port: InputPort[Any]) -> str:
     return f"{node.node_id}.{input_port.name}"
 
 
-def _source_path(source: OutputSource[Any]) -> str:
+def _source_path(source: VarSource[Any]) -> str:
     source = _resolve_lazy_source(source)
-    if isinstance(source, BoundOutputPort):
+    if isinstance(source, BoundVarPort):
         return source.path
-    if isinstance(source, OutputPort):
+    if isinstance(source, VarPort):
         return source.path
     if isinstance(source, SystemSource):
         return source.path
     if not isinstance(source, str):
         raise TypeError(
-            "Output source must be an OutputPort, SystemSource, a string reference, "
+            "State source must be a VarPort, SystemSource, a string reference, "
             "or a zero-argument callable returning one."
         )
     return _normalize_output_path(source)
 
 
-def _resolve_lazy_source(source: OutputSource[T]) -> ResolvedOutputSource[T]:
-    if isinstance(source, (BoundOutputPort, OutputPort, SystemSource, str)):
+def _resolve_lazy_source(source: VarSource[T]) -> ResolvedVarSource[T]:
+    if isinstance(source, (BoundVarPort, VarPort, SystemSource, str)):
         return source
     return source()
 
@@ -2233,7 +2327,7 @@ def _phase_dependency_edges(
     return sorted(edges)
 
 
-def _node_ref_outputs(node_ref: NodeRef) -> Iterable[tuple[str, OutputPort[Any]]]:
+def _node_ref_outputs(node_ref: NodeRef) -> Iterable[tuple[str, VarPort[Any]]]:
     for output in node_ref.__class__._outputs.values():
         yield _node_output_path(node_ref, output), output
 
@@ -2467,7 +2561,7 @@ def _z3_variable_for_type(output_type: type[Any], name: str) -> Any:
         return z3.Real(name)
     if _is_enum_type(output_type):
         return z3.Int(name)
-    raise TypeError(f"Output type {output_type!r} is not supported by z3.")
+    raise TypeError(f"State variable type {output_type!r} is not supported by z3.")
 
 
 def _z3_value(value: Any) -> Any:

@@ -23,11 +23,11 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
@@ -46,12 +46,12 @@ class Network(Node):
     """
 
     class Inputs(NodeInputs):
-        tick: int = Input(source=Clock.tick)
+        tick: int = Input(src=Clock.tick)
 
-    class Outputs(NodeOutputs):
-        bandwidth_kbps: float = Output(initial=float(TOP_BITRATE_KBPS))
+    class State(NodeState):
+        bandwidth_kbps: float = Var(init=float(TOP_BITRATE_KBPS))
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         if inputs.tick < 6:
             value = 2400.0
         elif inputs.tick < 14:
@@ -60,7 +60,7 @@ class Network(Node):
             value = 1100.0
         else:
             value = 2400.0
-        return self.Outputs(bandwidth_kbps=value)
+        return self.State(bandwidth_kbps=value)
 
 
 class QualityPolicy(Node):
@@ -72,38 +72,38 @@ class QualityPolicy(Node):
     """
 
     class Inputs(NodeInputs):
-        buffer_seconds: float = Input(source=lambda: MediaSession.Outputs.buffer_seconds)
-        bitrate_kbps: int = Input(source=lambda: BitrateController.Outputs.value)
-        bandwidth_kbps: float = Input(source=Network.Outputs.bandwidth_kbps)
+        buffer_seconds: float = Input(src=lambda: MediaSession.State.buffer_seconds)
+        bitrate_kbps: int = Input(src=lambda: BitrateController.State.value)
+        bandwidth_kbps: float = Input(src=Network.State.bandwidth_kbps)
 
-    class Outputs(NodeOutputs):
-        stalling: bool = Output(initial=False)
+    class State(NodeState):
+        stalling: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         bitrate = max(inputs.bitrate_kbps, 1)
         drain = max(0.0, 1.0 - inputs.bandwidth_kbps / bitrate)
         if drain <= 0.0:
-            return self.Outputs(stalling=False)
+            return self.State(stalling=False)
         time_to_empty = inputs.buffer_seconds / drain
-        return self.Outputs(stalling=time_to_empty < STALL_HORIZON_SECONDS)
+        return self.State(stalling=time_to_empty < STALL_HORIZON_SECONDS)
 
 
 class BitrateController(Node):
     """Owns the current target bitrate.  Drops one rung when invoked."""
 
     class Inputs(NodeInputs):
-        current: int = Input(source=lambda: BitrateController.Outputs.value)
+        current: int = Input(src=lambda: BitrateController.State.value)
 
-    class Outputs(NodeOutputs):
-        value: int = Output(initial=TOP_BITRATE_KBPS)
+    class State(NodeState):
+        value: int = Var(init=TOP_BITRATE_KBPS)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         try:
             index = BITRATE_LADDER_KBPS.index(inputs.current)
         except ValueError:
             index = len(BITRATE_LADDER_KBPS) - 1
         next_index = max(0, index - 1)
-        return self.Outputs(value=BITRATE_LADDER_KBPS[next_index])
+        return self.State(value=BITRATE_LADDER_KBPS[next_index])
 
 
 class Decoder(Node):
@@ -115,30 +115,30 @@ class Decoder(Node):
     """
 
     class Inputs(NodeInputs):
-        bandwidth_kbps: float = Input(source=Network.Outputs.bandwidth_kbps)
-        bitrate_kbps: int = Input(source=lambda: BitrateController.Outputs.value)
+        bandwidth_kbps: float = Input(src=Network.State.bandwidth_kbps)
+        bitrate_kbps: int = Input(src=lambda: BitrateController.State.value)
 
-    class Outputs(NodeOutputs):
+    class State(NodeState):
         fetched_seconds: float
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         bitrate = max(inputs.bitrate_kbps, 1)
-        return self.Outputs(fetched_seconds=inputs.bandwidth_kbps / bitrate * TICK_DT_SECONDS)
+        return self.State(fetched_seconds=inputs.bandwidth_kbps / bitrate * TICK_DT_SECONDS)
 
 
 class MediaSession(Node):
     """The plant.  Buffer fills with newly fetched video, drains with playback."""
 
     class Inputs(NodeInputs):
-        previous: float = Input(source=lambda: MediaSession.Outputs.buffer_seconds)
-        fetched: float = Input(source=Decoder.Outputs.fetched_seconds)
+        previous: float = Input(src=lambda: MediaSession.State.buffer_seconds)
+        fetched: float = Input(src=Decoder.State.fetched_seconds)
 
-    class Outputs(NodeOutputs):
-        buffer_seconds: float = Output(initial=10.0)
+    class State(NodeState):
+        buffer_seconds: float = Var(init=10.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         next_buffer = inputs.previous + inputs.fetched - TICK_DT_SECONDS
-        return self.Outputs(buffer_seconds=max(0.0, next_buffer))
+        return self.State(buffer_seconds=max(0.0, next_buffer))
 
 
 class Logger(Node):
@@ -147,17 +147,17 @@ class Logger(Node):
     Sample = tuple[int, float, int, float, bool]
 
     class Inputs(NodeInputs):
-        tick: int = Input(source=Clock.tick)
-        bandwidth_kbps: float = Input(source=Network.Outputs.bandwidth_kbps)
-        bitrate_kbps: int = Input(source=lambda: BitrateController.Outputs.value)
-        buffer_seconds: float = Input(source=lambda: MediaSession.Outputs.buffer_seconds)
-        stalling: bool = Input(source=QualityPolicy.Outputs.stalling)
-        history: list["Logger.Sample"] = Input(source=lambda: Logger.Outputs.history)
+        tick: int = Input(src=Clock.tick)
+        bandwidth_kbps: float = Input(src=Network.State.bandwidth_kbps)
+        bitrate_kbps: int = Input(src=lambda: BitrateController.State.value)
+        buffer_seconds: float = Input(src=lambda: MediaSession.State.buffer_seconds)
+        stalling: bool = Input(src=QualityPolicy.State.stalling)
+        history: list["Logger.Sample"] = Input(src=lambda: Logger.State.history)
 
-    class Outputs(NodeOutputs):
-        history: list["Logger.Sample"] = Output(initial=lambda: [])
+    class State(NodeState):
+        history: list["Logger.Sample"] = Var(init=lambda: [])
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         record: Logger.Sample = (
             inputs.tick,
             inputs.bandwidth_kbps,
@@ -166,7 +166,7 @@ class Logger(Node):
             inputs.stalling,
         )
         inputs.history.append(record)
-        return self.Outputs(history=inputs.history)
+        return self.State(history=inputs.history)
 
 
 def build_system() -> PhasedReactiveSystem:
@@ -189,7 +189,7 @@ def build_system() -> PhasedReactiveSystem:
                 "decide",
                 nodes=(policy,),
                 transitions=(
-                    If(V(policy.Outputs.stalling), "drop_quality", name="stalling"),
+                    If(V(policy.State.stalling), "drop_quality", name="stalling"),
                     Else("play", name="healthy"),
                 ),
             ),

@@ -8,27 +8,27 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
 
 class MicrogridSampler(Node):
     class Inputs(NodeInputs):
-        tick: int = Input(source="MicrogridSampler.Outputs.tick")
+        tick: int = Input(src="MicrogridSampler.State.tick")
 
-    class Outputs(NodeOutputs):
-        tick: int = Output(initial=0, domain=range(0, 4))
-        bus_voltage_low: bool = Output(initial=False)
-        branch_current_high: bool = Output(initial=False)
+    class State(NodeState):
+        tick: int = Var(init=0, domain=range(0, 4))
+        bus_voltage_low: bool = Var(init=False)
+        branch_current_high: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         tick = inputs.tick + 1
-        return self.Outputs(
+        return self.State(
             tick=tick,
             bus_voltage_low=True,
             branch_current_high=tick == 1,
@@ -37,26 +37,26 @@ class MicrogridSampler(Node):
 
 class StateEstimator(Node):
     class Inputs(NodeInputs):
-        bus_voltage_low: bool = Input(source=MicrogridSampler.Outputs.bus_voltage_low)
-        branch_current_high: bool = Input(source=MicrogridSampler.Outputs.branch_current_high)
+        bus_voltage_low: bool = Input(src=MicrogridSampler.State.bus_voltage_low)
+        branch_current_high: bool = Input(src=MicrogridSampler.State.branch_current_high)
 
-    class Outputs(NodeOutputs):
-        fault_detected: bool = Output(initial=False)
+    class State(NodeState):
+        fault_detected: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(fault_detected=inputs.bus_voltage_low or inputs.branch_current_high)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(fault_detected=inputs.bus_voltage_low or inputs.branch_current_high)
 
 
 class NominalPolicy(Node):
     class Inputs(NodeInputs):
-        fault_detected: bool = Input(source=StateEstimator.Outputs.fault_detected)
+        fault_detected: bool = Input(src=StateEstimator.State.fault_detected)
 
-    class Outputs(NodeOutputs):
-        nominal_current_reference: int = Output(initial=2, domain=range(0, 4))
-        nominal_safe: bool = Output(initial=True)
+    class State(NodeState):
+        nominal_current_reference: int = Var(init=2, domain=range(0, 4))
+        nominal_safe: bool = Var(init=True)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
+    def update(self, inputs: Inputs) -> State:
+        return self.State(
             nominal_current_reference=3,
             nominal_safe=not inputs.fault_detected,
         )
@@ -64,15 +64,15 @@ class NominalPolicy(Node):
 
 class FallbackPolicy(Node):
     class Inputs(NodeInputs):
-        fault_detected: bool = Input(source=StateEstimator.Outputs.fault_detected)
+        fault_detected: bool = Input(src=StateEstimator.State.fault_detected)
 
-    class Outputs(NodeOutputs):
-        fallback_current_reference: int = Output(initial=0, domain=range(0, 4))
-        fallback_safe: bool = Output(initial=False)
-        recovery_attempted: bool = Output(initial=False)
+    class State(NodeState):
+        fallback_current_reference: int = Var(init=0, domain=range(0, 4))
+        fallback_safe: bool = Var(init=False)
+        recovery_attempted: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
+    def update(self, inputs: Inputs) -> State:
+        return self.State(
             fallback_current_reference=1,
             fallback_safe=True,
             recovery_attempted=True,
@@ -82,24 +82,24 @@ class FallbackPolicy(Node):
 class ControlApplier(Node):
     class Inputs(NodeInputs):
         nominal_current_reference: int = Input(
-            source=NominalPolicy.Outputs.nominal_current_reference
+            src=NominalPolicy.State.nominal_current_reference
         )
-        nominal_safe: bool = Input(source=NominalPolicy.Outputs.nominal_safe)
+        nominal_safe: bool = Input(src=NominalPolicy.State.nominal_safe)
         fallback_current_reference: int = Input(
-            source=FallbackPolicy.Outputs.fallback_current_reference
+            src=FallbackPolicy.State.fallback_current_reference
         )
-        fallback_safe: bool = Input(source=FallbackPolicy.Outputs.fallback_safe)
-        recovery_attempted: bool = Input(source=FallbackPolicy.Outputs.recovery_attempted)
+        fallback_safe: bool = Input(src=FallbackPolicy.State.fallback_safe)
+        recovery_attempted: bool = Input(src=FallbackPolicy.State.recovery_attempted)
 
-    class Outputs(NodeOutputs):
-        applied_current_reference: int = Output(initial=0, domain=range(0, 4))
-        used_fallback: bool = Output(initial=False)
+    class State(NodeState):
+        applied_current_reference: int = Var(init=0, domain=range(0, 4))
+        used_fallback: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         use_fallback = (
             not inputs.nominal_safe and inputs.recovery_attempted and inputs.fallback_safe
         )
-        return self.Outputs(
+        return self.State(
             applied_current_reference=(
                 inputs.fallback_current_reference
                 if use_fallback
@@ -110,45 +110,45 @@ class ControlApplier(Node):
 
 
 class EmergencyShutdown(Node):
-    class Outputs(NodeOutputs):
-        shutdown_requested: bool = Output(initial=False)
+    class State(NodeState):
+        shutdown_requested: bool = Var(init=False)
 
-    def run(self, inputs: NodeInputs) -> Outputs:
-        return self.Outputs(shutdown_requested=True)
+    def update(self, inputs: NodeInputs) -> State:
+        return self.State(shutdown_requested=True)
 
 
 class Monitor(Node):
     class Inputs(NodeInputs):
         applied_current_reference: int = Input(
-            source=ControlApplier.Outputs.applied_current_reference
+            src=ControlApplier.State.applied_current_reference
         )
-        shutdown_requested: bool = Input(source=EmergencyShutdown.Outputs.shutdown_requested)
+        shutdown_requested: bool = Input(src=EmergencyShutdown.State.shutdown_requested)
 
-    class Outputs(NodeOutputs):
-        committed: bool = Output(initial=False)
+    class State(NodeState):
+        committed: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
+    def update(self, inputs: Inputs) -> State:
+        return self.State(
             committed=inputs.shutdown_requested or inputs.applied_current_reference <= 1
         )
 
 
 class RecoveryLogger(Node):
     class Inputs(NodeInputs):
-        tick: int = Input(source=MicrogridSampler.Outputs.tick)
-        fault_detected: bool = Input(source=StateEstimator.Outputs.fault_detected)
-        nominal_safe: bool = Input(source=NominalPolicy.Outputs.nominal_safe)
-        recovery_attempted: bool = Input(source=FallbackPolicy.Outputs.recovery_attempted)
-        used_fallback: bool = Input(source=ControlApplier.Outputs.used_fallback)
-        committed: bool = Input(source=Monitor.Outputs.committed)
+        tick: int = Input(src=MicrogridSampler.State.tick)
+        fault_detected: bool = Input(src=StateEstimator.State.fault_detected)
+        nominal_safe: bool = Input(src=NominalPolicy.State.nominal_safe)
+        recovery_attempted: bool = Input(src=FallbackPolicy.State.recovery_attempted)
+        used_fallback: bool = Input(src=ControlApplier.State.used_fallback)
+        committed: bool = Input(src=Monitor.State.committed)
         trace: tuple[tuple[int, bool, bool, bool, bool, bool], ...] = Input(
-            source="RecoveryLogger.Outputs.trace"
+            src="RecoveryLogger.State.trace"
         )
 
-    class Outputs(NodeOutputs):
-        trace: tuple[tuple[int, bool, bool, bool, bool, bool], ...] = Output(initial=())
+    class State(NodeState):
+        trace: tuple[tuple[int, bool, bool, bool, bool, bool], ...] = Var(init=())
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         sample = (
             inputs.tick,
             inputs.fault_detected,
@@ -157,7 +157,7 @@ class RecoveryLogger(Node):
             inputs.used_fallback,
             inputs.committed,
         )
-        return self.Outputs(trace=inputs.trace + (sample,))
+        return self.State(trace=inputs.trace + (sample,))
 
 
 def _effective_safe() -> Any:

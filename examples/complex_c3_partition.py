@@ -5,35 +5,35 @@ from regelum import (
     Goto,
     If,
     Node,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
 
 class Diagnostics(Node):
-    class Outputs(NodeOutputs):
-        fault: bool = Output(initial=False)
-        degraded: bool = Output(initial=False)
-        operator_override: bool = Output(initial=False)
+    class State(NodeState):
+        fault: bool = Var(init=False)
+        degraded: bool = Var(init=False)
+        operator_override: bool = Var(init=False)
 
 
 class NormalMode(Node):
-    class Outputs(NodeOutputs):
-        entered: bool = Output(initial=False)
+    class State(NodeState):
+        entered: bool = Var(init=False)
 
 
 class DegradedMode(Node):
-    class Outputs(NodeOutputs):
-        entered: bool = Output(initial=False)
+    class State(NodeState):
+        entered: bool = Var(init=False)
 
 
 class ShutdownMode(Node):
-    class Outputs(NodeOutputs):
-        entered: bool = Output(initial=False)
+    class State(NodeState):
+        entered: bool = Var(init=False)
 
 
 def build_ok_system() -> PhasedReactiveSystem:

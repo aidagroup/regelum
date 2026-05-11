@@ -6,34 +6,34 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
+    Var,
     terminate,
 )
 
 
 class First(Node):
     class Inputs(NodeInputs):
-        b: float = Input(source="Second.Outputs.b")
+        b: float = Input(src="Second.State.b")
 
-    class Outputs(NodeOutputs):
-        a: float = Output(initial=0.0)
+    class State(NodeState):
+        a: float = Var(init=0.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(a=inputs.b + 1.0)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(a=inputs.b + 1.0)
 
 
 class Second(Node):
     class Inputs(NodeInputs):
-        a: float = Input(source=First.Outputs.a)
+        a: float = Input(src=First.State.a)
 
-    class Outputs(NodeOutputs):
-        b: float = Output(initial=0.0)
+    class State(NodeState):
+        b: float = Var(init=0.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(b=inputs.a + 1.0)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(b=inputs.a + 1.0)
 
 
 def build_system() -> PhasedReactiveSystem:

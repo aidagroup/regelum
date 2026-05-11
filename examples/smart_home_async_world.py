@@ -29,11 +29,11 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
@@ -72,37 +72,37 @@ EV_DOMAIN = (0, 1, 2)
 class SensorBusOracle(Node):
     """True iff the sensor bus delivered fresh readings this tick."""
 
-    class Outputs(NodeOutputs):
-        sensor_bus_fresh: bool = Output(initial=True)
+    class State(NodeState):
+        sensor_bus_fresh: bool = Var(init=True)
 
-    def run(self, _: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(sensor_bus_fresh=True)
+    def update(self, _: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(sensor_bus_fresh=True)
 
 
 class ActuatorNetOracle(Node):
     """True iff the actuator network is reachable in this attempt."""
 
-    class Outputs(NodeOutputs):
-        actuators_reachable: bool = Output(initial=True)
+    class State(NodeState):
+        actuators_reachable: bool = Var(init=True)
 
-    def run(self, _: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(actuators_reachable=True)
+    def update(self, _: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(actuators_reachable=True)
 
 
 class CloudOracle(Node):
-    class Outputs(NodeOutputs):
-        cloud_up: bool = Output(initial=True)
+    class State(NodeState):
+        cloud_up: bool = Var(init=True)
 
-    def run(self, _: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(cloud_up=True)
+    def update(self, _: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(cloud_up=True)
 
 
 class PowerOracle(Node):
-    class Outputs(NodeOutputs):
-        power_stable: bool = Output(initial=True)
+    class State(NodeState):
+        power_stable: bool = Var(init=True)
 
-    def run(self, _: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(power_stable=True)
+    def update(self, _: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(power_stable=True)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -119,62 +119,62 @@ def _gate_evidence(present: bool, healthy: bool) -> int:
 
 class SmokeGate(Node):
     class Inputs(NodeInputs):
-        smoke_present: bool = Input(source="SmokeSensor.smoke_present")
-        smoke_health_ok: bool = Input(source="SmokeSensor.smoke_health_ok")
-        sensor_bus_fresh: bool = Input(source="SensorBusOracle.sensor_bus_fresh")
-        power_stable: bool = Input(source="PowerOracle.power_stable")
+        smoke_present: bool = Input(src="SmokeSensor.smoke_present")
+        smoke_health_ok: bool = Input(src="SmokeSensor.smoke_health_ok")
+        sensor_bus_fresh: bool = Input(src="SensorBusOracle.sensor_bus_fresh")
+        power_stable: bool = Input(src="PowerOracle.power_stable")
 
-    class Outputs(NodeOutputs):
-        smoke_ev: int = Output(initial=EV_NEGATIVE, domain=EV_DOMAIN)
+    class State(NodeState):
+        smoke_ev: int = Var(init=EV_NEGATIVE, domain=EV_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         healthy = inputs.smoke_health_ok and inputs.sensor_bus_fresh and inputs.power_stable
-        return self.Outputs(smoke_ev=_gate_evidence(inputs.smoke_present, healthy))
+        return self.State(smoke_ev=_gate_evidence(inputs.smoke_present, healthy))
 
 
 class HeatGate(Node):
     class Inputs(NodeInputs):
-        heat_present: bool = Input(source="HeatSensor.heat_present")
-        heat_health_ok: bool = Input(source="HeatSensor.heat_health_ok")
-        sensor_bus_fresh: bool = Input(source="SensorBusOracle.sensor_bus_fresh")
-        power_stable: bool = Input(source="PowerOracle.power_stable")
+        heat_present: bool = Input(src="HeatSensor.heat_present")
+        heat_health_ok: bool = Input(src="HeatSensor.heat_health_ok")
+        sensor_bus_fresh: bool = Input(src="SensorBusOracle.sensor_bus_fresh")
+        power_stable: bool = Input(src="PowerOracle.power_stable")
 
-    class Outputs(NodeOutputs):
-        heat_ev: int = Output(initial=EV_NEGATIVE, domain=EV_DOMAIN)
+    class State(NodeState):
+        heat_ev: int = Var(init=EV_NEGATIVE, domain=EV_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         healthy = inputs.heat_health_ok and inputs.sensor_bus_fresh and inputs.power_stable
-        return self.Outputs(heat_ev=_gate_evidence(inputs.heat_present, healthy))
+        return self.State(heat_ev=_gate_evidence(inputs.heat_present, healthy))
 
 
 class LeakGate(Node):
     class Inputs(NodeInputs):
-        leak_present: bool = Input(source="LeakSensor.leak_present")
-        leak_health_ok: bool = Input(source="LeakSensor.leak_health_ok")
-        sensor_bus_fresh: bool = Input(source="SensorBusOracle.sensor_bus_fresh")
-        power_stable: bool = Input(source="PowerOracle.power_stable")
+        leak_present: bool = Input(src="LeakSensor.leak_present")
+        leak_health_ok: bool = Input(src="LeakSensor.leak_health_ok")
+        sensor_bus_fresh: bool = Input(src="SensorBusOracle.sensor_bus_fresh")
+        power_stable: bool = Input(src="PowerOracle.power_stable")
 
-    class Outputs(NodeOutputs):
-        leak_ev: int = Output(initial=EV_NEGATIVE, domain=EV_DOMAIN)
+    class State(NodeState):
+        leak_ev: int = Var(init=EV_NEGATIVE, domain=EV_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         healthy = inputs.leak_health_ok and inputs.sensor_bus_fresh and inputs.power_stable
-        return self.Outputs(leak_ev=_gate_evidence(inputs.leak_present, healthy))
+        return self.State(leak_ev=_gate_evidence(inputs.leak_present, healthy))
 
 
 class TempGate(Node):
     class Inputs(NodeInputs):
-        temperature_high: bool = Input(source="TempSensor.temperature_high")
-        temp_health_ok: bool = Input(source="TempSensor.temp_health_ok")
-        sensor_bus_fresh: bool = Input(source="SensorBusOracle.sensor_bus_fresh")
-        power_stable: bool = Input(source="PowerOracle.power_stable")
+        temperature_high: bool = Input(src="TempSensor.temperature_high")
+        temp_health_ok: bool = Input(src="TempSensor.temp_health_ok")
+        sensor_bus_fresh: bool = Input(src="SensorBusOracle.sensor_bus_fresh")
+        power_stable: bool = Input(src="PowerOracle.power_stable")
 
-    class Outputs(NodeOutputs):
-        temp_ev: int = Output(initial=EV_NEGATIVE, domain=EV_DOMAIN)
+    class State(NodeState):
+        temp_ev: int = Var(init=EV_NEGATIVE, domain=EV_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         healthy = inputs.temp_health_ok and inputs.sensor_bus_fresh and inputs.power_stable
-        return self.Outputs(temp_ev=_gate_evidence(inputs.temperature_high, healthy))
+        return self.State(temp_ev=_gate_evidence(inputs.temperature_high, healthy))
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -202,88 +202,88 @@ RISK_DOMAIN = (0, 1, 2)
 
 class AsyncFireClassifier(Node):
     class Inputs(NodeInputs):
-        smoke_ev: int = Input(source="SmokeGate.smoke_ev")
-        heat_ev: int = Input(source="HeatGate.heat_ev")
-        temp_ev: int = Input(source="TempGate.temp_ev")
+        smoke_ev: int = Input(src="SmokeGate.smoke_ev")
+        heat_ev: int = Input(src="HeatGate.heat_ev")
+        temp_ev: int = Input(src="TempGate.temp_ev")
 
-    class Outputs(NodeOutputs):
-        fire_state: int = Output(initial=FIRE_NORMAL, domain=FIRE_DOMAIN)
+    class State(NodeState):
+        fire_state: int = Var(init=FIRE_NORMAL, domain=FIRE_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         smoke_unknown = inputs.smoke_ev == EV_UNKNOWN
         heat_unknown = inputs.heat_ev == EV_UNKNOWN
         if smoke_unknown and heat_unknown:
-            return self.Outputs(fire_state=FIRE_SENSOR_FAULT)
+            return self.State(fire_state=FIRE_SENSOR_FAULT)
         smoke_pos = inputs.smoke_ev == EV_POSITIVE
         heat_pos = inputs.heat_ev == EV_POSITIVE
         temp_pos = inputs.temp_ev == EV_POSITIVE  # UNKNOWN excluded
         if smoke_pos and (heat_pos or temp_pos):
-            return self.Outputs(fire_state=FIRE_CONFIRMED)
+            return self.State(fire_state=FIRE_CONFIRMED)
         if smoke_pos:
-            return self.Outputs(fire_state=FIRE_SMOKE_ONLY)
-        return self.Outputs(fire_state=FIRE_NORMAL)
+            return self.State(fire_state=FIRE_SMOKE_ONLY)
+        return self.State(fire_state=FIRE_NORMAL)
 
 
 class AsyncLeakClassifier(Node):
     class Inputs(NodeInputs):
-        leak_ev: int = Input(source="LeakGate.leak_ev")
+        leak_ev: int = Input(src="LeakGate.leak_ev")
 
-    class Outputs(NodeOutputs):
-        leak_state: int = Output(initial=LEAK_NORMAL, domain=LEAK_DOMAIN)
+    class State(NodeState):
+        leak_state: int = Var(init=LEAK_NORMAL, domain=LEAK_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         if inputs.leak_ev == EV_UNKNOWN:
-            return self.Outputs(leak_state=LEAK_SENSOR_FAULT)
+            return self.State(leak_state=LEAK_SENSOR_FAULT)
         if inputs.leak_ev == EV_POSITIVE:
-            return self.Outputs(leak_state=LEAK_DETECTED)
-        return self.Outputs(leak_state=LEAK_NORMAL)
+            return self.State(leak_state=LEAK_DETECTED)
+        return self.State(leak_state=LEAK_NORMAL)
 
 
 class AsyncRiskScorer(Node):
     class Inputs(NodeInputs):
-        fire_state: int = Input(source="AsyncFireClassifier.fire_state")
-        leak_state: int = Input(source="AsyncLeakClassifier.leak_state")
-        temp_ev: int = Input(source="TempGate.temp_ev")
+        fire_state: int = Input(src="AsyncFireClassifier.fire_state")
+        leak_state: int = Input(src="AsyncLeakClassifier.leak_state")
+        temp_ev: int = Input(src="TempGate.temp_ev")
 
-    class Outputs(NodeOutputs):
-        risk_level: int = Output(initial=RISK_LOW, domain=RISK_DOMAIN)
+    class State(NodeState):
+        risk_level: int = Var(init=RISK_LOW, domain=RISK_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         if inputs.fire_state == FIRE_CONFIRMED:
-            return self.Outputs(risk_level=RISK_HIGH)
+            return self.State(risk_level=RISK_HIGH)
         if inputs.fire_state == FIRE_SMOKE_ONLY or inputs.leak_state == LEAK_DETECTED:
-            return self.Outputs(risk_level=RISK_MEDIUM)
+            return self.State(risk_level=RISK_MEDIUM)
         if inputs.temp_ev == EV_POSITIVE:
-            return self.Outputs(risk_level=RISK_MEDIUM)
-        return self.Outputs(risk_level=RISK_LOW)
+            return self.State(risk_level=RISK_MEDIUM)
+        return self.State(risk_level=RISK_LOW)
 
 
 class AsyncPriorityArbiter(Node):
     class Inputs(NodeInputs):
-        fire_state: int = Input(source="AsyncFireClassifier.fire_state")
-        leak_state: int = Input(source="AsyncLeakClassifier.leak_state")
-        risk_level: int = Input(source="AsyncRiskScorer.risk_level")
-        cloud_up: bool = Input(source="CloudOracle.cloud_up")
+        fire_state: int = Input(src="AsyncFireClassifier.fire_state")
+        leak_state: int = Input(src="AsyncLeakClassifier.leak_state")
+        risk_level: int = Input(src="AsyncRiskScorer.risk_level")
+        cloud_up: bool = Input(src="CloudOracle.cloud_up")
 
-    class Outputs(NodeOutputs):
-        action_plan: int = Output(initial=ACT_NOOP, domain=ACTION_DOMAIN)
+    class State(NodeState):
+        action_plan: int = Var(init=ACT_NOOP, domain=ACTION_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         # If both safety subsystems are blind, alert the user via local alarm only;
         # cloud may not even reach the operator.
         if inputs.fire_state == FIRE_SENSOR_FAULT or inputs.leak_state == LEAK_SENSOR_FAULT:
-            return self.Outputs(action_plan=ACT_USER_ALERT)
+            return self.State(action_plan=ACT_USER_ALERT)
         if inputs.fire_state == FIRE_CONFIRMED and inputs.leak_state == LEAK_DETECTED:
-            return self.Outputs(action_plan=ACT_FIRE_OVER_LEAK)
+            return self.State(action_plan=ACT_FIRE_OVER_LEAK)
         if inputs.fire_state == FIRE_CONFIRMED:
-            return self.Outputs(action_plan=ACT_SPRINKLER_AND_ALARM)
+            return self.State(action_plan=ACT_SPRINKLER_AND_ALARM)
         if inputs.leak_state == LEAK_DETECTED:
-            return self.Outputs(action_plan=ACT_CLOSE_VALVE)
+            return self.State(action_plan=ACT_CLOSE_VALVE)
         if inputs.fire_state == FIRE_SMOKE_ONLY or inputs.risk_level == RISK_MEDIUM:
-            return self.Outputs(action_plan=ACT_ALARM_ONLY)
+            return self.State(action_plan=ACT_ALARM_ONLY)
         # Cloud-only telemetry mode: nothing to do locally
         _ = inputs.cloud_up
-        return self.Outputs(action_plan=ACT_NOOP)
+        return self.State(action_plan=ACT_NOOP)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -294,145 +294,145 @@ class AsyncPriorityArbiter(Node):
 
 
 class SprinklerAckOracle(Node):
-    class Outputs(NodeOutputs):
-        sprinkler_ack: bool = Output(initial=False)
+    class State(NodeState):
+        sprinkler_ack: bool = Var(init=False)
 
-    def run(self, _: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(sprinkler_ack=True)
+    def update(self, _: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(sprinkler_ack=True)
 
 
 class ValveAckOracle(Node):
-    class Outputs(NodeOutputs):
-        valve_ack: bool = Output(initial=False)
+    class State(NodeState):
+        valve_ack: bool = Var(init=False)
 
-    def run(self, _: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(valve_ack=True)
+    def update(self, _: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(valve_ack=True)
 
 
 class AlarmAckOracle(Node):
-    class Outputs(NodeOutputs):
-        alarm_ack: bool = Output(initial=False)
+    class State(NodeState):
+        alarm_ack: bool = Var(init=False)
 
-    def run(self, _: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(alarm_ack=True)
+    def update(self, _: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(alarm_ack=True)
 
 
 class NotifAckOracle(Node):
-    class Outputs(NodeOutputs):
-        notif_ack: bool = Output(initial=False)
+    class State(NodeState):
+        notif_ack: bool = Var(init=False)
 
-    def run(self, _: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(notif_ack=True)
+    def update(self, _: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(notif_ack=True)
 
 
 class SprinklerVerifyAsync(Node):
     class Inputs(NodeInputs):
-        sprinkler_on: bool = Input(source="SprinklerCmdAsync.sprinkler_on")
-        actuators_reachable: bool = Input(source="ActuatorNetOracle.actuators_reachable")
-        sprinkler_ack: bool = Input(source="SprinklerAckOracle.sprinkler_ack")
+        sprinkler_on: bool = Input(src="SprinklerCmdAsync.sprinkler_on")
+        actuators_reachable: bool = Input(src="ActuatorNetOracle.actuators_reachable")
+        sprinkler_ack: bool = Input(src="SprinklerAckOracle.sprinkler_ack")
 
-    class Outputs(NodeOutputs):
-        sprinkler_acked: bool = Output(initial=False)
+    class State(NodeState):
+        sprinkler_acked: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         ok = inputs.sprinkler_on and inputs.actuators_reachable and inputs.sprinkler_ack
-        return self.Outputs(sprinkler_acked=ok)
+        return self.State(sprinkler_acked=ok)
 
 
 class ValveVerifyAsync(Node):
     class Inputs(NodeInputs):
-        valve_closed: bool = Input(source="ValveCmdAsync.valve_closed")
-        actuators_reachable: bool = Input(source="ActuatorNetOracle.actuators_reachable")
-        valve_ack: bool = Input(source="ValveAckOracle.valve_ack")
+        valve_closed: bool = Input(src="ValveCmdAsync.valve_closed")
+        actuators_reachable: bool = Input(src="ActuatorNetOracle.actuators_reachable")
+        valve_ack: bool = Input(src="ValveAckOracle.valve_ack")
 
-    class Outputs(NodeOutputs):
-        valve_acked: bool = Output(initial=False)
+    class State(NodeState):
+        valve_acked: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         ok = inputs.valve_closed and inputs.actuators_reachable and inputs.valve_ack
-        return self.Outputs(valve_acked=ok)
+        return self.State(valve_acked=ok)
 
 
 class AlarmVerifyAsync(Node):
     class Inputs(NodeInputs):
-        alarm_on: bool = Input(source="AlarmCmdAsync.alarm_on")
-        actuators_reachable: bool = Input(source="ActuatorNetOracle.actuators_reachable")
-        alarm_ack: bool = Input(source="AlarmAckOracle.alarm_ack")
+        alarm_on: bool = Input(src="AlarmCmdAsync.alarm_on")
+        actuators_reachable: bool = Input(src="ActuatorNetOracle.actuators_reachable")
+        alarm_ack: bool = Input(src="AlarmAckOracle.alarm_ack")
 
-    class Outputs(NodeOutputs):
-        alarm_acked: bool = Output(initial=False)
+    class State(NodeState):
+        alarm_acked: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         ok = inputs.alarm_on and inputs.actuators_reachable and inputs.alarm_ack
-        return self.Outputs(alarm_acked=ok)
+        return self.State(alarm_acked=ok)
 
 
 class NotifVerifyAsync(Node):
     class Inputs(NodeInputs):
-        notif_sent: bool = Input(source="NotifCmdAsync.notif_sent")
-        cloud_up: bool = Input(source="CloudOracle.cloud_up")
-        notif_ack: bool = Input(source="NotifAckOracle.notif_ack")
+        notif_sent: bool = Input(src="NotifCmdAsync.notif_sent")
+        cloud_up: bool = Input(src="CloudOracle.cloud_up")
+        notif_ack: bool = Input(src="NotifAckOracle.notif_ack")
 
-    class Outputs(NodeOutputs):
-        notif_acked: bool = Output(initial=False)
+    class State(NodeState):
+        notif_acked: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         ok = inputs.notif_sent and inputs.cloud_up and inputs.notif_ack
-        return self.Outputs(notif_acked=ok)
+        return self.State(notif_acked=ok)
 
 
 # Async-aware actuator commanders. Standalone classes (not subclasses
 # of the synchronous ones) so output paths are SprinklerCmdAsync.* etc.
 class SprinklerCmdAsync(Node):
     class Inputs(NodeInputs):
-        action_plan: int = Input(source="AsyncPriorityArbiter.action_plan")
+        action_plan: int = Input(src="AsyncPriorityArbiter.action_plan")
 
-    class Outputs(NodeOutputs):
-        sprinkler_on: bool = Output(initial=False)
+    class State(NodeState):
+        sprinkler_on: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         on = inputs.action_plan in (ACT_SPRINKLER_AND_ALARM, ACT_FIRE_OVER_LEAK)
-        return self.Outputs(sprinkler_on=on)
+        return self.State(sprinkler_on=on)
 
 
 class ValveCmdAsync(Node):
     class Inputs(NodeInputs):
-        action_plan: int = Input(source="AsyncPriorityArbiter.action_plan")
+        action_plan: int = Input(src="AsyncPriorityArbiter.action_plan")
 
-    class Outputs(NodeOutputs):
-        valve_closed: bool = Output(initial=False)
+    class State(NodeState):
+        valve_closed: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         closed = inputs.action_plan in (ACT_CLOSE_VALVE, ACT_FIRE_OVER_LEAK)
-        return self.Outputs(valve_closed=closed)
+        return self.State(valve_closed=closed)
 
 
 class AlarmCmdAsync(Node):
     class Inputs(NodeInputs):
-        action_plan: int = Input(source="AsyncPriorityArbiter.action_plan")
+        action_plan: int = Input(src="AsyncPriorityArbiter.action_plan")
 
-    class Outputs(NodeOutputs):
-        alarm_on: bool = Output(initial=False)
+    class State(NodeState):
+        alarm_on: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         on = inputs.action_plan in (
             ACT_ALARM_ONLY,
             ACT_SPRINKLER_AND_ALARM,
             ACT_FIRE_OVER_LEAK,
             ACT_USER_ALERT,
         )
-        return self.Outputs(alarm_on=on)
+        return self.State(alarm_on=on)
 
 
 class NotifCmdAsync(Node):
     class Inputs(NodeInputs):
-        action_plan: int = Input(source="AsyncPriorityArbiter.action_plan")
+        action_plan: int = Input(src="AsyncPriorityArbiter.action_plan")
 
-    class Outputs(NodeOutputs):
-        notif_sent: bool = Output(initial=False)
+    class State(NodeState):
+        notif_sent: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(notif_sent=inputs.action_plan != ACT_NOOP)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(notif_sent=inputs.action_plan != ACT_NOOP)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -441,10 +441,10 @@ class NotifCmdAsync(Node):
 
 
 ALL_ACKED = (
-    V(SprinklerVerifyAsync.Outputs.sprinkler_acked)
-    & V(ValveVerifyAsync.Outputs.valve_acked)
-    & V(AlarmVerifyAsync.Outputs.alarm_acked)
-    & V(NotifVerifyAsync.Outputs.notif_acked)
+    V(SprinklerVerifyAsync.State.sprinkler_acked)
+    & V(ValveVerifyAsync.State.valve_acked)
+    & V(AlarmVerifyAsync.State.alarm_acked)
+    & V(NotifVerifyAsync.State.notif_acked)
 )
 
 

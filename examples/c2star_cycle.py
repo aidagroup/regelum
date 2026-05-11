@@ -4,18 +4,18 @@ from regelum import (
     CompileError,
     If,
     Node,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
 
 class Mode(Node):
-    class Outputs(NodeOutputs):
-        flag: bool = Output(initial=False)
+    class State(NodeState):
+        flag: bool = Var(init=False)
 
 
 def build_dead_cycle_system() -> PhasedReactiveSystem:
@@ -26,8 +26,8 @@ def build_dead_cycle_system() -> PhasedReactiveSystem:
                 "a",
                 nodes=(mode,),
                 transitions=(
-                    If(V(Mode.Outputs.flag), "b", name="to-b"),
-                    If(~V(Mode.Outputs.flag), terminate, name="stop-a"),
+                    If(V(Mode.State.flag), "b", name="to-b"),
+                    If(~V(Mode.State.flag), terminate, name="stop-a"),
                 ),
                 is_initial=True,
             ),
@@ -35,8 +35,8 @@ def build_dead_cycle_system() -> PhasedReactiveSystem:
                 "b",
                 nodes=(mode,),
                 transitions=(
-                    If(~V(Mode.Outputs.flag), "a", name="to-a"),
-                    If(V(Mode.Outputs.flag), terminate, name="stop-b"),
+                    If(~V(Mode.State.flag), "a", name="to-a"),
+                    If(V(Mode.State.flag), terminate, name="stop-b"),
                 ),
             ),
         ],
@@ -51,8 +51,8 @@ def build_live_cycle_system() -> PhasedReactiveSystem:
                 "a",
                 nodes=(mode,),
                 transitions=(
-                    If(V(Mode.Outputs.flag), "b", name="to-b"),
-                    If(~V(Mode.Outputs.flag), terminate, name="stop-a"),
+                    If(V(Mode.State.flag), "b", name="to-b"),
+                    If(~V(Mode.State.flag), terminate, name="stop-a"),
                 ),
                 is_initial=True,
             ),
@@ -60,8 +60,8 @@ def build_live_cycle_system() -> PhasedReactiveSystem:
                 "b",
                 nodes=(mode,),
                 transitions=(
-                    If(V(Mode.Outputs.flag), "a", name="to-a"),
-                    If(~V(Mode.Outputs.flag), terminate, name="stop-b"),
+                    If(V(Mode.State.flag), "a", name="to-a"),
+                    If(~V(Mode.State.flag), terminate, name="stop-b"),
                 ),
             ),
         ],
