@@ -1340,16 +1340,15 @@ class PhasedReactiveSystem:
     def _run_continuous_phase(self, phase: Phase) -> tuple[StepRecord, ...]:
         records: list[StepRecord] = []
         time_start = float(self._time_tick * self._base_dt)
+        time_stop = time_start + float(self._base_dt)
         for node in phase.nodes:
-            if not self._is_due(node):
-                continue
             inputs = self._build_inputs(node)
             result = _run_node(
                 node,
                 inputs,
                 state_snapshot=dict(self._state),
                 time_start=time_start,
-                time_stop=time_start + float(_ode_system_dt(node)),
+                time_stop=time_stop,
             )
             state_vars = self._normalize_outputs(node, result)
             self._commit_node_outputs(node, state_vars)
@@ -1426,6 +1425,14 @@ class PhasedReactiveSystem:
                     ),
                 )
             )
+        issues.extend(
+            _check_continuous_phase_contract(
+                self.phases,
+                self.nodes,
+                initial_phase=self.initial_phase,
+                max_phase_steps=self.max_phase_steps,
+            )
+        )
         issues.extend(_check_cross_ode_system_coupling(self.phases, report.inputs))
         warnings.extend(
             _schedule_warnings(
@@ -1492,6 +1499,7 @@ class PhasedReactiveSystem:
                     ),
                 )
             )
+        issues.extend(_check_phase_reachability(self.phases, self.initial_phase))
         issues.extend(
             _check_c2star(
                 self.phases,
@@ -2193,6 +2201,217 @@ def _check_cross_ode_system_coupling(
     return issues
 
 
+def _check_continuous_phase_contract(
+    phases: tuple[Phase, ...],
+    nodes: tuple[Node, ...],
+    *,
+    initial_phase: str,
+    max_phase_steps: int,
+) -> list[CompileIssue]:
+    continuous_phases = {phase.name for phase in phases if _is_continuous_phase(phase)}
+    if not continuous_phases:
+        return []
+    if len(continuous_phases) != 1:
+        return []
+    phase_map = {phase.name: phase for phase in phases}
+    if initial_phase not in phase_map:
+        return []
+
+    output_types = _output_types(nodes)
+    output_types[f"{SYSTEM_CLOCK}.tick"] = int
+    output_types[f"{SYSTEM_CLOCK}.time"] = float
+    domains = _finite_domains_by_path(nodes)
+    guard_vars = _phase_guard_variables(phases)
+    initial_bindings: dict[str, Any] = {}
+    initial_constraints: list[z3.BoolRef] = []
+
+    issues: list[CompileIssue] = []
+    stack: list[tuple[str, int, int, dict[str, Any], list[z3.BoolRef], tuple[str, ...]]] = [
+        (initial_phase, 0, 0, initial_bindings, initial_constraints, ())
+    ]
+    while stack:
+        phase_name, depth, continuous_count, bindings, constraints, path = stack.pop()
+        if depth >= max_phase_steps:
+            continue
+        phase = phase_map[phase_name]
+        next_count = continuous_count + int(phase.name in continuous_phases)
+        next_path = (*path, phase.name)
+        if next_count > 1:
+            issue = _continuous_contract_issue(
+                "path can reach a continuous phase more than once",
+                next_path,
+                output_types,
+                domains,
+                bindings,
+                constraints,
+            )
+            if issue is not None:
+                issues.append(issue)
+                return issues
+            continue
+
+        phase_bindings = dict(bindings)
+        phase_constraints = list(constraints)
+        try:
+            _havoc_phase_writes(
+                phase,
+                depth=depth,
+                relevant_vars=guard_vars,
+                output_types=output_types,
+                domains=domains,
+                bindings=phase_bindings,
+                constraints=phase_constraints,
+            )
+        except Exception as exc:
+            return [
+                CompileIssue(
+                    location=phase.name,
+                    message=f"continuous phase contract check failed: {exc}",
+                )
+            ]
+
+        for transition in _effective_transitions(phase):
+            if not isinstance(transition.predicate, Expr):
+                return [
+                    CompileIssue(
+                        location=f"{phase.name}.{transition.name}",
+                        message=(
+                            "continuous phase contract cannot be proven with "
+                            "non-symbolic transition guards"
+                        ),
+                    )
+                ]
+            target = _phase_ref_name(transition.target)
+            transition_bindings = dict(phase_bindings)
+            transition_constraints = list(phase_constraints)
+            try:
+                predicate = _z3_guard_for_transition(
+                    transition,
+                    output_types=output_types,
+                    domains=domains,
+                    bindings=transition_bindings,
+                    constraints=transition_constraints,
+                )
+            except Exception as exc:
+                return [
+                    CompileIssue(
+                        location=f"{phase.name}.{transition.name}",
+                        message=f"continuous phase contract check failed: {exc}",
+                    )
+                ]
+            transition_constraints.append(cast(z3.BoolRef, predicate))
+            if not _z3_constraints_satisfiable(transition_constraints):
+                continue
+            if target is None:
+                if next_count != 1:
+                    issue = _continuous_contract_issue(
+                        "path can terminate without reaching a continuous phase",
+                        next_path,
+                        output_types,
+                        domains,
+                        transition_bindings,
+                        transition_constraints,
+                    )
+                    if issue is not None:
+                        issues.append(issue)
+                        return issues
+                continue
+            if target in phase_map:
+                stack.append(
+                    (
+                        target,
+                        depth + 1,
+                        next_count,
+                        transition_bindings,
+                        transition_constraints,
+                        next_path,
+                    )
+                )
+    return issues
+
+
+def _havoc_phase_writes(
+    phase: Phase,
+    *,
+    depth: int,
+    relevant_vars: frozenset[str],
+    output_types: dict[str, type[Any]],
+    domains: dict[str, tuple[Any, ...]],
+    bindings: dict[str, Any],
+    constraints: list[z3.BoolRef],
+) -> None:
+    for path, _port in _phase_state_writes(phase):
+        if path not in relevant_vars:
+            continue
+        output_type = output_types.get(path)
+        if output_type is None:
+            continue
+        bindings[path] = _z3_variable_for_type(output_type, f"phase::{depth}::{phase.name}::{path}")
+        ctx = Z3Context(output_types, domains=domains, bindings=bindings)
+        constraints.extend(ctx.domain_constraints((path,)))
+
+
+def _phase_state_writes(phase: Phase) -> Iterable[tuple[str, VarPort[Any]]]:
+    for node in phase.nodes:
+        for expanded_node in _expand_phase_node(node):
+            yield from _node_ref_outputs(expanded_node)
+
+
+def _phase_guard_variables(phases: tuple[Phase, ...]) -> frozenset[str]:
+    variables: set[str] = set()
+    for phase in phases:
+        for transition in _effective_transitions(phase):
+            if isinstance(transition.predicate, Expr):
+                variables.update(transition.predicate.variables)
+    return frozenset(variables)
+
+
+def _z3_guard_for_transition(
+    transition: EffectiveTransition,
+    *,
+    output_types: dict[str, type[Any]],
+    domains: dict[str, tuple[Any, ...]],
+    bindings: dict[str, Any],
+    constraints: list[z3.BoolRef],
+) -> z3.BoolRef:
+    predicate = cast(Expr, transition.predicate)
+    ctx = Z3Context(output_types, domains=domains, bindings=bindings)
+    result = predicate.to_z3(ctx)
+    bindings.update(ctx.variables)
+    constraints.extend(ctx.domain_constraints(predicate.variables))
+    if z3.is_bool(result):
+        return cast(z3.BoolRef, result)
+    raise TypeError("transition guard did not compile to a z3 Bool expression")
+
+
+def _z3_constraints_satisfiable(constraints: list[z3.BoolRef]) -> bool:
+    solver = z3.Solver()
+    solver.add(*constraints)
+    return solver.check() == z3.sat
+
+
+def _continuous_contract_issue(
+    message: str,
+    path: tuple[str, ...],
+    output_types: dict[str, type[Any]],
+    domains: dict[str, tuple[Any, ...]],
+    bindings: dict[str, Any],
+    constraints: list[z3.BoolRef],
+) -> CompileIssue | None:
+    solver = z3.Solver()
+    solver.add(*constraints)
+    if solver.check() != z3.sat:
+        return None
+    ctx = Z3Context(output_types, domains=domains, bindings=bindings)
+    return CompileIssue(
+        location=" -> ".join(path),
+        message=(
+            f"continuous phase contract violation: {message}; "
+            f"witness={_model_snapshot(solver.model(), ctx, limit=16)}"
+        ),
+    )
+
+
 def _check_clock_name_is_reserved(nodes: tuple[Node, ...]) -> list[CompileIssue]:
     return [
         CompileIssue(
@@ -2405,6 +2624,37 @@ def _phase_transition_edges(phases: tuple[Phase, ...]) -> list[tuple[str, str]]:
         for target in (_phase_ref_name(transition.target),)
         if target is not None
     )
+
+
+def _check_phase_reachability(
+    phases: tuple[Phase, ...],
+    initial_phase: str,
+) -> list[CompileIssue]:
+    phase_names = {phase.name for phase in phases}
+    if initial_phase not in phase_names:
+        return []
+    adjacency: dict[str, list[str]] = {phase.name: [] for phase in phases}
+    for source, target in _phase_transition_edges(phases):
+        if target in phase_names:
+            adjacency[source].append(target)
+
+    reachable: set[str] = set()
+    stack = [initial_phase]
+    while stack:
+        phase_name = stack.pop()
+        if phase_name in reachable:
+            continue
+        reachable.add(phase_name)
+        stack.extend(adjacency.get(phase_name, ()))
+
+    return [
+        CompileIssue(
+            location=phase.name,
+            message=f"phase is unreachable from initial phase {initial_phase!r}",
+        )
+        for phase in phases
+        if phase.name not in reachable
+    ]
 
 
 def _simple_cycles(

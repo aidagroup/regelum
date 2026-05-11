@@ -1804,6 +1804,39 @@ def test_compile_rejects_missing_initial_phase_marker() -> None:
     )
 
 
+def test_compile_rejects_unreachable_phase() -> None:
+    with pytest.raises(CompileError) as exc_info:
+        PhasedReactiveSystem(
+            phases=[
+                Phase("start", nodes=(), transitions=(Goto(terminate),), is_initial=True),
+                Phase("orphan", nodes=(), transitions=(Goto(terminate),)),
+            ],
+        )
+
+    assert any(
+        issue.location == "orphan"
+        and issue.message == "phase is unreachable from initial phase 'start'"
+        for issue in exc_info.value.report.issues
+    )
+
+
+def test_compile_report_records_unreachable_phase_when_not_strict() -> None:
+    system = PhasedReactiveSystem(
+        phases=[
+            Phase("start", nodes=(), transitions=(Goto(terminate),), is_initial=True),
+            Phase("orphan", nodes=(), transitions=(Goto(terminate),)),
+        ],
+        strict=False,
+    )
+
+    assert not system.compile_report.ok
+    assert any(
+        issue.location == "orphan"
+        and issue.message == "phase is unreachable from initial phase 'start'"
+        for issue in system.compile_report.issues
+    )
+
+
 def test_compile_rejects_c1_phase_cycle() -> None:
     with pytest.raises(CompileError) as exc_info:
         build_c1_violation_system()
