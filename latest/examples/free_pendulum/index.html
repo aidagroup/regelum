@@ -865,13 +865,14 @@
 
 
 <h1 id="free-pendulum">Free Pendulum</h1>
-<p><a class="md-button md-button--primary" href="https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/free_pendulum/app.py" target="_blank">Open in molab</a>
+<p><a class="md-button md-button--primary" href="https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/free_pendulum/rg-examples-free-pendulum.py" target="_blank">Open in molab</a>
 <a class="md-button" href="#open-in-marimo">Run locally</a></p>
 <p>This example starts from a single physical object: a damped pendulum without
 external torque. The pendulum is implemented as an <code>ODENode</code>, integrated by an
 <code>ODESystem</code>, and observed by a discrete node that publishes derived signals.</p>
+<p><img alt="Pendulum plant" src="../../assets/examples/pendulum/pendulum.svg" /></p>
 <p>Run locally:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>marimo<span class="w"> </span>edit<span class="w"> </span>examples/free_pendulum/app.py
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>marimo<span class="w"> </span>edit<span class="w"> </span>examples/free_pendulum/rg-examples-free-pendulum.py
 </code></pre></div>
 <h2 id="dynamics">Dynamics</h2>
 <p>The state is the angle <span class="arithmatex">\(\theta\)</span> and angular velocity <span class="arithmatex">\(\omega\)</span>:</p>
@@ -975,12 +976,12 @@ derivatives on the base simulation grid.</p>
 </table>
 <h2 id="open-in-marimo">Open In Marimo</h2>
 <p>Open the notebook in molab:</p>
-<p><a class="md-button md-button--primary" href="https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/free_pendulum/app.py" target="_blank">Open in molab</a></p>
+<p><a class="md-button md-button--primary" href="https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/free_pendulum/rg-examples-free-pendulum.py" target="_blank">Open in molab</a></p>
 <p>Molab opens the notebook from the published <code>main</code> branch and installs
 <code>regelum</code> from PyPI, plus plotting dependencies, using the notebook's inline
 dependency metadata.</p>
 <p>Run the notebook locally from the repository root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>marimo<span class="w"> </span>edit<span class="w"> </span>examples/free_pendulum/app.py
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>marimo<span class="w"> </span>edit<span class="w"> </span>examples/free_pendulum/rg-examples-free-pendulum.py
 </code></pre></div>
 <p>The local command opens the current working copy, including changes that have
 not been pushed to GitHub yet.</p>

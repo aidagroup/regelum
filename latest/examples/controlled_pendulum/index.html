@@ -865,14 +865,15 @@
 
 
 <h1 id="controlled-pendulum">Controlled Pendulum</h1>
-<p><a class="md-button md-button--primary" href="https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/controlled_pendulum/app.py" target="_blank">Open in molab</a>
+<p><a class="md-button md-button--primary" href="https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/controlled_pendulum/rg-examples-controlled-pendulum.py" target="_blank">Open in molab</a>
 <a class="md-button" href="#open-in-marimo">Run locally</a></p>
 <p>This example keeps the pendulum plant explicit, then adds a controller as a
 separate stateful node. The important timing detail is sample-and-hold: the
 plant integrates at <code>dt=0.01</code>, while the controller updates at <code>dt=0.05</code>.
 Between controller updates the plant reads the held torque state.</p>
+<p><img alt="Pendulum plant with torque" src="../../assets/examples/pendulum/pendulum.svg" /></p>
 <p>Run locally:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>marimo<span class="w"> </span>edit<span class="w"> </span>examples/controlled_pendulum/app.py
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>marimo<span class="w"> </span>edit<span class="w"> </span>examples/controlled_pendulum/rg-examples-controlled-pendulum.py
 </code></pre></div>
 <h2 id="dynamics">Dynamics</h2>
 <p>The controlled plant has the same <span class="arithmatex">\(\theta, \omega\)</span> state and adds torque
@@ -998,12 +999,12 @@ plant on every base integration step.</p>
 </table>
 <h2 id="open-in-marimo">Open In Marimo</h2>
 <p>Open the notebook in molab:</p>
-<p><a class="md-button md-button--primary" href="https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/controlled_pendulum/app.py" target="_blank">Open in molab</a></p>
+<p><a class="md-button md-button--primary" href="https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/controlled_pendulum/rg-examples-controlled-pendulum.py" target="_blank">Open in molab</a></p>
 <p>Molab opens the notebook from the published <code>main</code> branch and installs
 <code>regelum</code> from PyPI, plus plotting dependencies, using the notebook's inline
 dependency metadata.</p>
 <p>Run the notebook locally from the repository root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>marimo<span class="w"> </span>edit<span class="w"> </span>examples/controlled_pendulum/app.py
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>marimo<span class="w"> </span>edit<span class="w"> </span>examples/controlled_pendulum/rg-examples-controlled-pendulum.py
 </code></pre></div>
 <p>The local command opens the current working copy, including changes that have
 not been pushed to GitHub yet.</p>

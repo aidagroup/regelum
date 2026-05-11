@@ -1,0 +1,155 @@
+:root {
+  --regelum-ink: #111318;
+  --regelum-phase-measure-bg: #2f6fed22;
+  --regelum-phase-measure-border: #2f6fed;
+  --regelum-phase-decide-bg: #7c3aed22;
+  --regelum-phase-decide-border: #7c3aed;
+  --regelum-phase-drop-quality-bg: #d9770622;
+  --regelum-phase-drop-quality-border: #d97706;
+  --regelum-phase-play-bg: #15803d22;
+  --regelum-phase-play-border: #15803d;
+  --regelum-phase-plant-bg: #2f6fed22;
+  --regelum-phase-plant-border: #2f6fed;
+  --regelum-phase-observe-bg: #15803d22;
+  --regelum-phase-observe-border: #15803d;
+  --regelum-phase-control-bg: #d9770622;
+  --regelum-phase-control-border: #d97706;
+  --regelum-node-pendulum-bg: #7c3aed1f;
+  --regelum-node-pendulum-border: #7c3aed;
+  --regelum-node-observer-bg: #0891b21f;
+  --regelum-node-observer-border: #0891b2;
+  --regelum-node-controller-bg: #dc26261f;
+  --regelum-node-controller-border: #dc2626;
+  --regelum-node-logger-bg: #64748b1f;
+  --regelum-node-logger-border: #64748b;
+}
+
+[data-md-color-primary="white"],
+[data-md-color-scheme="slate"][data-md-color-primary="black"] {
+  --md-typeset-a-color: #ffc105;
+}
+
+[data-md-color-accent="amber"] {
+  --md-accent-fg-color: #ffd144;
+  --md-accent-fg-color--transparent: #ffd1441a;
+}
+
+.md-header {
+  border-bottom: 1px solid rgba(125, 125, 125, 0.18);
+  box-shadow: var(--md-shadow-z1);
+}
+
+.md-tabs {
+  border-bottom: 1px solid rgba(125, 125, 125, 0.14);
+  box-shadow: none;
+}
+
+.md-header__button.md-logo img {
+  content: url("../assets/logo/logo_mark_black_transparent.png");
+}
+
+[data-md-color-scheme="slate"] .md-header__button.md-logo img {
+  content: url("../assets/logo/logo_mark_white_transparent.png");
+}
+
+.hero-logo {
+  margin: 1.5rem 0 2rem;
+  text-align: center;
+}
+
+.hero-logo img {
+  display: inline-block;
+  max-width: min(30rem, 100%);
+  width: 100%;
+}
+
+.hero-logo-dark {
+  display: none !important;
+}
+
+[data-md-color-scheme="slate"] .hero-logo-light {
+  display: none !important;
+}
+
+[data-md-color-scheme="slate"] .hero-logo-dark {
+  display: inline-block !important;
+}
+
+.phase-label {
+  display: inline-block;
+  min-width: 6.5rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid;
+  border-radius: 0.2rem;
+  color: var(--md-typeset-color);
+  font-family: var(--md-code-font-family);
+  font-size: 0.85em;
+  text-align: center;
+}
+
+.phase-label--measure {
+  background: var(--regelum-phase-measure-bg);
+  border-color: var(--regelum-phase-measure-border);
+}
+
+.phase-label--decide {
+  background: var(--regelum-phase-decide-bg);
+  border-color: var(--regelum-phase-decide-border);
+}
+
+.phase-label--drop-quality {
+  background: var(--regelum-phase-drop-quality-bg);
+  border-color: var(--regelum-phase-drop-quality-border);
+}
+
+.phase-label--play {
+  background: var(--regelum-phase-play-bg);
+  border-color: var(--regelum-phase-play-border);
+}
+
+.phase-label--plant {
+  background: var(--regelum-phase-plant-bg);
+  border-color: var(--regelum-phase-plant-border);
+}
+
+.phase-label--observe {
+  background: var(--regelum-phase-observe-bg);
+  border-color: var(--regelum-phase-observe-border);
+}
+
+.phase-label--control {
+  background: var(--regelum-phase-control-bg);
+  border-color: var(--regelum-phase-control-border);
+}
+
+.node-label {
+  display: inline-block;
+  min-width: 9rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid;
+  border-radius: 0.2rem;
+  color: var(--md-typeset-color);
+  font-family: var(--md-code-font-family);
+  font-size: 0.85em;
+  text-align: center;
+}
+
+.node-label--pendulum {
+  background: var(--regelum-node-pendulum-bg);
+  border-color: var(--regelum-node-pendulum-border);
+}
+
+.node-label--observer {
+  background: var(--regelum-node-observer-bg);
+  border-color: var(--regelum-node-observer-border);
+}
+
+.node-label--controller {
+  background: var(--regelum-node-controller-bg);
+  border-color: var(--regelum-node-controller-border);
+}
+
+.node-label--logger {
+  background: var(--regelum-node-logger-bg);
+  border-color: var(--regelum-node-logger-border);
+}
