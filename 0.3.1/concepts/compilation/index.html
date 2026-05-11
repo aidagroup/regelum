@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://regelum.aidynamic.group/latest/concepts/phases/">
+        <link rel="canonical" href="https://regelum.aidynamic.group/latest/concepts/compilation/">
       
       
-        <link rel="prev" href="../nodes/">
+        <link rel="prev" href="../continuous/">
       
       
-        <link rel="next" href="../continuous/">
+        <link rel="next" href="../../authors/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Phases - regelum</title>
+        <title>Create, Compile, and Run - regelum</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#phases" class="md-skip">
+        <a href="#create-compile-and-run-a-phased-reactive-system" class="md-skip">
           Skip to content
         </a>
       
@@ -119,7 +119,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Phases
+              Create, Compile, and Run
             
           </span>
         </div>
@@ -410,37 +410,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Phases
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../phases/" class="md-nav__link">
         
   
   
@@ -456,109 +429,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#recap" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Recap
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-a-phase-is" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What a phase is
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#phase-api" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Phase API
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#transitions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Transitions
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Transitions">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#goto" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Goto
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#branch-chains" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Branch chains
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rules" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Rules
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -596,10 +466,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../compilation/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Create, Compile, and Run
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -615,6 +512,186 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#recap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recap
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#creating-a-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating a system
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-compilation-resolves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What compilation resolves
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compile-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compile report
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-compile-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common compile issues
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c1-and-c3-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C1 and C3 checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtime
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Runtime">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-tick" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The tick
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step order
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-multiple-ticks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running multiple ticks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State access
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reset
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#logging-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Logging nodes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -692,10 +769,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-a-phase-is" class="md-nav__link">
+  <a href="#creating-a-system" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What a phase is
+        Creating a system
       
     </span>
   </a>
@@ -703,10 +780,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#phase-api" class="md-nav__link">
+  <a href="#what-compilation-resolves" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Phase API
+        What compilation resolves
       
     </span>
   </a>
@@ -714,22 +791,55 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#transitions" class="md-nav__link">
+  <a href="#compile-report" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Transitions
+        Compile report
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Transitions">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-compile-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common compile issues
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#c1-and-c3-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C1 and C3 checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtime
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Runtime">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#goto" class="md-nav__link">
+  <a href="#the-tick" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Goto
+        The tick
       
     </span>
   </a>
@@ -737,10 +847,54 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#branch-chains" class="md-nav__link">
+  <a href="#step-order" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Branch chains
+        Step order
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-multiple-ticks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running multiple ticks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State access
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reset
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#logging-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Logging nodes
       
     </span>
   </a>
@@ -783,12 +937,14 @@
   
 
 
-<h1 id="phases">Phases</h1>
+<h1 id="create-compile-and-run-a-phased-reactive-system">Create, Compile, and Run a Phased Reactive System</h1>
 <h2 id="recap">Recap</h2>
-<p>In the overview we took the adaptive-bitrate video player and cut its
-feedback loop into ticks.
-Each tick enters the phase graph at <code>init</code>, visits one or more named phases,
-and leaves at <code>⊥</code>.</p>
+<p>By this point the video player has three layers of declarations:</p>
+<ul>
+<li>node instances such as <code>Network</code>, <code>QualityPolicy</code>, and <code>MediaSession</code>;</li>
+<li>phases such as <code>measure</code>, <code>decide</code>, <code>drop_quality</code>, and <code>play</code>;</li>
+<li>transitions that say how one phase hands control to the next.</li>
+</ul>
 <div class="admonition example">
 <p class="admonition-title">The running example: an adaptive-bitrate video player</p>
 <p>The player samples network bandwidth, decides whether the current bitrate
@@ -813,7 +969,6 @@ the state left by the previous one.</p>
     class decide decide;
     class drop_quality dropQuality;
     class play play;</code></pre>
-<p>The graph has four phases:</p>
 <table>
 <thead>
 <tr>
@@ -1131,256 +1286,242 @@ The node colors correspond to the phase colors in the table above:</p>
 <a id="__codelineno-0-241" name="__codelineno-0-241" href="#__codelineno-0-241"></a>    <span class="n">main</span><span class="p">()</span>
 </code></pre></div>
 </details>
-<p>This page zooms in on how those phases are declared: which node instances
-belong to each phase, where a tick starts, how nodes inside a phase are
-scheduled, and how transitions choose the next phase.</p>
-<h2 id="what-a-phase-is">What a phase is</h2>
-<p>A phase is defined by two things:</p>
-<ul>
-<li><strong>nodes</strong> — the node instances that are active together;</li>
-<li><strong>transitions</strong> — the outgoing edges that choose the next phase, or
-  terminate the current tick.</li>
-</ul>
-<p>The nodes inside one phase must form a DAG with respect to their input/state
-dependencies.
-This is what lets the compiler resolve a deterministic topological order for
-the phase.
-Across the whole system there must also be exactly one initial phase, so every
-tick has a single unambiguous entry point.
-Every non-initial phase must be reachable from that initial phase through
-transition targets; otherwise the compiler reports it as unreachable phase
-graph structure.</p>
-<p>When a tick runs, it starts at the initial phase, executes that phase's nodes,
-and then evaluates the phase's transitions.
-Exactly one effective transition should be selected: zero true transitions
-means the tick has nowhere to go, and more than one true transition means the
-next phase is ambiguous.
-With <a href="#branch-chains">symbolic predicates</a>, <code>regelum</code> can inspect the
-phase graph during compilation and report structural problems before runtime
-where possible.</p>
-<p>The video player has four phases — <code>measure</code>, <code>decide</code>, <code>drop_quality</code>, and
-<code>play</code>.
-<code>measure</code> and <code>play</code> carry several nodes each; <code>decide</code> and <code>drop_quality</code>
-each hold one.</p>
-<h2 id="phase-api">Phase API</h2>
-<p>A phase declaration has three main parts:</p>
-<ul>
-<li>a <strong>name</strong>, such as <code>"measure"</code> or <code>"play"</code>;</li>
-<li><code>nodes</code>, a tuple of node instances that run together in that phase;</li>
-<li><code>transitions</code>, a tuple of transition rules that choose what happens after
-  the phase has executed.</li>
-</ul>
-<p>It may also set <code>is_initial=True</code>.
-The initial phase is where every tick enters the phase graph.
-For the player, that is <code>measure</code>: a tick begins by sampling the network
-before any decision is taken.</p>
-<p>Phase names must be unique inside one <code>PhasedReactiveSystem</code>, because
-transitions target phases by name.
-Node instances also have runtime names, either explicit or derived by
-<code>regelum</code>, and those names must be unique in the compiled system so diagnostics
-and state paths are unambiguous.</p>
-<div class="admonition warning">
-<p class="admonition-title">Exactly one initial phase</p>
-<p>Exactly one phase in a <code>PhasedReactiveSystem</code> must be marked
-<code>is_initial=True</code>.
-There is no fallback to the first phase, and more than one initial phase
-would make tick entry ambiguous.</p>
-</div>
-<div class="admonition note">
-<p class="admonition-title">All nodes live in phases</p>
-<p>Every node instance that belongs to the system must be listed in at least
-one phase.
-The system's node set is derived from phase declarations.
-The same node instance may be reused in multiple phases when it should run
-in more than one part of the tick.</p>
-</div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="s2">&quot;measure&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">network</span><span class="p">,),</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;decide&quot;</span><span class="p">),),</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">is_initial</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">)</span>
+<p>Those declarations are still just Python objects.
+To make them executable, wrap the phase list in <code>rg.PhasedReactiveSystem</code>.
+System creation compiles the declarations into a concrete runtime model:
+references are resolved, nodes are scheduled, transition targets are checked,
+and the initial-state requirements are computed.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">regelum</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rg</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">build_system</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">:</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">network</span> <span class="o">=</span> <span class="n">Network</span><span class="p">()</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">policy</span> <span class="o">=</span> <span class="n">QualityPolicy</span><span class="p">()</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">controller</span> <span class="o">=</span> <span class="n">BitrateController</span><span class="p">()</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">decoder</span> <span class="o">=</span> <span class="n">Decoder</span><span class="p">()</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">session</span> <span class="o">=</span> <span class="n">MediaSession</span><span class="p">()</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="k">return</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>        <span class="n">phases</span><span class="o">=</span><span class="p">[</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>            <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>                <span class="s2">&quot;measure&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>                <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">network</span><span class="p">,),</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>                <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;decide&quot;</span><span class="p">),),</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>                <span class="n">is_initial</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>            <span class="p">),</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>            <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>                <span class="s2">&quot;decide&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>                <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">policy</span><span class="p">,),</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>                <span class="n">transitions</span><span class="o">=</span><span class="p">(</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>                    <span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>                        <span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">stalling</span><span class="p">),</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>                        <span class="s2">&quot;drop_quality&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>                        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;stalling&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>                    <span class="p">),</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>                    <span class="n">rg</span><span class="o">.</span><span class="n">Else</span><span class="p">(</span><span class="s2">&quot;play&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;healthy&quot;</span><span class="p">),</span>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>                <span class="p">),</span>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>            <span class="p">),</span>
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>            <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
+<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>                <span class="s2">&quot;drop_quality&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>                <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">controller</span><span class="p">,),</span>
+<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>                <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;play&quot;</span><span class="p">),),</span>
+<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>            <span class="p">),</span>
+<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>            <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
+<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>                <span class="s2">&quot;play&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>                <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">decoder</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">logger</span><span class="p">),</span>
+<a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>                <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">terminate</span><span class="p">),),</span>
+<a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a>            <span class="p">),</span>
+<a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a>        <span class="p">],</span>
+<a id="__codelineno-1-43" name="__codelineno-1-43" href="#__codelineno-1-43"></a>    <span class="p">)</span>
 </code></pre></div>
-<p>Here <code>nodes=(network,)</code> is the set of node instances active in the <code>measure</code>
-phase.
-<code>transitions=(rg.Goto("decide"),)</code> is the phase's transition rule set: in this
-case, the rule is unconditional and sends control to <code>decide</code> after <code>measure</code>
-finishes.</p>
-<h2 id="transitions">Transitions</h2>
-<p>Transitions choose the next phase after the current phase has executed.
-They may also terminate the current tick.</p>
-<p>The video player uses symbolic predicates for the branching decision, plus
-unconditional <code>Goto</code> transitions for the linear segments and
-<code>Goto(terminate)</code> to end the tick.</p>
-<h3 id="goto">Goto</h3>
-<p><code>Goto</code> is an unconditional transition.
-It says where control goes after the current phase has finished.
-There is no predicate to evaluate: if the phase reaches this transition, the
-transition is taken.</p>
-<p>Pass one of three target forms to <code>Goto</code>:</p>
+<p><code>rg.PhasedReactiveSystem</code> is the object you keep and run.
+It owns the compiled phase graph, the current runtime state, and the compile
+report.</p>
+<h2 id="creating-a-system">Creating a system</h2>
+<p>The constructor receives the phases that define the system.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">system</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span><span class="n">phases</span><span class="o">=</span><span class="n">phases</span><span class="p">)</span>
+</code></pre></div>
+<p>During construction, <code>regelum</code> compiles the system.
+If compilation succeeds, the returned object is ready for <code>step()</code>, <code>update()</code>,
+<code>snapshot()</code>, <code>read(...)</code>, and <code>reset(...)</code>.
+If compilation fails, the default behavior is to raise <code>CompileError</code>.</p>
+<p>Use <code>strict=False</code> when you want to inspect a broken system instead of raising
+immediately:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">system</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">phases</span><span class="o">=</span><span class="n">phases</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">)</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nb">print</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">compile_report</span><span class="o">.</span><span class="n">issues</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="what-compilation-resolves">What compilation resolves</h2>
+<p>Compilation resolves:</p>
 <ul>
-<li>a phase name, such as <code>"decide"</code>;</li>
-<li>a phase instance, when you already have the target object;</li>
-<li><code>rg.terminate</code>, which ends the current tick.</li>
+<li>node names;</li>
+<li>input sources;</li>
+<li>instance connections;</li>
+<li>state paths;</li>
+<li>phase targets;</li>
+<li>guard references;</li>
+<li>phase schedules;</li>
+<li>dependency edges;</li>
+<li>required initial state variables.</li>
 </ul>
-<div class="annotate highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="s2">&quot;measure&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">network</span><span class="p">,),</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;decide&quot;</span><span class="p">),),</span>  <span class="c1"># (1)</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">is_initial</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="p">)</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="s2">&quot;play&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">decoder</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">logger</span><span class="p">),</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">terminate</span><span class="p">),),</span>  <span class="c1"># (2)</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="p">)</span>
+<p>For the video player, the report's <code>phase_schedules</code> shows the topologically
+ordered nodes per phase and <code>minimal_initial_state_vars</code> lists the six state variables
+that need initial state
+(<code>Network.bandwidth_kbps</code>, <code>BitrateController.value</code>,
+<code>QualityPolicy.stalling</code>, <code>MediaSession.buffer_seconds</code>, <code>Logger.history</code>).</p>
+<h2 id="compile-report">Compile report</h2>
+<p>Every <code>rg.PhasedReactiveSystem</code> stores a <code>compile_report</code>.
+Read it before debugging runtime behavior; it tells you what the constructor
+resolved and what it rejected.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">system</span> <span class="o">=</span> <span class="n">build_system</span><span class="p">()</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">report</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">compile_report</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">ok</span><span class="p">)</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">issues</span><span class="p">)</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">warnings</span><span class="p">)</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">phase_schedules</span><span class="p">)</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">minimal_initial_state_vars</span><span class="p">)</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">required_initial_state_vars</span><span class="p">)</span>
 </code></pre></div>
-<ol>
-<li><code>rg.Goto("decide")</code> sends control to the phase named <code>"decide"</code> after
-   <code>measure</code> has executed.
-   The same target could also be passed as a phase instance when the object is
-   already available.</li>
-<li><code>rg.Goto(rg.terminate)</code> does not choose another phase.
-   It marks the current tick as complete.</li>
-</ol>
-<h3 id="branch-chains">Branch chains</h3>
-<p>For branching, <code>regelum</code> uses ordinary <code>if</code> / <code>elif</code> / <code>else</code> semantics.
-<code>If</code> starts a branch chain.
-<code>Elif</code> continues the current chain.
-<code>Else</code> closes the current chain and is taken only when none of the previous
-predicates in that chain were true.
-<code>ElseIf</code> is also available as an alias for <code>Elif</code>.</p>
-<p>Every <code>If</code> and <code>Elif</code> transition takes a predicate as its first argument.
-This predicate is the transition's <strong>guard</strong>.
-A guard is a boolean condition over system variables: after the current phase
-has executed, it evaluates to either <code>True</code> or <code>False</code>.
-If the guard is <code>True</code>, that transition is enabled.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">predicate</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">rg</span><span class="o">.</span><span class="n">Elif</span><span class="p">(</span><span class="n">predicate</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-</code></pre></div>
-<ul>
-<li><code>target</code> is the phase to enter when the guard is true: a phase name, a
-  phase instance, or <code>rg.terminate</code>;</li>
-<li><code>name</code> is optional and gives the transition a stable diagnostic label.</li>
-</ul>
-<p>The point of the guard is to make the outgoing edge explicit.
-For the video player, the question is: did the policy detect that playback is
-stalling?
-If yes, the tick should enter <code>drop_quality</code>.
-If no, the tick should continue to <code>play</code>.</p>
-<p>The video player only needs <code>If</code> plus <code>Else</code>, because the policy publishes a
-single boolean:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="s2">&quot;decide&quot;</span><span class="p">,</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">policy</span><span class="p">,),</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">transitions</span><span class="o">=</span><span class="p">(</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">stalling</span><span class="p">),</span> <span class="s2">&quot;drop_quality&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;stalling&quot;</span><span class="p">),</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">rg</span><span class="o">.</span><span class="n">Else</span><span class="p">(</span><span class="s2">&quot;play&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;healthy&quot;</span><span class="p">),</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="p">),</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">)</span>
-</code></pre></div>
-<p><code>policy.State.stalling</code> is a state reference, not the current boolean
+<p><code>minimal_initial_state_vars</code> is the smallest set of state variables that must have a
+tick-zero value for this compiled graph.
+Those values may come from <code>rg.Var(init=...)</code>, from a callable
+initializer, or from a runtime <code>initial_state</code> override.</p>
+<p><code>required_initial_state_vars</code> is the subset that still has no declared initial
 value.
-<code>rg.V(policy.State.stalling)</code> means: read this state variable value when the
-transition is evaluated.</p>
-<p>Expressions that contain <code>rg.V(...)</code> build <strong>symbolic guards</strong> under the hood.
-Use this form for transition guards by default: if a guard depends on a node
-state variable, wrap that state reference with <code>rg.V(...)</code>.
-Symbolic guards can also compare state variable values or terminate a tick:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">MediaSession</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">buffer_seconds</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">2.0</span><span class="p">,</span> <span class="s2">&quot;buffer_warning&quot;</span><span class="p">)</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">force_stop</span><span class="p">),</span> <span class="n">rg</span><span class="o">.</span><span class="n">terminate</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;force_stop&quot;</span><span class="p">)</span>
+If it is non-empty, the system is telling you exactly which state variables must be
+provided before execution.
+You can use that list to build an <code>initial_state</code> mapping:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">missing</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">compile_report</span><span class="o">.</span><span class="n">required_initial_state_vars</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">missing</span><span class="p">)</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">system</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">initial_state</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>        <span class="n">MediaSession</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">buffer_seconds</span><span class="p">:</span> <span class="mf">5.0</span><span class="p">,</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>        <span class="n">BitrateController</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">value</span><span class="p">:</span> <span class="mi">720</span><span class="p">,</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="p">}</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="p">)</span>
 </code></pre></div>
-<p>Keeping guards symbolic is what lets <code>regelum</code> reason about transitions
-during graph compilation instead of treating them as opaque Python code.
-The compiler can see which state variables the guard depends on and can check whether
-the transition graph has structural problems, such as an ambiguous next phase
-or a path that may fail to terminate where this can be proven.
-Under the hood, this analysis is backed by
-<a href="https://github.com/Z3Prover/z3">Z3</a>, an SMT solver.</p>
-<p><code>V(...)</code> accepts the same kinds of state references as inputs:</p>
+<p>In the video player, <code>required_initial_state_vars</code> is empty because every
+required tick-zero state variable has either a static initial value or a callable
+initializer.</p>
+<p>Use <code>format()</code> for a compact text report.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">print</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">compile_report</span><span class="o">.</span><span class="n">format</span><span class="p">())</span>
+</code></pre></div>
+<h2 id="common-compile-issues">Common compile issues</h2>
+<p>Typical issues include:</p>
 <ul>
-<li>state descriptors, such as
-  <code>rg.V(MediaSession.State.buffer_seconds)</code>;</li>
-<li>instance-bound state ports, such as
-  <code>rg.V(session.State.buffer_seconds)</code>;</li>
-<li>lazy callables, such as
-  <code>rg.V(lambda: MediaSession.State.buffer_seconds)</code>;</li>
-<li>string references, such as
-  <code>rg.V("MediaSession.buffer_seconds")</code>.</li>
+<li>input source is not connected;</li>
+<li>input source is unknown;</li>
+<li>class-level reference is ambiguous;</li>
+<li>state path is duplicated;</li>
+<li>explicit node names are duplicated;</li>
+<li>state variable without initial value is read too early;</li>
+<li>phase graph is incomplete;</li>
+<li>transition target is unknown;</li>
+<li>transition chain is malformed.</li>
 </ul>
-<p>Enum state variables can be compared directly inside symbolic predicates:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">PlaybackMode</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">PLAYING</span> <span class="o">=</span> <span class="s2">&quot;playing&quot;</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">PAUSED</span> <span class="o">=</span> <span class="s2">&quot;paused&quot;</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">mode</span><span class="p">)</span> <span class="o">==</span> <span class="n">PlaybackMode</span><span class="o">.</span><span class="n">PLAYING</span><span class="p">,</span> <span class="s2">&quot;play&quot;</span><span class="p">)</span>
+<h2 id="c1-and-c3-checks">C1 and C3 checks</h2>
+<p>Compilation rejects cyclic dependency graphs inside a phase.
+This is the C1 check.
+For the video player, the only non-trivial intra-phase dependency chain is
+<code>Decoder → MediaSession → Logger</code> in <code>play</code>, which is acyclic.</p>
+<p>For finite state variable domains, compilation also checks C3 by requiring exactly one
+enabled transition per sampled state.
+The branching in <code>decide</code> is <code>If(V(QualityPolicy.State.stalling),
+"drop_quality")</code> plus <code>Else("play")</code>, with <code>stalling: bool</code> — boolean has a
+finite domain, so C3 is verified statically.</p>
+<h2 id="runtime">Runtime</h2>
+<p>After construction, the same <code>rg.PhasedReactiveSystem</code> object is the runtime
+handle.
+Runtime executes the compiled phase schedules and updates system state.
+It does not reinterpret declarations on every step.</p>
+<h3 id="the-tick">The tick</h3>
+<p>A tick walks the phase graph from the initial phase until a transition reaches
+<code>terminate</code>.
+For the video player, a healthy tick visits <code>measure → decide → play</code>; a
+stalling tick visits <code>measure → decide → drop_quality → play</code>.</p>
+<p>The feedback loop closes between ticks: <code>MediaSession.buffer_seconds</code> written
+in <code>play</code> of tick N is read by <code>QualityPolicy</code> in <code>decide</code> of tick N+1, and
+that read is what selects the branch.</p>
+<p>Every system also has a built-in <code>rg.Clock</code>.
+<code>Clock.tick</code> is incremented after the whole tick terminates.
+In a discrete-only system, <code>Clock.time</code> advances with the tick by <code>base_dt</code>.
+When a tick contains a continuous phase, <code>Clock.time</code> advances immediately
+after that continuous phase, so later phases in the same tick can observe the
+new physical time.
+See <a href="../continuous/">Continuous dynamics</a> for the ODE resolution rules.</p>
+<h3 id="step-order">Step order</h3>
+<p>One <code>step()</code> starts at the initial phase and follows transitions until the
+tick terminates.</p>
+<p>For each phase:</p>
+<ol>
+<li>run active nodes in the compiled schedule;</li>
+<li>build each node input namespace;</li>
+<li>call <code>update</code>;</li>
+<li>normalize returned state variables;</li>
+<li>write state variables into state;</li>
+<li>choose the next phase from transitions.</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">records</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
 </code></pre></div>
-<p>Python callables, including lambdas, can also be used as predicates when the
-guard cannot be expressed symbolically:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="k">lambda</span> <span class="n">state</span><span class="p">:</span> <span class="n">state</span><span class="o">.</span><span class="n">buffer_seconds</span> <span class="o">&lt;</span> <span class="mf">2.0</span><span class="p">,</span> <span class="s2">&quot;buffer_warning&quot;</span><span class="p">)</span>
+<p>Each record contains the phase, node, inputs, and state variables.
+A 30-tick run of the player produces records like:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">:</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">phase</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">node</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">state</span><span class="p">)</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># measure Network {&#39;bandwidth_kbps&#39;: 600.0}</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># decide  QualityPolicy {&#39;stalling&#39;: False}</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="c1"># play    Decoder {&#39;fetched_seconds&#39;: 0.278}</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="c1"># play    MediaSession {&#39;buffer_seconds&#39;: 9.11}</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># play    Logger {&#39;history&#39;: [...]}</span>
 </code></pre></div>
-<p>Callable predicates are an escape hatch.
-Prefer symbolic <code>V(...)</code> predicates when possible, because they keep guard
-dependencies visible to the compiler and produce clearer diagnostics.</p>
-<p>A larger system might extend the chain with <code>Elif</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">transitions</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">stalling</span><span class="p">),</span> <span class="s2">&quot;drop_quality&quot;</span><span class="p">),</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">Elif</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">healthy_steady</span><span class="p">),</span> <span class="s2">&quot;upgrade_quality&quot;</span><span class="p">),</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">Else</span><span class="p">(</span><span class="s2">&quot;play&quot;</span><span class="p">),</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="p">)</span>
+<h3 id="running-multiple-ticks">Running multiple ticks</h3>
+<p>Use <code>update(steps=...)</code> to execute several ticks.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">system</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
 </code></pre></div>
-<p><code>Elif</code> after <code>Else</code> is invalid, because <code>Else</code> closes the current chain.</p>
-<p>A phase may contain several independent <code>If</code> chains.
-Compilation checks that the transition structure is well formed, and runtime
-evaluates effective transitions in order.</p>
-<p>For example, this transition tuple contains three chains: a single <code>If</code>, an
-<code>If</code>/<code>Elif</code> chain, and another single <code>If</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">transitions</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">network</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">disconnected</span><span class="p">),</span> <span class="s2">&quot;pause&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;offline&quot;</span><span class="p">),</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">stalling</span><span class="p">),</span> <span class="s2">&quot;drop_quality&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;stalling&quot;</span><span class="p">),</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">Elif</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">can_upgrade</span><span class="p">),</span> <span class="s2">&quot;upgrade_quality&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;upgrade&quot;</span><span class="p">),</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">logger</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">should_flush</span><span class="p">),</span> <span class="s2">&quot;flush_logs&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;flush_logs&quot;</span><span class="p">),</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="p">)</span>
+<p>Each tick starts from the initial phase again.
+State persists across ticks unless <code>reset()</code> is called.</p>
+<h3 id="state-access">State access</h3>
+<p>Use <code>snapshot()</code> to inspect current state.
+It returns user node state variables and committed ODE state values; system clock
+fields are read explicitly.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">snapshot</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">snapshot</span><span class="p">()</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">snapshot</span><span class="p">[</span><span class="s2">&quot;MediaSession.buffer_seconds&quot;</span><span class="p">])</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="nb">print</span><span class="p">(</span><span class="n">snapshot</span><span class="p">[</span><span class="s2">&quot;BitrateController.value&quot;</span><span class="p">])</span>
 </code></pre></div>
-<p>Each <code>If</code> starts a chain.
-Each <code>Elif</code> continues the chain that immediately precedes it.
-If guards are written with <code>rg.V(...)</code>, the compiler can see the guard
-dependencies and verify the transition structure.
-At execution time, the effective transitions should resolve to exactly one
-selected next step; zero or multiple selected transitions make the next phase
-ambiguous.</p>
-<div class="admonition warning">
-<p class="admonition-title">Avoid multiple Else branches in one transition tuple</p>
-<p>A tuple like this is hard to reason about:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">transitions</span> <span class="o">=</span> <span class="p">(</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">network</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">disconnected</span><span class="p">),</span> <span class="s2">&quot;pause&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;offline&quot;</span><span class="p">),</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">Else</span><span class="p">(</span><span class="s2">&quot;decide_quality&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;online&quot;</span><span class="p">),</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">stalling</span><span class="p">),</span> <span class="s2">&quot;drop_quality&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;stalling&quot;</span><span class="p">),</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="n">rg</span><span class="o">.</span><span class="n">Else</span><span class="p">(</span><span class="s2">&quot;play&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;healthy&quot;</span><span class="p">),</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="p">)</span>
+<p>Use <code>read(...)</code> when code has a state reference.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">buffer</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">session</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">buffer_seconds</span><span class="p">)</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">tick</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">tick</span><span class="p">)</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">time</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
 </code></pre></div>
-<p>Each <code>Else</code> closes the chain immediately before it, but multiple <code>Else</code>
-branches in one phase usually hide the control flow rather than clarify it.
-Prefer explicit <code>If</code> / <code>Elif</code> chains and keep the phase's transition rules
-easy to audit.</p>
-</div>
+<h3 id="reset">Reset</h3>
+<p><code>reset()</code> clears runtime state and history.
+It then applies declared initial values and optional overrides.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">system</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">system</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">initial_state</span><span class="o">=</span><span class="p">{</span><span class="n">MediaSession</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">buffer_seconds</span><span class="p">:</span> <span class="mf">5.0</span><span class="p">})</span>
+</code></pre></div>
+<h3 id="logging-nodes">Logging nodes</h3>
+<p>A logger is just another node.
+It sees the values available at the point where its scheduled phase runs.
+The video player puts <code>Logger</code> last in <code>play</code> so it observes the buffer
+update from <code>MediaSession</code> and the freshly committed bitrate.</p>
 <h2 id="rules">Rules</h2>
 <ul>
-<li>Phases list node instances, not classes.</li>
-<li>A system is defined by its phases.</li>
-<li>Exactly one initial phase is expected.</li>
-<li>Each phase is scheduled topologically.</li>
-<li>Phase coverage must include input and guard producers.</li>
-<li>Use <code>Goto</code> for unconditional jumps.</li>
-<li>Use <code>If</code> / <code>Elif</code> / <code>Else</code> for ordered branches.</li>
-<li>Use <code>rg.terminate</code> to end a tick.</li>
-<li>Prefer symbolic <code>V(...)</code> predicates.</li>
+<li>Read the compile report before debugging runtime behavior.</li>
+<li>Create systems with <code>rg.PhasedReactiveSystem(phases=[...])</code>.</li>
+<li>Use <code>strict=False</code> for diagnostics.</li>
+<li>Resolve ambiguous class references with instance connections.</li>
+<li>Add initial values only for state variables that must exist before execution.</li>
+<li>Runtime follows compiled phase schedules.</li>
+<li>State persists between ticks.</li>
+<li><code>reset()</code> clears state and history.</li>
+<li><code>step()</code> returns execution records.</li>
+<li><code>snapshot()</code> returns user-visible state; use <code>read(rg.Clock.time)</code> for clock
+  fields.</li>
 </ul>
 
 
