@@ -67,6 +67,7 @@ nav:
   - Examples:
       - Free Pendulum: examples/free_pendulum.md
       - Controlled Pendulum: examples/controlled_pendulum.md
+      - Two Inverter Static Droop Control: examples/two_inverter_static_droop.md
   - Authors: authors.md
 
 markdown_extensions:
