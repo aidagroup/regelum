@@ -1,19 +1,12 @@
 # Free Pendulum
 
-[Open in molab](https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/free_pendulum/rg-examples-free-pendulum.py){ .md-button .md-button--primary target="_blank" }
-[Run locally](#open-in-marimo){ .md-button }
+[Open in molab](https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/free_pendulum/rg-examples-free-pendulum.py){ .md-button target="_blank" }
 
 This example starts from a single physical object: a damped pendulum without
 external torque. The pendulum is implemented as an `ODENode`, integrated by an
 `ODESystem`, and observed by a discrete node that publishes derived signals.
 
 ![Pendulum plant](../assets/examples/pendulum/pendulum.svg)
-
-Run locally:
-
-```bash
-uv run marimo edit examples/free_pendulum/rg-examples-free-pendulum.py
-```
 
 ## Dynamics
 
@@ -100,20 +93,11 @@ flowchart LR
 
 Open the notebook in molab:
 
-[Open in molab](https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/free_pendulum/rg-examples-free-pendulum.py){ .md-button .md-button--primary target="_blank" }
+[Open in molab](https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/free_pendulum/rg-examples-free-pendulum.py){ .md-button target="_blank" }
 
 Molab opens the notebook from the published `main` branch and installs
 `regelum` from PyPI, plus plotting dependencies, using the notebook's inline
 dependency metadata.
-
-Run the notebook locally from the repository root:
-
-```bash
-uv run marimo edit examples/free_pendulum/rg-examples-free-pendulum.py
-```
-
-The local command opens the current working copy, including changes that have
-not been pushed to GitHub yet.
 
 ??? example "Standalone Python listing"
 
