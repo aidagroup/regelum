@@ -64,6 +64,9 @@ nav:
       - Phases: concepts/phases.md
       - Continuous Dynamics: concepts/continuous.md
       - Create, Compile, and Run: concepts/compilation.md
+  - Examples:
+      - Free Pendulum: examples/free_pendulum.md
+      - Controlled Pendulum: examples/controlled_pendulum.md
   - Authors: authors.md
 
 markdown_extensions:
@@ -73,6 +76,8 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
+  - pymdownx.arithmatex:
+      generic: true
   - pymdownx.snippets:
       base_path:
         - .
@@ -84,3 +89,7 @@ markdown_extensions:
 
 extra_css:
   - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js

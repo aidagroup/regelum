@@ -134,6 +134,8 @@ uv run mkdocs serve
 
 ```bash
 uv run regelum-pendulum
+uv run marimo edit examples/free_pendulum/app.py
+uv run marimo edit examples/controlled_pendulum/app.py
 uv run regelum-video-player
 uv run regelum-instance-connect
 ```
