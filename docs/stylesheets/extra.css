@@ -16,6 +16,10 @@
   --regelum-phase-control-border: #d97706;
   --regelum-phase-log-bg: #64748b22;
   --regelum-phase-log-border: #64748b;
+  --regelum-phase-branches-bg: #2f6fed22;
+  --regelum-phase-branches-border: #2f6fed;
+  --regelum-phase-bus-bg: #15803d22;
+  --regelum-phase-bus-border: #15803d;
   --regelum-node-pendulum-bg: #7c3aed1f;
   --regelum-node-pendulum-border: #7c3aed;
   --regelum-node-observer-bg: #0891b21f;
@@ -127,6 +131,16 @@
 .phase-label--log {
   background: var(--regelum-phase-log-bg);
   border-color: var(--regelum-phase-log-border);
+}
+
+.phase-label--branches {
+  background: var(--regelum-phase-branches-bg);
+  border-color: var(--regelum-phase-branches-border);
+}
+
+.phase-label--bus {
+  background: var(--regelum-phase-bus-bg);
+  border-color: var(--regelum-phase-bus-border);
 }
 
 .node-label {
