@@ -22,10 +22,10 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
+    Var,
     terminate,
 )
 
@@ -49,10 +49,10 @@ class NetworkDroopController(NativeDroopController):
         super().__init__()
 
     class Inputs(NodeInputs):
-        master_current: PhaseVector = Input(source="Lc1Filter.Outputs.inductor_i")
-        master_voltage: PhaseVector = Input(source="Lc1Filter.Outputs.capacitor_v")
-        slave_current: PhaseVector = Input(source="Lcl1Filter.Outputs.inverter_side_i")
-        slave_voltage: PhaseVector = Input(source="Lcl1Filter.Outputs.capacitor_v")
+        master_current: PhaseVector = Input(src="Lc1Filter.State.inductor_i")
+        master_voltage: PhaseVector = Input(src="Lc1Filter.State.capacitor_v")
+        slave_current: PhaseVector = Input(src="Lcl1Filter.State.inverter_side_i")
+        slave_voltage: PhaseVector = Input(src="Lcl1Filter.State.capacitor_v")
 
 
 class Inverter1(Node):
@@ -60,13 +60,13 @@ class Inverter1(Node):
         self.gain = 0.5 * v_dc
 
     class Inputs(NodeInputs):
-        modulation: PhaseVector = Input(source=NetworkDroopController.Outputs.inverter1_modulation)
+        modulation: PhaseVector = Input(src=NetworkDroopController.State.inverter1_modulation)
 
-    class Outputs(NodeOutputs):
-        phase_v: PhaseVector = Output(initial=zeros3)
+    class State(NodeState):
+        phase_v: PhaseVector = Var(init=zeros3)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(phase_v=scale3(inputs.modulation, self.gain))
+    def update(self, inputs: Inputs) -> State:
+        return self.State(phase_v=scale3(inputs.modulation, self.gain))
 
 
 class Inverter2(Node):
@@ -74,13 +74,13 @@ class Inverter2(Node):
         self.gain = 0.5 * v_dc
 
     class Inputs(NodeInputs):
-        modulation: PhaseVector = Input(source=NetworkDroopController.Outputs.inverter2_modulation)
+        modulation: PhaseVector = Input(src=NetworkDroopController.State.inverter2_modulation)
 
-    class Outputs(NodeOutputs):
-        phase_v: PhaseVector = Output(initial=zeros3)
+    class State(NodeState):
+        phase_v: PhaseVector = Var(init=zeros3)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(phase_v=scale3(inputs.modulation, self.gain))
+    def update(self, inputs: Inputs) -> State:
+        return self.State(phase_v=scale3(inputs.modulation, self.gain))
 
 
 class NetworkOdeStep(Node):
@@ -102,23 +102,23 @@ class NetworkOdeStep(Node):
         self.load_inductance = load_inductance
 
     class Inputs(NodeInputs):
-        time_s: float = Input(source=SimulationClock.Outputs.time_s)
-        inverter1_v: PhaseVector = Input(source=Inverter1.Outputs.phase_v)
-        inverter2_v: PhaseVector = Input(source=Inverter2.Outputs.phase_v)
-        state: NetworkState = Input(source="NetworkOdeStep.Outputs.state")
+        time_s: float = Input(src=SimulationClock.State.time_s)
+        inverter1_v: PhaseVector = Input(src=Inverter1.State.phase_v)
+        inverter2_v: PhaseVector = Input(src=Inverter2.State.phase_v)
+        state: NetworkState = Input(src="NetworkOdeStep.State.state")
 
-    class Outputs(NodeOutputs):
-        state: NetworkState = Output(initial=zeros24)
-        lc1_capacitor_v: PhaseVector = Output(initial=zeros3)
-        lc1_inductor_i: PhaseVector = Output(initial=zeros3)
-        lcl1_capacitor_v: PhaseVector = Output(initial=zeros3)
-        lcl1_inverter_side_i: PhaseVector = Output(initial=zeros3)
-        lcl1_grid_side_i: PhaseVector = Output(initial=zeros3)
-        lc2_capacitor_v: PhaseVector = Output(initial=zeros3)
-        lc2_inductor_i: PhaseVector = Output(initial=zeros3)
-        rl1_load_i: PhaseVector = Output(initial=zeros3)
+    class State(NodeState):
+        state: NetworkState = Var(init=zeros24)
+        lc1_capacitor_v: PhaseVector = Var(init=zeros3)
+        lc1_inductor_i: PhaseVector = Var(init=zeros3)
+        lcl1_capacitor_v: PhaseVector = Var(init=zeros3)
+        lcl1_inverter_side_i: PhaseVector = Var(init=zeros3)
+        lcl1_grid_side_i: PhaseVector = Var(init=zeros3)
+        lc2_capacitor_v: PhaseVector = Var(init=zeros3)
+        lc2_inductor_i: PhaseVector = Var(init=zeros3)
+        rl1_load_i: PhaseVector = Var(init=zeros3)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         load_resistance = (
             self.load_resistance if inputs.time_s < 0.2 else 2.0 * self.load_resistance
         )
@@ -146,7 +146,7 @@ class NetworkOdeStep(Node):
             lc2_inductor_i,
             rl1_load_i,
         ) = unpack_state(state)
-        return self.Outputs(
+        return self.State(
             state=state,
             lc1_capacitor_v=lc1_capacitor_v,
             lc1_inductor_i=lc1_inductor_i,
@@ -242,19 +242,19 @@ class Lc1Filter(Node):
     """Modelica `lc1`: inverter-side L and bus shunt C."""
 
     class Inputs(NodeInputs):
-        inductor_i: PhaseVector = Input(source=NetworkOdeStep.Outputs.lc1_inductor_i)
-        capacitor_v: PhaseVector = Input(source=NetworkOdeStep.Outputs.lc1_capacitor_v)
+        inductor_i: PhaseVector = Input(src=NetworkOdeStep.State.lc1_inductor_i)
+        capacitor_v: PhaseVector = Input(src=NetworkOdeStep.State.lc1_capacitor_v)
 
-    class Outputs(NodeOutputs):
-        inductor_i: PhaseVector = Output(initial=zeros3)
-        capacitor_v: PhaseVector = Output(initial=zeros3)
-        current_to_bus: PhaseVector = Output(initial=zeros3)
-        capacitor1_v: float = Output(initial=0.0)
-        capacitor2_v: float = Output(initial=0.0)
-        capacitor3_v: float = Output(initial=0.0)
+    class State(NodeState):
+        inductor_i: PhaseVector = Var(init=zeros3)
+        capacitor_v: PhaseVector = Var(init=zeros3)
+        current_to_bus: PhaseVector = Var(init=zeros3)
+        capacitor1_v: float = Var(init=0.0)
+        capacitor2_v: float = Var(init=0.0)
+        capacitor3_v: float = Var(init=0.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
+    def update(self, inputs: Inputs) -> State:
+        return self.State(
             inductor_i=inputs.inductor_i,
             capacitor_v=inputs.capacitor_v,
             current_to_bus=inputs.inductor_i,
@@ -268,20 +268,20 @@ class Lcl1Filter(Node):
     """Modelica `lcl1`: inverter L, midpoint shunt C, and grid-side L."""
 
     class Inputs(NodeInputs):
-        inverter_side_i: PhaseVector = Input(source=NetworkOdeStep.Outputs.lcl1_inverter_side_i)
-        capacitor_v: PhaseVector = Input(source=NetworkOdeStep.Outputs.lcl1_capacitor_v)
-        grid_side_i: PhaseVector = Input(source=NetworkOdeStep.Outputs.lcl1_grid_side_i)
+        inverter_side_i: PhaseVector = Input(src=NetworkOdeStep.State.lcl1_inverter_side_i)
+        capacitor_v: PhaseVector = Input(src=NetworkOdeStep.State.lcl1_capacitor_v)
+        grid_side_i: PhaseVector = Input(src=NetworkOdeStep.State.lcl1_grid_side_i)
 
-    class Outputs(NodeOutputs):
-        inverter_side_i: PhaseVector = Output(initial=zeros3)
-        capacitor_v: PhaseVector = Output(initial=zeros3)
-        grid_side_i: PhaseVector = Output(initial=zeros3)
-        capacitor1_v: float = Output(initial=0.0)
-        capacitor2_v: float = Output(initial=0.0)
-        capacitor3_v: float = Output(initial=0.0)
+    class State(NodeState):
+        inverter_side_i: PhaseVector = Var(init=zeros3)
+        capacitor_v: PhaseVector = Var(init=zeros3)
+        grid_side_i: PhaseVector = Var(init=zeros3)
+        capacitor1_v: float = Var(init=0.0)
+        capacitor2_v: float = Var(init=0.0)
+        capacitor3_v: float = Var(init=0.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
+    def update(self, inputs: Inputs) -> State:
+        return self.State(
             inverter_side_i=inputs.inverter_side_i,
             capacitor_v=inputs.capacitor_v,
             grid_side_i=inputs.grid_side_i,
@@ -295,18 +295,18 @@ class Lc2Filter(Node):
     """Modelica `lc2`: load-side LC between the common bus and `rl1`."""
 
     class Inputs(NodeInputs):
-        inductor_i: PhaseVector = Input(source=NetworkOdeStep.Outputs.lc2_inductor_i)
-        capacitor_v: PhaseVector = Input(source=NetworkOdeStep.Outputs.lc2_capacitor_v)
+        inductor_i: PhaseVector = Input(src=NetworkOdeStep.State.lc2_inductor_i)
+        capacitor_v: PhaseVector = Input(src=NetworkOdeStep.State.lc2_capacitor_v)
 
-    class Outputs(NodeOutputs):
-        inductor_i: PhaseVector = Output(initial=zeros3)
-        capacitor_v: PhaseVector = Output(initial=zeros3)
-        capacitor1_v: float = Output(initial=0.0)
-        capacitor2_v: float = Output(initial=0.0)
-        capacitor3_v: float = Output(initial=0.0)
+    class State(NodeState):
+        inductor_i: PhaseVector = Var(init=zeros3)
+        capacitor_v: PhaseVector = Var(init=zeros3)
+        capacitor1_v: float = Var(init=0.0)
+        capacitor2_v: float = Var(init=0.0)
+        capacitor3_v: float = Var(init=0.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
+    def update(self, inputs: Inputs) -> State:
+        return self.State(
             inductor_i=inputs.inductor_i,
             capacitor_v=inputs.capacitor_v,
             capacitor1_v=inputs.capacitor_v[0],
@@ -317,34 +317,34 @@ class Lc2Filter(Node):
 
 class Rl1Load(Node):
     class Inputs(NodeInputs):
-        load_i: PhaseVector = Input(source=NetworkOdeStep.Outputs.rl1_load_i)
+        load_i: PhaseVector = Input(src=NetworkOdeStep.State.rl1_load_i)
 
-    class Outputs(NodeOutputs):
-        load_i: PhaseVector = Output(initial=zeros3)
+    class State(NodeState):
+        load_i: PhaseVector = Var(init=zeros3)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(load_i=inputs.load_i)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(load_i=inputs.load_i)
 
 
 class OneToOneMicrogridLogger(Node):
     class Inputs(NodeInputs):
-        time_s: float = Input(source=SimulationClock.Outputs.time_s)
-        lcl1_capacitor1_v: float = Input(source=Lcl1Filter.Outputs.capacitor1_v)
-        lcl1_capacitor2_v: float = Input(source=Lcl1Filter.Outputs.capacitor2_v)
-        lcl1_capacitor3_v: float = Input(source=Lcl1Filter.Outputs.capacitor3_v)
-        samples: tuple[VoltageSample, ...] = Input(source="OneToOneMicrogridLogger.Outputs.samples")
+        time_s: float = Input(src=SimulationClock.State.time_s)
+        lcl1_capacitor1_v: float = Input(src=Lcl1Filter.State.capacitor1_v)
+        lcl1_capacitor2_v: float = Input(src=Lcl1Filter.State.capacitor2_v)
+        lcl1_capacitor3_v: float = Input(src=Lcl1Filter.State.capacitor3_v)
+        samples: tuple[VoltageSample, ...] = Input(src="OneToOneMicrogridLogger.State.samples")
 
-    class Outputs(NodeOutputs):
-        samples: tuple[VoltageSample, ...] = Output(initial=())
+    class State(NodeState):
+        samples: tuple[VoltageSample, ...] = Var(init=())
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         sample = (
             inputs.time_s,
             inputs.lcl1_capacitor1_v,
             inputs.lcl1_capacitor2_v,
             inputs.lcl1_capacitor3_v,
         )
-        return self.Outputs(samples=inputs.samples + (sample,))
+        return self.State(samples=inputs.samples + (sample,))
 
 
 def build_system() -> PhasedReactiveSystem:

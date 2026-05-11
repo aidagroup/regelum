@@ -5,25 +5,25 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
+    Var,
     port,
     terminate,
 )
 
 
 class NumberSource(Node):
-    class Outputs(NodeOutputs):
-        value: int = Output(initial=0)
+    class State(NodeState):
+        value: int = Var(init=0)
 
     def __init__(self, value: int, *, name: str | None = None) -> None:
         super().__init__(name=name)
         self.value = value
 
-    def run(self) -> Outputs:
-        return self.Outputs(value=self.value)
+    def update(self) -> State:
+        return self.State(value=self.value)
 
 
 class Accumulator(Node):
@@ -31,11 +31,11 @@ class Accumulator(Node):
         value: int = Input()
         total: int = Input()
 
-    class Outputs(NodeOutputs):
-        total: int = Output(initial=0)
+    class State(NodeState):
+        total: int = Var(init=0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(total=inputs.total + inputs.value)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(total=inputs.total + inputs.value)
 
 
 def build_system() -> PhasedReactiveSystem:
@@ -44,10 +44,10 @@ def build_system() -> PhasedReactiveSystem:
     accumulator_a = Accumulator(name="accumulator_a")
     accumulator_b = Accumulator(name="accumulator_b")
 
-    port(accumulator_a.Inputs.value).connect(source_a.Outputs.value)
-    port(accumulator_a.Outputs.total).connect(accumulator_a.Inputs.total)
-    port(source_b.Outputs.value).connect(accumulator_b.Inputs.value)
-    port(accumulator_b.Inputs.total).connect(accumulator_b.Outputs.total)
+    port(accumulator_a.Inputs.value).connect(source_a.State.value)
+    port(accumulator_a.State.total).connect(accumulator_a.Inputs.total)
+    port(source_b.State.value).connect(accumulator_b.Inputs.value)
+    port(accumulator_b.Inputs.total).connect(accumulator_b.State.total)
 
     return PhasedReactiveSystem(
         phases=[

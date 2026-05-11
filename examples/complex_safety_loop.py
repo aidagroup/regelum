@@ -9,11 +9,11 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
@@ -23,16 +23,16 @@ class SensorFusion(Node):
         self.target = target
 
     class Inputs(NodeInputs):
-        position: float = Input(source="Plant.Outputs.position")
-        velocity: float = Input(source="Plant.Outputs.velocity")
+        position: float = Input(src="Plant.State.position")
+        velocity: float = Input(src="Plant.State.velocity")
 
-    class Outputs(NodeOutputs):
-        position_estimate: float = Output(initial=0.0)
-        velocity_estimate: float = Output(initial=0.0)
-        target: float = Output(initial=lambda self: cast(SensorFusion, self).target)
+    class State(NodeState):
+        position_estimate: float = Var(init=0.0)
+        velocity_estimate: float = Var(init=0.0)
+        target: float = Var(init=lambda self: cast(SensorFusion, self).target)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
+    def update(self, inputs: Inputs) -> State:
+        return self.State(
             position_estimate=inputs.position,
             velocity_estimate=inputs.velocity,
             target=self.target,
@@ -46,18 +46,18 @@ class Supervisor(Node):
         self.limit = limit
 
     class Inputs(NodeInputs):
-        position: float = Input(source=SensorFusion.Outputs.position_estimate)
-        velocity: float = Input(source=SensorFusion.Outputs.velocity_estimate)
-        target: float = Input(source=SensorFusion.Outputs.target)
+        position: float = Input(src=SensorFusion.State.position_estimate)
+        velocity: float = Input(src=SensorFusion.State.velocity_estimate)
+        target: float = Input(src=SensorFusion.State.target)
 
-    class Outputs(NodeOutputs):
-        force: float = Output(initial=0.0)
-        saturated: bool = Output(initial=False)
+    class State(NodeState):
+        force: float = Var(init=0.0)
+        saturated: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         raw = self.kp * (inputs.target - inputs.position) - self.kd * inputs.velocity
         force = max(-self.limit, min(self.limit, raw))
-        return self.Outputs(force=force, saturated=abs(raw) > self.limit)
+        return self.State(force=force, saturated=abs(raw) > self.limit)
 
 
 class Plant(Node):
@@ -72,18 +72,18 @@ class Plant(Node):
         self.dt = dt
 
     class Inputs(NodeInputs):
-        force: float = Input(source="Supervisor.Outputs.force")
-        position: float = Input(source="Plant.Outputs.position")
-        velocity: float = Input(source="Plant.Outputs.velocity")
+        force: float = Input(src="Supervisor.State.force")
+        position: float = Input(src="Plant.State.position")
+        velocity: float = Input(src="Plant.State.velocity")
 
-    class Outputs(NodeOutputs):
-        position: float = Output(initial=lambda self: cast(Plant, self).init_position)
-        velocity: float = Output(initial=lambda self: cast(Plant, self).init_velocity)
+    class State(NodeState):
+        position: float = Var(init=lambda self: cast(Plant, self).init_position)
+        velocity: float = Var(init=lambda self: cast(Plant, self).init_velocity)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         velocity = inputs.velocity + self.dt * inputs.force
         position = inputs.position + self.dt * velocity
-        return self.Outputs(position=position, velocity=velocity)
+        return self.State(position=position, velocity=velocity)
 
 
 class SafetyMonitor(Node):
@@ -91,47 +91,47 @@ class SafetyMonitor(Node):
         self.position_limit = position_limit
 
     class Inputs(NodeInputs):
-        position: float = Input(source=Plant.Outputs.position)
-        saturated: bool = Input(source=Supervisor.Outputs.saturated)
+        position: float = Input(src=Plant.State.position)
+        saturated: bool = Input(src=Supervisor.State.saturated)
 
-    class Outputs(NodeOutputs):
-        fault: bool = Output(initial=False)
-        reason: str = Output(initial="ok")
+    class State(NodeState):
+        fault: bool = Var(init=False)
+        reason: str = Var(init="ok")
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         out_of_bounds = abs(inputs.position) > self.position_limit
         fault = out_of_bounds or inputs.saturated
         reason = "position_limit" if out_of_bounds else "saturated" if inputs.saturated else "ok"
-        return self.Outputs(fault=fault, reason=reason)
+        return self.State(fault=fault, reason=reason)
 
 
 class Alarm(Node):
     class Inputs(NodeInputs):
-        reason: str = Input(source=SafetyMonitor.Outputs.reason)
+        reason: str = Input(src=SafetyMonitor.State.reason)
 
-    class Outputs(NodeOutputs):
-        active: bool = Output(initial=False)
-        message: str = Output(initial="")
+    class State(NodeState):
+        active: bool = Var(init=False)
+        message: str = Var(init="")
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(active=True, message=f"fault:{inputs.reason}")
+    def update(self, inputs: Inputs) -> State:
+        return self.State(active=True, message=f"fault:{inputs.reason}")
 
 
 class TraceLogger(Node):
     class Inputs(NodeInputs):
-        position: float = Input(source=Plant.Outputs.position)
-        velocity: float = Input(source=Plant.Outputs.velocity)
-        force: float = Input(source=Supervisor.Outputs.force)
-        fault: bool = Input(source=SafetyMonitor.Outputs.fault)
-        alarm: bool = Input(source=Alarm.Outputs.active)
+        position: float = Input(src=Plant.State.position)
+        velocity: float = Input(src=Plant.State.velocity)
+        force: float = Input(src=Supervisor.State.force)
+        fault: bool = Input(src=SafetyMonitor.State.fault)
+        alarm: bool = Input(src=Alarm.State.active)
         trace: tuple[tuple[float, float, float, bool, bool], ...] = Input(
-            source="TraceLogger.Outputs.trace"
+            src="TraceLogger.State.trace"
         )
 
-    class Outputs(NodeOutputs):
-        trace: tuple[tuple[float, float, float, bool, bool], ...] = Output(initial=())
+    class State(NodeState):
+        trace: tuple[tuple[float, float, float, bool, bool], ...] = Var(init=())
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         sample = (
             inputs.position,
             inputs.velocity,
@@ -139,7 +139,7 @@ class TraceLogger(Node):
             inputs.fault,
             inputs.alarm,
         )
-        return self.Outputs(trace=inputs.trace + (sample,))
+        return self.State(trace=inputs.trace + (sample,))
 
 
 def build_ok_system() -> PhasedReactiveSystem:

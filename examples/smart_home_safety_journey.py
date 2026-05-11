@@ -33,11 +33,11 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
@@ -80,39 +80,39 @@ ACTION_DOMAIN = (0, 1, 2, 3, 4, 5)
 
 
 class SmokeSensor(Node):
-    class Outputs(NodeOutputs):
-        smoke_present: bool = Output(initial=False)
-        smoke_health_ok: bool = Output(initial=True)
+    class State(NodeState):
+        smoke_present: bool = Var(init=False)
+        smoke_health_ok: bool = Var(init=True)
 
-    def run(self, inputs: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(smoke_present=True, smoke_health_ok=True)
+    def update(self, inputs: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(smoke_present=True, smoke_health_ok=True)
 
 
 class HeatSensor(Node):
-    class Outputs(NodeOutputs):
-        heat_present: bool = Output(initial=False)
-        heat_health_ok: bool = Output(initial=True)
+    class State(NodeState):
+        heat_present: bool = Var(init=False)
+        heat_health_ok: bool = Var(init=True)
 
-    def run(self, inputs: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(heat_present=True, heat_health_ok=True)
+    def update(self, inputs: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(heat_present=True, heat_health_ok=True)
 
 
 class LeakSensor(Node):
-    class Outputs(NodeOutputs):
-        leak_present: bool = Output(initial=False)
-        leak_health_ok: bool = Output(initial=True)
+    class State(NodeState):
+        leak_present: bool = Var(init=False)
+        leak_health_ok: bool = Var(init=True)
 
-    def run(self, inputs: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(leak_present=True, leak_health_ok=True)
+    def update(self, inputs: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(leak_present=True, leak_health_ok=True)
 
 
 class TempSensor(Node):
-    class Outputs(NodeOutputs):
-        temperature_high: bool = Output(initial=False)
-        temp_health_ok: bool = Output(initial=True)
+    class State(NodeState):
+        temperature_high: bool = Var(init=False)
+        temp_health_ok: bool = Var(init=True)
 
-    def run(self, inputs: NodeInputs) -> Outputs:  # noqa: ARG002
-        return self.Outputs(temperature_high=True, temp_health_ok=True)
+    def update(self, inputs: NodeInputs) -> State:  # noqa: ARG002
+        return self.State(temperature_high=True, temp_health_ok=True)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -126,63 +126,63 @@ class FireClassifier(Node):
     FIRE_SENSOR_FAULT."""
 
     class Inputs(NodeInputs):
-        smoke_present: bool = Input(source="SmokeSensor.smoke_present")
-        smoke_health_ok: bool = Input(source="SmokeSensor.smoke_health_ok")
-        heat_present: bool = Input(source="HeatSensor.heat_present")
-        heat_health_ok: bool = Input(source="HeatSensor.heat_health_ok")
-        temperature_high: bool = Input(source="TempSensor.temperature_high")
-        temp_health_ok: bool = Input(source="TempSensor.temp_health_ok")
+        smoke_present: bool = Input(src="SmokeSensor.smoke_present")
+        smoke_health_ok: bool = Input(src="SmokeSensor.smoke_health_ok")
+        heat_present: bool = Input(src="HeatSensor.heat_present")
+        heat_health_ok: bool = Input(src="HeatSensor.heat_health_ok")
+        temperature_high: bool = Input(src="TempSensor.temperature_high")
+        temp_health_ok: bool = Input(src="TempSensor.temp_health_ok")
 
-    class Outputs(NodeOutputs):
-        fire_state: int = Output(initial=FIRE_NORMAL, domain=FIRE_DOMAIN)
+    class State(NodeState):
+        fire_state: int = Var(init=FIRE_NORMAL, domain=FIRE_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         if not inputs.smoke_health_ok and not inputs.heat_health_ok:
-            return self.Outputs(fire_state=FIRE_SENSOR_FAULT)
+            return self.State(fire_state=FIRE_SENSOR_FAULT)
         temp_evidence = inputs.temperature_high and inputs.temp_health_ok
         if inputs.smoke_present and (inputs.heat_present or temp_evidence):
-            return self.Outputs(fire_state=FIRE_CONFIRMED)
+            return self.State(fire_state=FIRE_CONFIRMED)
         if inputs.smoke_present:
-            return self.Outputs(fire_state=FIRE_SMOKE_ONLY)
-        return self.Outputs(fire_state=FIRE_NORMAL)
+            return self.State(fire_state=FIRE_SMOKE_ONLY)
+        return self.State(fire_state=FIRE_NORMAL)
 
 
 class LeakClassifier(Node):
     class Inputs(NodeInputs):
-        leak_present: bool = Input(source="LeakSensor.leak_present")
-        leak_health_ok: bool = Input(source="LeakSensor.leak_health_ok")
+        leak_present: bool = Input(src="LeakSensor.leak_present")
+        leak_health_ok: bool = Input(src="LeakSensor.leak_health_ok")
 
-    class Outputs(NodeOutputs):
-        leak_state: int = Output(initial=LEAK_NORMAL, domain=LEAK_DOMAIN)
+    class State(NodeState):
+        leak_state: int = Var(init=LEAK_NORMAL, domain=LEAK_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         if not inputs.leak_health_ok:
-            return self.Outputs(leak_state=LEAK_SENSOR_FAULT)
+            return self.State(leak_state=LEAK_SENSOR_FAULT)
         if inputs.leak_present:
-            return self.Outputs(leak_state=LEAK_DETECTED)
-        return self.Outputs(leak_state=LEAK_NORMAL)
+            return self.State(leak_state=LEAK_DETECTED)
+        return self.State(leak_state=LEAK_NORMAL)
 
 
 class RiskScorer(Node):
     """Numerical risk score informed by both classifiers + temperature."""
 
     class Inputs(NodeInputs):
-        fire_state: int = Input(source="FireClassifier.fire_state")
-        leak_state: int = Input(source="LeakClassifier.leak_state")
-        temperature_high: bool = Input(source="TempSensor.temperature_high")
-        temp_health_ok: bool = Input(source="TempSensor.temp_health_ok")
+        fire_state: int = Input(src="FireClassifier.fire_state")
+        leak_state: int = Input(src="LeakClassifier.leak_state")
+        temperature_high: bool = Input(src="TempSensor.temperature_high")
+        temp_health_ok: bool = Input(src="TempSensor.temp_health_ok")
 
-    class Outputs(NodeOutputs):
-        risk_level: int = Output(initial=RISK_LOW, domain=RISK_DOMAIN)
+    class State(NodeState):
+        risk_level: int = Var(init=RISK_LOW, domain=RISK_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         if inputs.fire_state == FIRE_CONFIRMED:
-            return self.Outputs(risk_level=RISK_HIGH)
+            return self.State(risk_level=RISK_HIGH)
         if inputs.fire_state == FIRE_SMOKE_ONLY or inputs.leak_state == LEAK_DETECTED:
-            return self.Outputs(risk_level=RISK_MEDIUM)
+            return self.State(risk_level=RISK_MEDIUM)
         if inputs.temperature_high and inputs.temp_health_ok:
-            return self.Outputs(risk_level=RISK_MEDIUM)
-        return self.Outputs(risk_level=RISK_LOW)
+            return self.State(risk_level=RISK_MEDIUM)
+        return self.State(risk_level=RISK_LOW)
 
 
 class PriorityArbiter(Node):
@@ -190,25 +190,25 @@ class PriorityArbiter(Node):
     Mohanty 2023). Picks one ActionPlan."""
 
     class Inputs(NodeInputs):
-        fire_state: int = Input(source="FireClassifier.fire_state")
-        leak_state: int = Input(source="LeakClassifier.leak_state")
-        risk_level: int = Input(source="RiskScorer.risk_level")
+        fire_state: int = Input(src="FireClassifier.fire_state")
+        leak_state: int = Input(src="LeakClassifier.leak_state")
+        risk_level: int = Input(src="RiskScorer.risk_level")
 
-    class Outputs(NodeOutputs):
-        action_plan: int = Output(initial=ACT_NOOP, domain=ACTION_DOMAIN)
+    class State(NodeState):
+        action_plan: int = Var(init=ACT_NOOP, domain=ACTION_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         if inputs.fire_state == FIRE_SENSOR_FAULT or inputs.leak_state == LEAK_SENSOR_FAULT:
-            return self.Outputs(action_plan=ACT_USER_ALERT)
+            return self.State(action_plan=ACT_USER_ALERT)
         if inputs.fire_state == FIRE_CONFIRMED and inputs.leak_state == LEAK_DETECTED:
-            return self.Outputs(action_plan=ACT_FIRE_OVER_LEAK)
+            return self.State(action_plan=ACT_FIRE_OVER_LEAK)
         if inputs.fire_state == FIRE_CONFIRMED:
-            return self.Outputs(action_plan=ACT_SPRINKLER_AND_ALARM)
+            return self.State(action_plan=ACT_SPRINKLER_AND_ALARM)
         if inputs.leak_state == LEAK_DETECTED:
-            return self.Outputs(action_plan=ACT_CLOSE_VALVE)
+            return self.State(action_plan=ACT_CLOSE_VALVE)
         if inputs.fire_state == FIRE_SMOKE_ONLY or inputs.risk_level == RISK_MEDIUM:
-            return self.Outputs(action_plan=ACT_ALARM_ONLY)
-        return self.Outputs(action_plan=ACT_NOOP)
+            return self.State(action_plan=ACT_ALARM_ONLY)
+        return self.State(action_plan=ACT_NOOP)
 
 
 # v1 buggy variants: PriorityArbiter reads RiskScorer (forward edge),
@@ -216,15 +216,15 @@ class PriorityArbiter(Node):
 # Both live in the same CLASSIFY phase => C1 dependency cycle.
 class PriorityArbiterV1(Node):
     class Inputs(NodeInputs):
-        fire_state: int = Input(source="FireClassifier.fire_state")
-        leak_state: int = Input(source="LeakClassifier.leak_state")
-        risk_level: int = Input(source="RiskScorerV1.risk_level")
+        fire_state: int = Input(src="FireClassifier.fire_state")
+        leak_state: int = Input(src="LeakClassifier.leak_state")
+        risk_level: int = Input(src="RiskScorerV1.risk_level")
 
-    class Outputs(NodeOutputs):
-        action_plan: int = Output(initial=ACT_NOOP, domain=ACTION_DOMAIN)
+    class State(NodeState):
+        action_plan: int = Var(init=ACT_NOOP, domain=ACTION_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return PriorityArbiter().run(inputs)  # type: ignore[arg-type]
+    def update(self, inputs: Inputs) -> State:
+        return PriorityArbiter().update(inputs)  # type: ignore[arg-type]
 
 
 class RiskScorerV1(Node):
@@ -232,16 +232,16 @@ class RiskScorerV1(Node):
     Creates a within-phase dependency cycle PriorityArbiterV1 <-> RiskScorerV1."""
 
     class Inputs(NodeInputs):
-        fire_state: int = Input(source="FireClassifier.fire_state")
-        leak_state: int = Input(source="LeakClassifier.leak_state")
-        temperature_high: bool = Input(source="TempSensor.temperature_high")
-        last_plan: int = Input(source="PriorityArbiterV1.action_plan")
+        fire_state: int = Input(src="FireClassifier.fire_state")
+        leak_state: int = Input(src="LeakClassifier.leak_state")
+        temperature_high: bool = Input(src="TempSensor.temperature_high")
+        last_plan: int = Input(src="PriorityArbiterV1.action_plan")
 
-    class Outputs(NodeOutputs):
-        risk_level: int = Output(initial=RISK_LOW, domain=RISK_DOMAIN)
+    class State(NodeState):
+        risk_level: int = Var(init=RISK_LOW, domain=RISK_DOMAIN)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return RiskScorer().run(inputs)  # type: ignore[arg-type]
+    def update(self, inputs: Inputs) -> State:
+        return RiskScorer().update(inputs)  # type: ignore[arg-type]
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -251,54 +251,54 @@ class RiskScorerV1(Node):
 
 class SprinklerCmd(Node):
     class Inputs(NodeInputs):
-        action_plan: int = Input(source="PriorityArbiter.action_plan")
+        action_plan: int = Input(src="PriorityArbiter.action_plan")
 
-    class Outputs(NodeOutputs):
-        sprinkler_on: bool = Output(initial=False)
+    class State(NodeState):
+        sprinkler_on: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         on = inputs.action_plan in (ACT_SPRINKLER_AND_ALARM, ACT_FIRE_OVER_LEAK)
-        return self.Outputs(sprinkler_on=on)
+        return self.State(sprinkler_on=on)
 
 
 class ValveCmd(Node):
     class Inputs(NodeInputs):
-        action_plan: int = Input(source="PriorityArbiter.action_plan")
+        action_plan: int = Input(src="PriorityArbiter.action_plan")
 
-    class Outputs(NodeOutputs):
-        valve_closed: bool = Output(initial=False)
+    class State(NodeState):
+        valve_closed: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         closed = inputs.action_plan in (ACT_CLOSE_VALVE, ACT_FIRE_OVER_LEAK)
-        return self.Outputs(valve_closed=closed)
+        return self.State(valve_closed=closed)
 
 
 class AlarmCmd(Node):
     class Inputs(NodeInputs):
-        action_plan: int = Input(source="PriorityArbiter.action_plan")
+        action_plan: int = Input(src="PriorityArbiter.action_plan")
 
-    class Outputs(NodeOutputs):
-        alarm_on: bool = Output(initial=False)
+    class State(NodeState):
+        alarm_on: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         on = inputs.action_plan in (
             ACT_ALARM_ONLY,
             ACT_SPRINKLER_AND_ALARM,
             ACT_FIRE_OVER_LEAK,
             ACT_USER_ALERT,
         )
-        return self.Outputs(alarm_on=on)
+        return self.State(alarm_on=on)
 
 
 class NotifCmd(Node):
     class Inputs(NodeInputs):
-        action_plan: int = Input(source="PriorityArbiter.action_plan")
+        action_plan: int = Input(src="PriorityArbiter.action_plan")
 
-    class Outputs(NodeOutputs):
-        notif_sent: bool = Output(initial=False)
+    class State(NodeState):
+        notif_sent: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(notif_sent=inputs.action_plan != ACT_NOOP)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(notif_sent=inputs.action_plan != ACT_NOOP)
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -308,46 +308,46 @@ class NotifCmd(Node):
 
 class SprinklerVerify(Node):
     class Inputs(NodeInputs):
-        sprinkler_on: bool = Input(source="SprinklerCmd.sprinkler_on")
+        sprinkler_on: bool = Input(src="SprinklerCmd.sprinkler_on")
 
-    class Outputs(NodeOutputs):
-        sprinkler_acked: bool = Output(initial=False)
+    class State(NodeState):
+        sprinkler_acked: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(sprinkler_acked=True)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(sprinkler_acked=True)
 
 
 class ValveVerify(Node):
     class Inputs(NodeInputs):
-        valve_closed: bool = Input(source="ValveCmd.valve_closed")
+        valve_closed: bool = Input(src="ValveCmd.valve_closed")
 
-    class Outputs(NodeOutputs):
-        valve_acked: bool = Output(initial=False)
+    class State(NodeState):
+        valve_acked: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(valve_acked=True)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(valve_acked=True)
 
 
 class AlarmVerify(Node):
     class Inputs(NodeInputs):
-        alarm_on: bool = Input(source="AlarmCmd.alarm_on")
+        alarm_on: bool = Input(src="AlarmCmd.alarm_on")
 
-    class Outputs(NodeOutputs):
-        alarm_acked: bool = Output(initial=False)
+    class State(NodeState):
+        alarm_acked: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(alarm_acked=True)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(alarm_acked=True)
 
 
 class NotifVerify(Node):
     class Inputs(NodeInputs):
-        notif_sent: bool = Input(source="NotifCmd.notif_sent")
+        notif_sent: bool = Input(src="NotifCmd.notif_sent")
 
-    class Outputs(NodeOutputs):
-        notif_acked: bool = Output(initial=False)
+    class State(NodeState):
+        notif_acked: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(notif_acked=True)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(notif_acked=True)
 
 
 # Helper retry counter for v3
@@ -355,13 +355,13 @@ class AttemptCounter(Node):
     """Increments a retry counter. Lives in COMMAND phase for v3."""
 
     class Inputs(NodeInputs):
-        attempts: int = Input(source="AttemptCounter.attempts")
+        attempts: int = Input(src="AttemptCounter.attempts")
 
-    class Outputs(NodeOutputs):
-        attempts: int = Output(initial=0, domain=(0, 1, 2, 3))
+    class State(NodeState):
+        attempts: int = Var(init=0, domain=(0, 1, 2, 3))
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(attempts=min(inputs.attempts + 1, 3))
+    def update(self, inputs: Inputs) -> State:
+        return self.State(attempts=min(inputs.attempts + 1, 3))
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -369,10 +369,10 @@ class AttemptCounter(Node):
 # ────────────────────────────────────────────────────────────────────
 
 ALL_ACKED = (
-    V(SprinklerVerify.Outputs.sprinkler_acked)
-    & V(ValveVerify.Outputs.valve_acked)
-    & V(AlarmVerify.Outputs.alarm_acked)
-    & V(NotifVerify.Outputs.notif_acked)
+    V(SprinklerVerify.State.sprinkler_acked)
+    & V(ValveVerify.State.valve_acked)
+    & V(AlarmVerify.State.alarm_acked)
+    & V(NotifVerify.State.notif_acked)
 )
 
 
@@ -478,7 +478,7 @@ def build_v3() -> PhasedReactiveSystem:
     Intuitively: 'retry only while attempts < 3'. Under F_max the
     AttemptCounter can write attempts := 0 every time, so the cycle
     is still feasible -- C2* rejects with a witness."""
-    attempts_lt_3 = V(AttemptCounter.Outputs.attempts) < 3
+    attempts_lt_3 = V(AttemptCounter.State.attempts) < 3
     cycle_back = (~ALL_ACKED) & attempts_lt_3
     finalise = ALL_ACKED | (~attempts_lt_3)
     smoke, heat, leak, temp = SmokeSensor(), HeatSensor(), LeakSensor(), TempSensor()

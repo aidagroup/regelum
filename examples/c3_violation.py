@@ -4,18 +4,18 @@ from regelum import (
     CompileError,
     If,
     Node,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
 
 class ModeSource(Node):
-    class Outputs(NodeOutputs):
-        ready: bool = Output(initial=False)
+    class State(NodeState):
+        ready: bool = Var(init=False)
 
 
 def build_system() -> PhasedReactiveSystem:

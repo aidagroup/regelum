@@ -19,11 +19,11 @@ from regelum import (
     If,
     Input,
     Node,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
@@ -50,17 +50,17 @@ class ScenarioProfile(Node):
         self.wind_power_profile_kw = wind_power_profile_kw or _wind_power_profile_kw
         self.load_profile_kw = load_profile_kw or _load_profile_kw
 
-    class Outputs(NodeOutputs):
-        time: float = Output(initial=lambda self: cast(ScenarioProfile, self).init_time)
-        wind_power_available_kw: float = Output(initial=0.0)
-        load_power_kw: float = Output(initial=28.0)
+    class State(NodeState):
+        time: float = Var(init=lambda self: cast(ScenarioProfile, self).init_time)
+        wind_power_available_kw: float = Var(init=0.0)
+        load_power_kw: float = Var(init=28.0)
 
-    def run(
+    def update(
         self,
-        time: float = Input(source=lambda: ScenarioProfile.Outputs.time),
-    ) -> Outputs:
+        time: float = Input(src=lambda: ScenarioProfile.State.time),
+    ) -> State:
         next_time = time + self.dt
-        return self.Outputs(
+        return self.State(
             time=next_time,
             wind_power_available_kw=self.wind_power_profile_kw(next_time),
             load_power_kw=self.load_profile_kw(next_time),
@@ -71,67 +71,67 @@ class WindTurbinePMSG(Node):
     def __init__(self, *, converter_voltage_v: float = 520.0) -> None:
         self.converter_voltage_v = converter_voltage_v
 
-    class Outputs(NodeOutputs):
-        generated_power_kw: float = Output(initial=0.0)
-        current_a: float = Output(initial=0.0)
+    class State(NodeState):
+        generated_power_kw: float = Var(init=0.0)
+        current_a: float = Var(init=0.0)
 
-    def run(
+    def update(
         self,
         wind_power_available_kw: float = Input(
-            source=ScenarioProfile.Outputs.wind_power_available_kw
+            src=ScenarioProfile.State.wind_power_available_kw
         ),
-        mppt_efficiency: float = Input(source=lambda: MpptController.Outputs.efficiency),
-    ) -> Outputs:
+        mppt_efficiency: float = Input(src=lambda: MpptController.State.efficiency),
+    ) -> State:
         generated_power = wind_power_available_kw * mppt_efficiency
         current = 1000.0 * generated_power / self.converter_voltage_v
-        return self.Outputs(generated_power_kw=generated_power, current_a=current)
+        return self.State(generated_power_kw=generated_power, current_a=current)
 
 
 class MpptController(Node):
-    class Outputs(NodeOutputs):
-        duty: float = Output(initial=0.82)
-        efficiency: float = Output(initial=0.94)
+    class State(NodeState):
+        duty: float = Var(init=0.82)
+        efficiency: float = Var(init=0.94)
 
-    def run(
+    def update(
         self,
         wind_power_available_kw: float = Input(
-            source=ScenarioProfile.Outputs.wind_power_available_kw
+            src=ScenarioProfile.State.wind_power_available_kw
         ),
         previous_wind_power_kw: float = Input(
-            source=ScenarioProfile.Outputs.wind_power_available_kw
+            src=ScenarioProfile.State.wind_power_available_kw
         ),
-        duty: float = Input(source=lambda: MpptController.Outputs.duty),
-    ) -> Outputs:
+        duty: float = Input(src=lambda: MpptController.State.duty),
+    ) -> State:
         direction = 1.0 if wind_power_available_kw >= previous_wind_power_kw else -1.0
         duty_next = _clamp(duty + 0.01 * direction, 0.72, 1.0)
         efficiency = 0.90 + 0.08 * duty_next
-        return self.Outputs(duty=duty_next, efficiency=efficiency)
+        return self.State(duty=duty_next, efficiency=efficiency)
 
 
 class WaterTreatmentLoad(Node):
-    class Outputs(NodeOutputs):
-        load_power_kw: float = Output(initial=28.0)
+    class State(NodeState):
+        load_power_kw: float = Var(init=28.0)
 
-    def run(
+    def update(
         self,
-        load_power_kw: float = Input(source=ScenarioProfile.Outputs.load_power_kw),
-    ) -> Outputs:
-        return self.Outputs(load_power_kw=load_power_kw)
+        load_power_kw: float = Input(src=ScenarioProfile.State.load_power_kw),
+    ) -> State:
+        return self.State(load_power_kw=load_power_kw)
 
 
 class PowerFlowSupervisor(Node):
-    class Outputs(NodeOutputs):
-        mode: MicrogridMode = Output(initial=MicrogridMode.DG_CHARGING)
-        diesel_enabled: bool = Output(initial=True)
-        dump_load_enabled: bool = Output(initial=False)
+    class State(NodeState):
+        mode: MicrogridMode = Var(init=MicrogridMode.DG_CHARGING)
+        diesel_enabled: bool = Var(init=True)
+        dump_load_enabled: bool = Var(init=False)
 
-    def run(
+    def update(
         self,
-        soc_percent: float = Input(source=lambda: Battery.Outputs.soc_percent),
-        wind_power_kw: float = Input(source=WindTurbinePMSG.Outputs.generated_power_kw),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
-        diesel_enabled: bool = Input(source=lambda: PowerFlowSupervisor.Outputs.diesel_enabled),
-    ) -> Outputs:
+        soc_percent: float = Input(src=lambda: Battery.State.soc_percent),
+        wind_power_kw: float = Input(src=WindTurbinePMSG.State.generated_power_kw),
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_power_kw),
+        diesel_enabled: bool = Input(src=lambda: PowerFlowSupervisor.State.diesel_enabled),
+    ) -> State:
         dump_load_enabled = soc_percent >= 100.0 and wind_power_kw > load_power_kw
         if diesel_enabled:
             diesel_next = soc_percent < 70.0
@@ -149,7 +149,7 @@ class PowerFlowSupervisor(Node):
         else:
             mode = MicrogridMode.WT_BATTERY_DISCHARGING
 
-        return self.Outputs(
+        return self.State(
             mode=mode,
             diesel_enabled=diesel_next,
             dump_load_enabled=dump_load_enabled,
@@ -159,19 +159,19 @@ class PowerFlowSupervisor(Node):
 class DieselGenerator(Node):
     rated_power_kw = 50.0
 
-    class Outputs(NodeOutputs):
-        generated_power_kw: float = Output(initial=40.0)
-        speed_rpm: float = Output(initial=1800.0)
+    class State(NodeState):
+        generated_power_kw: float = Var(init=40.0)
+        speed_rpm: float = Var(init=1800.0)
 
-    def run(
+    def update(
         self,
-        diesel_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.diesel_enabled),
-        speed_rpm: float = Input(source=lambda: DieselGenerator.Outputs.speed_rpm),
-    ) -> Outputs:
+        diesel_enabled: bool = Input(src=PowerFlowSupervisor.State.diesel_enabled),
+        speed_rpm: float = Input(src=lambda: DieselGenerator.State.speed_rpm),
+    ) -> State:
         target_speed = 1800.0 if diesel_enabled else 0.0
         speed_next = speed_rpm + 0.35 * (target_speed - speed_rpm)
         power = self.rated_power_kw if diesel_enabled else 0.0
-        return self.Outputs(generated_power_kw=power, speed_rpm=speed_next)
+        return self.State(generated_power_kw=power, speed_rpm=speed_next)
 
 
 class PowerBalance(Node):
@@ -179,19 +179,19 @@ class PowerBalance(Node):
         self.max_charge_kw = max_charge_kw
         self.max_discharge_kw = max_discharge_kw
 
-    class Outputs(NodeOutputs):
+    class State(NodeState):
         battery_power_kw: float
         dump_load_power_kw: float
         unserved_power_kw: float
 
-    def run(
+    def update(
         self,
-        wind_power_kw: float = Input(source=WindTurbinePMSG.Outputs.generated_power_kw),
-        diesel_power_kw: float = Input(source=DieselGenerator.Outputs.generated_power_kw),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
-        soc_percent: float = Input(source=lambda: Battery.Outputs.soc_percent),
-        dump_load_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.dump_load_enabled),
-    ) -> Outputs:
+        wind_power_kw: float = Input(src=WindTurbinePMSG.State.generated_power_kw),
+        diesel_power_kw: float = Input(src=DieselGenerator.State.generated_power_kw),
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_power_kw),
+        soc_percent: float = Input(src=lambda: Battery.State.soc_percent),
+        dump_load_enabled: bool = Input(src=PowerFlowSupervisor.State.dump_load_enabled),
+    ) -> State:
         surplus = wind_power_kw + diesel_power_kw - load_power_kw
         dump_load_power = max(0.0, surplus) if dump_load_enabled else 0.0
         surplus_after_dump = surplus - dump_load_power
@@ -199,7 +199,7 @@ class PowerBalance(Node):
         max_discharge = self.max_discharge_kw if soc_percent > 0.0 else 0.0
         battery_power = _clamp(surplus_after_dump, -max_discharge, max_charge)
         unserved_power = surplus_after_dump - battery_power
-        return self.Outputs(
+        return self.State(
             battery_power_kw=battery_power,
             dump_load_power_kw=dump_load_power,
             unserved_power_kw=unserved_power,
@@ -220,19 +220,19 @@ class Battery(Node):
         self.nominal_voltage_v = nominal_voltage_v
         self.dt = dt
 
-    class Outputs(NodeOutputs):
-        soc_percent: float = Output(initial=lambda self: cast(Battery, self).init_soc_percent)
-        current_a: float = Output(initial=0.0)
+    class State(NodeState):
+        soc_percent: float = Var(init=lambda self: cast(Battery, self).init_soc_percent)
+        current_a: float = Var(init=0.0)
 
-    def run(
+    def update(
         self,
-        battery_power_kw: float = Input(source=PowerBalance.Outputs.battery_power_kw),
-        soc_percent: float = Input(source=lambda: Battery.Outputs.soc_percent),
-    ) -> Outputs:
+        battery_power_kw: float = Input(src=PowerBalance.State.battery_power_kw),
+        soc_percent: float = Input(src=lambda: Battery.State.soc_percent),
+    ) -> State:
         delta_soc = 100.0 * battery_power_kw * self.dt / (3600.0 * self.effective_capacity_kwh)
         soc_next = _clamp(soc_percent + delta_soc, 0.0, 100.0)
         current = -1000.0 * battery_power_kw / self.nominal_voltage_v
-        return self.Outputs(soc_percent=soc_next, current_a=current)
+        return self.State(soc_percent=soc_next, current_a=current)
 
 
 class DcBus(Node):
@@ -261,28 +261,28 @@ class DcBus(Node):
         self.transient_decay = transient_decay
         self.response = response
 
-    class Outputs(NodeOutputs):
-        voltage_v: float = Output(initial=350.0)
-        transient_v: float = Output(initial=0.0)
-        previous_wind_power_kw: float = Output(initial=3.0)
-        previous_diesel_power_kw: float = Output(initial=50.0)
-        previous_load_power_kw: float = Output(initial=42.0)
+    class State(NodeState):
+        voltage_v: float = Var(init=350.0)
+        transient_v: float = Var(init=0.0)
+        previous_wind_power_kw: float = Var(init=3.0)
+        previous_diesel_power_kw: float = Var(init=50.0)
+        previous_load_power_kw: float = Var(init=42.0)
 
-    def run(
+    def update(
         self,
-        battery_power_kw: float = Input(source=PowerBalance.Outputs.battery_power_kw),
-        wind_power_kw: float = Input(source=WindTurbinePMSG.Outputs.generated_power_kw),
-        diesel_power_kw: float = Input(source=DieselGenerator.Outputs.generated_power_kw),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
-        unserved_power_kw: float = Input(source=PowerBalance.Outputs.unserved_power_kw),
-        voltage_v: float = Input(source=lambda: DcBus.Outputs.voltage_v),
-        transient_v: float = Input(source=lambda: DcBus.Outputs.transient_v),
-        previous_wind_power_kw: float = Input(source=lambda: DcBus.Outputs.previous_wind_power_kw),
+        battery_power_kw: float = Input(src=PowerBalance.State.battery_power_kw),
+        wind_power_kw: float = Input(src=WindTurbinePMSG.State.generated_power_kw),
+        diesel_power_kw: float = Input(src=DieselGenerator.State.generated_power_kw),
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_power_kw),
+        unserved_power_kw: float = Input(src=PowerBalance.State.unserved_power_kw),
+        voltage_v: float = Input(src=lambda: DcBus.State.voltage_v),
+        transient_v: float = Input(src=lambda: DcBus.State.transient_v),
+        previous_wind_power_kw: float = Input(src=lambda: DcBus.State.previous_wind_power_kw),
         previous_diesel_power_kw: float = Input(
-            source=lambda: DcBus.Outputs.previous_diesel_power_kw
+            src=lambda: DcBus.State.previous_diesel_power_kw
         ),
-        previous_load_power_kw: float = Input(source=lambda: DcBus.Outputs.previous_load_power_kw),
-    ) -> Outputs:
+        previous_load_power_kw: float = Input(src=lambda: DcBus.State.previous_load_power_kw),
+    ) -> State:
         step_v = (
             self.wind_step_gain_v_per_kw * (wind_power_kw - previous_wind_power_kw)
             + self.diesel_step_gain_v_per_kw * (diesel_power_kw - previous_diesel_power_kw)
@@ -299,7 +299,7 @@ class DcBus(Node):
         )
         target = _clamp(target, 330.0, 356.0)
         voltage_next = voltage_v + self.response * (target - voltage_v)
-        return self.Outputs(
+        return self.State(
             voltage_v=voltage_next,
             transient_v=transient_next,
             previous_wind_power_kw=wind_power_kw,
@@ -334,34 +334,34 @@ class PccRegulator(Node):
         self.transient_decay = transient_decay
         self.response = response
 
-    class Outputs(NodeOutputs):
-        voltage_v: float = Output(initial=460.0)
-        frequency_hz: float = Output(initial=60.095)
-        voltage_transient_v: float = Output(initial=0.0)
-        previous_wind_power_kw: float = Output(initial=3.0)
-        previous_diesel_power_kw: float = Output(initial=50.0)
-        previous_load_power_kw: float = Output(initial=42.0)
+    class State(NodeState):
+        voltage_v: float = Var(init=460.0)
+        frequency_hz: float = Var(init=60.095)
+        voltage_transient_v: float = Var(init=0.0)
+        previous_wind_power_kw: float = Var(init=3.0)
+        previous_diesel_power_kw: float = Var(init=50.0)
+        previous_load_power_kw: float = Var(init=42.0)
 
-    def run(
+    def update(
         self,
-        dc_bus_voltage_v: float = Input(source=DcBus.Outputs.voltage_v),
-        unserved_power_kw: float = Input(source=PowerBalance.Outputs.unserved_power_kw),
-        wind_power_kw: float = Input(source=WindTurbinePMSG.Outputs.generated_power_kw),
-        diesel_power_kw: float = Input(source=DieselGenerator.Outputs.generated_power_kw),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
-        voltage_v: float = Input(source=lambda: PccRegulator.Outputs.voltage_v),
-        frequency_hz: float = Input(source=lambda: PccRegulator.Outputs.frequency_hz),
-        voltage_transient_v: float = Input(source=lambda: PccRegulator.Outputs.voltage_transient_v),
+        dc_bus_voltage_v: float = Input(src=DcBus.State.voltage_v),
+        unserved_power_kw: float = Input(src=PowerBalance.State.unserved_power_kw),
+        wind_power_kw: float = Input(src=WindTurbinePMSG.State.generated_power_kw),
+        diesel_power_kw: float = Input(src=DieselGenerator.State.generated_power_kw),
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_power_kw),
+        voltage_v: float = Input(src=lambda: PccRegulator.State.voltage_v),
+        frequency_hz: float = Input(src=lambda: PccRegulator.State.frequency_hz),
+        voltage_transient_v: float = Input(src=lambda: PccRegulator.State.voltage_transient_v),
         previous_wind_power_kw: float = Input(
-            source=lambda: PccRegulator.Outputs.previous_wind_power_kw
+            src=lambda: PccRegulator.State.previous_wind_power_kw
         ),
         previous_diesel_power_kw: float = Input(
-            source=lambda: PccRegulator.Outputs.previous_diesel_power_kw
+            src=lambda: PccRegulator.State.previous_diesel_power_kw
         ),
         previous_load_power_kw: float = Input(
-            source=lambda: PccRegulator.Outputs.previous_load_power_kw
+            src=lambda: PccRegulator.State.previous_load_power_kw
         ),
-    ) -> Outputs:
+    ) -> State:
         load_delta_kw = load_power_kw - previous_load_power_kw
         diesel_delta_kw = diesel_power_kw - previous_diesel_power_kw
         wind_delta_kw = wind_power_kw - previous_wind_power_kw
@@ -385,7 +385,7 @@ class PccRegulator(Node):
         )
         voltage_next = voltage_v + 0.60 * (voltage_target - voltage_v)
         frequency_next = frequency_hz + self.response * (frequency_target - frequency_hz)
-        return self.Outputs(
+        return self.State(
             voltage_v=voltage_next,
             frequency_hz=frequency_next,
             voltage_transient_v=voltage_transient_next,
@@ -399,15 +399,15 @@ class Inverter(Node):
     def __init__(self, *, efficiency: float = 0.97) -> None:
         self.efficiency = efficiency
 
-    class Outputs(NodeOutputs):
-        current_peak_a: float = Output(initial=0.0)
+    class State(NodeState):
+        current_peak_a: float = Var(init=0.0)
 
-    def run(
+    def update(
         self,
-        diesel_power_kw: float = Input(source=DieselGenerator.Outputs.generated_power_kw),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
-        pcc_voltage_v: float = Input(source=PccRegulator.Outputs.voltage_v),
-    ) -> Outputs:
+        diesel_power_kw: float = Input(src=DieselGenerator.State.generated_power_kw),
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_power_kw),
+        pcc_voltage_v: float = Input(src=PccRegulator.State.voltage_v),
+    ) -> State:
         voltage = max(abs(pcc_voltage_v), 1.0)
         inverter_ac_power_kw = load_power_kw - diesel_power_kw
         ac_power_kw = (
@@ -417,34 +417,34 @@ class Inverter(Node):
         )
         current_rms_a = 1000.0 * abs(ac_power_kw) / (sqrt(3.0) * voltage)
         current_peak_a = (1.0 if ac_power_kw >= 0.0 else -1.0) * sqrt(2.0) * current_rms_a
-        return self.Outputs(current_peak_a=current_peak_a)
+        return self.State(current_peak_a=current_peak_a)
 
 
 class MicrogridLogger(Node):
-    class Outputs(NodeOutputs):
-        samples: list[dict[str, float | str | bool]] = Output(initial=list)
+    class State(NodeState):
+        samples: list[dict[str, float | str | bool]] = Var(init=list)
 
-    def run(
+    def update(
         self,
-        time: float = Input(source=ScenarioProfile.Outputs.time),
-        mode: MicrogridMode = Input(source=PowerFlowSupervisor.Outputs.mode),
-        wind_power_kw: float = Input(source=WindTurbinePMSG.Outputs.generated_power_kw),
-        wind_current_a: float = Input(source=WindTurbinePMSG.Outputs.current_a),
-        diesel_power_kw: float = Input(source=DieselGenerator.Outputs.generated_power_kw),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_power_kw),
-        battery_power_kw: float = Input(source=PowerBalance.Outputs.battery_power_kw),
-        battery_current_a: float = Input(source=Battery.Outputs.current_a),
-        dump_load_power_kw: float = Input(source=PowerBalance.Outputs.dump_load_power_kw),
-        soc_percent: float = Input(source=Battery.Outputs.soc_percent),
-        dc_bus_voltage_v: float = Input(source=DcBus.Outputs.voltage_v),
-        pcc_voltage_v: float = Input(source=PccRegulator.Outputs.voltage_v),
-        frequency_hz: float = Input(source=PccRegulator.Outputs.frequency_hz),
-        inverter_current_a: float = Input(source=Inverter.Outputs.current_peak_a),
-        diesel_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.diesel_enabled),
+        time: float = Input(src=ScenarioProfile.State.time),
+        mode: MicrogridMode = Input(src=PowerFlowSupervisor.State.mode),
+        wind_power_kw: float = Input(src=WindTurbinePMSG.State.generated_power_kw),
+        wind_current_a: float = Input(src=WindTurbinePMSG.State.current_a),
+        diesel_power_kw: float = Input(src=DieselGenerator.State.generated_power_kw),
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_power_kw),
+        battery_power_kw: float = Input(src=PowerBalance.State.battery_power_kw),
+        battery_current_a: float = Input(src=Battery.State.current_a),
+        dump_load_power_kw: float = Input(src=PowerBalance.State.dump_load_power_kw),
+        soc_percent: float = Input(src=Battery.State.soc_percent),
+        dc_bus_voltage_v: float = Input(src=DcBus.State.voltage_v),
+        pcc_voltage_v: float = Input(src=PccRegulator.State.voltage_v),
+        frequency_hz: float = Input(src=PccRegulator.State.frequency_hz),
+        inverter_current_a: float = Input(src=Inverter.State.current_peak_a),
+        diesel_enabled: bool = Input(src=PowerFlowSupervisor.State.diesel_enabled),
         samples: list[dict[str, float | str | bool]] = Input(
-            source=lambda: MicrogridLogger.Outputs.samples
+            src=lambda: MicrogridLogger.State.samples
         ),
-    ) -> Outputs:
+    ) -> State:
         sample: dict[str, float | str | bool] = {
             "time": time,
             "mode": mode.value,
@@ -463,7 +463,7 @@ class MicrogridLogger(Node):
             "diesel_enabled": diesel_enabled,
         }
         samples.append(sample)
-        return self.Outputs(samples=samples)
+        return self.State(samples=samples)
 
 
 def build_system(
@@ -557,27 +557,27 @@ def build_system(
                 nodes=(supervisor,),
                 transitions=(
                     If(
-                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.WT_CHARGING,
+                        V(PowerFlowSupervisor.State.mode) == MicrogridMode.WT_CHARGING,
                         "wt_charging_source",
                         name="wt_charging",
                     ),
                     ElseIf(
-                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.WT_BATTERY_DISCHARGING,
+                        V(PowerFlowSupervisor.State.mode) == MicrogridMode.WT_BATTERY_DISCHARGING,
                         "wt_battery_discharging_source",
                         name="wt_battery_discharging",
                     ),
                     ElseIf(
-                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.DG_CHARGING,
+                        V(PowerFlowSupervisor.State.mode) == MicrogridMode.DG_CHARGING,
                         "dg_charging_source",
                         name="dg_charging",
                     ),
                     ElseIf(
-                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.DG_WT_FAST_CHARGING,
+                        V(PowerFlowSupervisor.State.mode) == MicrogridMode.DG_WT_FAST_CHARGING,
                         "dg_wt_fast_charging_source",
                         name="dg_wt_fast_charging",
                     ),
                     ElseIf(
-                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.DUMP_LOAD,
+                        V(PowerFlowSupervisor.State.mode) == MicrogridMode.DUMP_LOAD,
                         "dump_load_source",
                         name="dump_load",
                     ),
@@ -1289,8 +1289,8 @@ Digitized paper output traces are not used to overwrite simulated output channel
 ## Remaining mismatch
 
 Fig. 9 uses CSV-backed external wind and load inputs; battery current, SOC, DC bus voltage,
-and frequency are still Regelum outputs.
-Fig. 10-11 use Regelum model outputs with paper-comparable axes and calibrated scenario parameters.
+and frequency are still Regelum state variables.
+Fig. 10-11 use Regelum model state variables with paper-comparable axes and calibrated scenario parameters.
 The high-frequency traces are synthesized 60 Hz envelopes from Regelum state, not a switching power-electronics simulation.
 """
     path.write_text(report, encoding="utf-8")

@@ -7,11 +7,11 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
@@ -20,18 +20,18 @@ class MicrogridMeasurements(Node):
     """Local current-voltage measurements for the Rachi et al. SS-DCCB logic."""
 
     class Inputs(NodeInputs):
-        breaker_open: bool = Input(source="BreakerActuator.Outputs.breaker_open")
-        tick: int = Input(source="MicrogridMeasurements.Outputs.tick")
+        breaker_open: bool = Input(src="BreakerActuator.State.breaker_open")
+        tick: int = Input(src="MicrogridMeasurements.State.tick")
 
-    class Outputs(NodeOutputs):
-        tick: int = Output(initial=0, domain=range(0, 8))
-        bus_voltage: float = Output(initial=380.0)
-        branch_current: float = Output(initial=0.5)
-        current_above_inst: bool = Output(initial=False)
-        current_above_pickup: bool = Output(initial=False)
-        voltage_low: bool = Output(initial=False)
+    class State(NodeState):
+        tick: int = Var(init=0, domain=range(0, 8))
+        bus_voltage: float = Var(init=380.0)
+        branch_current: float = Var(init=0.5)
+        current_above_inst: bool = Var(init=False)
+        current_above_pickup: bool = Var(init=False)
+        voltage_low: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         next_tick = inputs.tick + 1
         if inputs.breaker_open:
             voltage = 380.0
@@ -43,7 +43,7 @@ class MicrogridMeasurements(Node):
             voltage = 380.0
             current = 0.5
 
-        return self.Outputs(
+        return self.State(
             tick=next_tick,
             bus_voltage=voltage,
             branch_current=current,
@@ -55,28 +55,28 @@ class MicrogridMeasurements(Node):
 
 class InstantTripDecision(Node):
     class Inputs(NodeInputs):
-        current_above_inst: bool = Input(source=MicrogridMeasurements.Outputs.current_above_inst)
+        current_above_inst: bool = Input(src=MicrogridMeasurements.State.current_above_inst)
 
-    class Outputs(NodeOutputs):
-        instant_trip: bool = Output(initial=False)
+    class State(NodeState):
+        instant_trip: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(instant_trip=inputs.current_above_inst)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(instant_trip=inputs.current_above_inst)
 
 
 class FaultFlagLatch(Node):
     class Inputs(NodeInputs):
         current_above_pickup: bool = Input(
-            source=MicrogridMeasurements.Outputs.current_above_pickup
+            src=MicrogridMeasurements.State.current_above_pickup
         )
-        voltage_low: bool = Input(source=MicrogridMeasurements.Outputs.voltage_low)
+        voltage_low: bool = Input(src=MicrogridMeasurements.State.voltage_low)
 
-    class Outputs(NodeOutputs):
-        current_flag: bool = Output(initial=False)
-        voltage_flag: bool = Output(initial=False)
+    class State(NodeState):
+        current_flag: bool = Var(init=False)
+        voltage_flag: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
+    def update(self, inputs: Inputs) -> State:
+        return self.State(
             current_flag=inputs.current_above_pickup,
             voltage_flag=inputs.voltage_low,
         )
@@ -84,21 +84,21 @@ class FaultFlagLatch(Node):
 
 class ProtectionTimers(Node):
     class Inputs(NodeInputs):
-        current_flag: bool = Input(source=FaultFlagLatch.Outputs.current_flag)
-        voltage_flag: bool = Input(source=FaultFlagLatch.Outputs.voltage_flag)
-        current_counter: int = Input(source="ProtectionTimers.Outputs.current_counter")
-        voltage_counter: int = Input(source="ProtectionTimers.Outputs.voltage_counter")
+        current_flag: bool = Input(src=FaultFlagLatch.State.current_flag)
+        voltage_flag: bool = Input(src=FaultFlagLatch.State.voltage_flag)
+        current_counter: int = Input(src="ProtectionTimers.State.current_counter")
+        voltage_counter: int = Input(src="ProtectionTimers.State.voltage_counter")
 
-    class Outputs(NodeOutputs):
-        current_counter: int = Output(initial=0, domain=range(0, 4))
-        voltage_counter: int = Output(initial=0, domain=range(0, 4))
-        current_delay_elapsed: bool = Output(initial=False)
-        voltage_delay_elapsed: bool = Output(initial=False)
+    class State(NodeState):
+        current_counter: int = Var(init=0, domain=range(0, 4))
+        voltage_counter: int = Var(init=0, domain=range(0, 4))
+        current_delay_elapsed: bool = Var(init=False)
+        voltage_delay_elapsed: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         current_counter = inputs.current_counter + 1 if inputs.current_flag else 0
         voltage_counter = inputs.voltage_counter + 1 if inputs.voltage_flag else 0
-        return self.Outputs(
+        return self.State(
             current_counter=min(current_counter, 3),
             voltage_counter=min(voltage_counter, 3),
             current_delay_elapsed=current_counter >= 2,
@@ -108,23 +108,23 @@ class ProtectionTimers(Node):
 
 class BreakerActuator(Node):
     class Inputs(NodeInputs):
-        instant_trip: bool = Input(source=InstantTripDecision.Outputs.instant_trip)
-        current_flag: bool = Input(source=FaultFlagLatch.Outputs.current_flag)
-        voltage_flag: bool = Input(source=FaultFlagLatch.Outputs.voltage_flag)
-        current_delay_elapsed: bool = Input(source=ProtectionTimers.Outputs.current_delay_elapsed)
-        voltage_delay_elapsed: bool = Input(source=ProtectionTimers.Outputs.voltage_delay_elapsed)
-        breaker_open: bool = Input(source="BreakerActuator.Outputs.breaker_open")
+        instant_trip: bool = Input(src=InstantTripDecision.State.instant_trip)
+        current_flag: bool = Input(src=FaultFlagLatch.State.current_flag)
+        voltage_flag: bool = Input(src=FaultFlagLatch.State.voltage_flag)
+        current_delay_elapsed: bool = Input(src=ProtectionTimers.State.current_delay_elapsed)
+        voltage_delay_elapsed: bool = Input(src=ProtectionTimers.State.voltage_delay_elapsed)
+        breaker_open: bool = Input(src="BreakerActuator.State.breaker_open")
 
-    class Outputs(NodeOutputs):
-        breaker_open: bool = Output(initial=False)
-        tripped: bool = Output(initial=False)
+    class State(NodeState):
+        breaker_open: bool = Var(init=False)
+        tripped: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         delayed_trip = inputs.current_flag and (
             inputs.current_delay_elapsed or (inputs.voltage_flag and inputs.voltage_delay_elapsed)
         )
         tripped = inputs.instant_trip or delayed_trip
-        return self.Outputs(
+        return self.State(
             breaker_open=inputs.breaker_open or tripped,
             tripped=tripped,
         )
@@ -132,20 +132,20 @@ class BreakerActuator(Node):
 
 class ProtectionLogger(Node):
     class Inputs(NodeInputs):
-        tick: int = Input(source=MicrogridMeasurements.Outputs.tick)
-        bus_voltage: float = Input(source=MicrogridMeasurements.Outputs.bus_voltage)
-        branch_current: float = Input(source=MicrogridMeasurements.Outputs.branch_current)
-        current_flag: bool = Input(source=FaultFlagLatch.Outputs.current_flag)
-        voltage_flag: bool = Input(source=FaultFlagLatch.Outputs.voltage_flag)
-        breaker_open: bool = Input(source=BreakerActuator.Outputs.breaker_open)
+        tick: int = Input(src=MicrogridMeasurements.State.tick)
+        bus_voltage: float = Input(src=MicrogridMeasurements.State.bus_voltage)
+        branch_current: float = Input(src=MicrogridMeasurements.State.branch_current)
+        current_flag: bool = Input(src=FaultFlagLatch.State.current_flag)
+        voltage_flag: bool = Input(src=FaultFlagLatch.State.voltage_flag)
+        breaker_open: bool = Input(src=BreakerActuator.State.breaker_open)
         log: tuple[tuple[int, float, float, bool, bool, bool], ...] = Input(
-            source="ProtectionLogger.Outputs.log"
+            src="ProtectionLogger.State.log"
         )
 
-    class Outputs(NodeOutputs):
-        log: tuple[tuple[int, float, float, bool, bool, bool], ...] = Output(initial=())
+    class State(NodeState):
+        log: tuple[tuple[int, float, float, bool, bool, bool], ...] = Var(init=())
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         sample = (
             inputs.tick,
             inputs.bus_voltage,
@@ -166,7 +166,7 @@ class ProtectionLogger(Node):
                 breaker_open=inputs.breaker_open,
             )
         )
-        return self.Outputs(log=inputs.log + (sample,))
+        return self.State(log=inputs.log + (sample,))
 
 
 def _nodes() -> list[Node]:

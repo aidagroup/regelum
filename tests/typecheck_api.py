@@ -1,4 +1,4 @@
-from regelum import Input, Node, NodeInputs, NodeOutputs, Output
+from regelum import Input, Node, NodeInputs, NodeState, Var
 from regelum.examples.pendulum import PDController, PendulumPlant
 
 
@@ -9,32 +9,46 @@ def check_inputs(inputs: PDController.Inputs) -> None:
 
 
 def check_sources() -> None:
-    theta_source: float = PendulumPlant.Outputs.theta
-    torque_source: float = PDController.Outputs.torque
+    theta_source: float = PendulumPlant.State.theta
+    torque_source: float = PDController.State.torque
     _: tuple[float, float] = (theta_source, torque_source)
 
 
 class CustomSource(Node):
-    class Vars(NodeOutputs):
-        value: int = Output(initial=1)
+    class State(NodeState):
+        value: int = Var(init=1)
 
-    def run(self) -> Vars:
-        return self.Vars(value=2)
+    def update(self) -> State:
+        return self.State(value=2)
 
 
 class CustomSink(Node):
     class In(NodeInputs):
-        value: int = Input(source=lambda: CustomSource.Vars.value)
+        value: int = Input(src=lambda: CustomSource.State.value)
 
-    class Out(NodeOutputs):
-        seen: int = Output()
+    class State(NodeState):
+        seen: int = Var()
 
-    def run(self, inputs: In) -> Out:
-        return self.Out(seen=inputs.value)
+    def update(self, inputs: In) -> State:
+        return self.State(seen=inputs.value)
+
+
+class CustomAccumulator(Node):
+    class State(NodeState):
+        total: int = Var(init=0)
+
+    def update(
+        self,
+        value: int = Input(src=lambda: CustomSource.State.value),
+        *,
+        prev_state: State,
+    ) -> State:
+        total: int = prev_state.total
+        return self.State(**{"total": total + value})
 
 
 def check_custom_namespaces(source: CustomSource, sink: CustomSink) -> None:
-    source_value: int = CustomSource.Vars.value
+    source_value: int = CustomSource.State.value
     sink_input: int = sink.In.value
-    source_output: int = source.Vars.value
+    source_output: int = source.State.value
     _: tuple[int, int, int] = (source_value, sink_input, source_output)

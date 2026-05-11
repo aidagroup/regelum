@@ -12,20 +12,20 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     port,
     terminate,
 )
 
 
 class Source(Node):
-    class Outputs(NodeOutputs):
-        value: int = Output(initial=1)
-        ready: bool = Output(initial=True)
+    class State(NodeState):
+        value: int = Var(init=1)
+        ready: bool = Var(init=True)
 
     def __init__(
         self,
@@ -38,45 +38,45 @@ class Source(Node):
         self.value = value
         self.ready = ready
 
-    def run(self) -> Outputs:
-        return self.Outputs(value=self.value, ready=self.ready)
+    def update(self) -> State:
+        return self.State(value=self.value, ready=self.ready)
 
 
 class Sink(Node):
     class Inputs(NodeInputs):
-        value: int = Input(source=Source.Outputs.value)
+        value: int = Input(src=Source.State.value)
 
-    class Outputs(NodeOutputs):
-        seen: int = Output(initial=0)
+    class State(NodeState):
+        seen: int = Var(init=0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(seen=inputs.value)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(seen=inputs.value)
 
 
 class UnconnectedSink(Node):
     class Inputs(NodeInputs):
         value: int = Input()
 
-    class Outputs(NodeOutputs):
-        seen: int = Output(initial=0)
+    class State(NodeState):
+        seen: int = Var(init=0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(seen=inputs.value)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(seen=inputs.value)
 
 
 class Worker(Node):
-    class Outputs(NodeOutputs):
-        ran: bool = Output(initial=False)
+    class State(NodeState):
+        ran: bool = Var(init=False)
 
-    def run(self) -> Outputs:
-        return self.Outputs(ran=True)
+    def update(self) -> State:
+        return self.State(ran=True)
 
 
 class Flag(Node):
-    class Outputs(NodeOutputs):
-        ready: bool = Output(initial=True)
-        blocked: bool = Output(initial=False)
-        level: int = Output(initial=0)
+    class State(NodeState):
+        ready: bool = Var(init=True)
+        blocked: bool = Var(init=False)
+        level: int = Var(init=0)
 
     def __init__(
         self,
@@ -91,8 +91,8 @@ class Flag(Node):
         self.blocked = blocked
         self.level = level
 
-    def run(self) -> Outputs:
-        return self.Outputs(
+    def update(self) -> State:
+        return self.State(
             ready=self.ready,
             blocked=self.blocked,
             level=self.level,
@@ -100,30 +100,30 @@ class Flag(Node):
 
 
 class LinkA(Node):
-    class Outputs(NodeOutputs):
-        value: int = Output(initial=1)
+    class State(NodeState):
+        value: int = Var(init=1)
 
 
 class LinkB(Node):
     class Inputs(NodeInputs):
-        value: int = Input(source=LinkA.Outputs.value)
+        value: int = Input(src=LinkA.State.value)
 
-    class Outputs(NodeOutputs):
-        value: int = Output(initial=0)
+    class State(NodeState):
+        value: int = Var(init=0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(value=inputs.value)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(value=inputs.value)
 
 
 class LinkC(Node):
     class Inputs(NodeInputs):
-        value: int = Input(source=LinkB.Outputs.value)
+        value: int = Input(src=LinkB.State.value)
 
-    class Outputs(NodeOutputs):
-        value: int = Output(initial=0)
+    class State(NodeState):
+        value: int = Var(init=0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(value=inputs.value)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(value=inputs.value)
 
 
 def _single_phase_system(*nodes: Node, strict: bool = True) -> PhasedReactiveSystem:
@@ -142,6 +142,107 @@ def _single_phase_system(*nodes: Node, strict: bool = True) -> PhasedReactiveSys
 
 def _messages(error: CompileError) -> tuple[str, ...]:
     return tuple(issue.message for issue in error.report.issues)
+
+
+def test_var_uses_init_keyword_without_initial_alias() -> None:
+    old_keyword = "initial"
+    with pytest.raises(TypeError, match="unexpected keyword argument 'initial'"):
+        Var(**{old_keyword: 0})
+
+
+def test_update_can_receive_previous_state_without_declaring_self_input() -> None:
+    class Counter(Node):
+        class State(NodeState):
+            count: int = Var(init=0)
+
+        def update(self, prev_state: State) -> State:
+            return self.State(count=prev_state.count + 1)
+
+    counter = Counter()
+    system = _single_phase_system(counter)
+
+    assert system.compile_report.ok
+    assert system.compile_report.inputs == {}
+    system.run(steps=3)
+    assert system.read(counter.State.count) == 3
+
+
+def test_update_can_receive_inputs_object_and_previous_state() -> None:
+    class Accumulator(Node):
+        class Inputs(NodeInputs):
+            value: int = Input(src=Source.State.value)
+
+        class State(NodeState):
+            total: int = Var(init=0)
+
+        def update(self, inputs: Inputs, state: State) -> State:
+            return self.State(total=state.total + inputs.value)
+
+    source = Source(value=2)
+    accumulator = Accumulator()
+    system = _single_phase_system(source, accumulator)
+
+    assert system.compile_report.ok
+    assert system.compile_report.inputs["Accumulator.value"] == "Source.value"
+    system.run(steps=2)
+    assert system.read(accumulator.State.total) == 4
+
+
+def test_update_can_receive_previous_state_from_deferred_annotation() -> None:
+    class Counter(Node):
+        class State(NodeState):
+            count: int = Var(init=0)
+
+        def update(self, prev_state: "State") -> "State":
+            return self.State(count=prev_state.count + 1)
+
+    counter = Counter()
+    system = _single_phase_system(counter)
+
+    system.run(steps=2)
+    assert system.read(counter.State.count) == 2
+
+
+def test_update_can_receive_parameter_inputs_and_previous_state() -> None:
+    class Accumulator(Node):
+        class State(NodeState):
+            total: int = Var(init=0)
+
+        def update(
+            self,
+            value: int = Input(src=Source.State.value),
+            *,
+            prevstate: State,
+        ) -> State:
+            return self.State(total=prevstate.total + value)
+
+    source = Source(value=3)
+    accumulator = Accumulator()
+    system = _single_phase_system(source, accumulator)
+
+    assert system.compile_report.ok
+    assert system.compile_report.inputs["Accumulator.value"] == "Source.value"
+    system.run(steps=2)
+    assert system.read(accumulator.State.total) == 6
+
+
+def test_previous_state_requires_initial_value_or_initial_state() -> None:
+    class Counter(Node):
+        class State(NodeState):
+            count: int = Var()
+
+        def update(self, prev_state: State) -> State:
+            return self.State(count=prev_state.count + 1)
+
+    counter = Counter()
+    system = _single_phase_system(counter)
+
+    with pytest.raises(RuntimeError, match="define Var\\(init=\\.\\.\\.\\) or pass initial_state"):
+        system.step()
+
+    system.reset(initial_state={counter.State.count: 10})
+    system.step()
+    assert system.read(counter.State.count) == 11
 
 
 def test_class_level_input_ref_resolves_when_single_instance_exists() -> None:
@@ -222,7 +323,7 @@ def test_instance_bound_input_ref_selects_one_of_two_instances() -> None:
     source_a = Source(value=1)
     source_b = Source(value=2)
     sink = UnconnectedSink()
-    port(sink.Inputs.value).connect(source_b.Outputs.value)
+    port(sink.Inputs.value).connect(source_b.State.value)
 
     system = _single_phase_system(source_a, source_b, sink)
 
@@ -235,7 +336,7 @@ def test_instance_bound_input_ref_selects_one_of_two_instances() -> None:
 def test_instance_bound_input_ref_may_point_to_node_in_another_phase() -> None:
     source = Source(value=3)
     sink = UnconnectedSink()
-    port(sink.Inputs.value).connect(source.Outputs.value)
+    port(sink.Inputs.value).connect(source.State.value)
 
     system = PhasedReactiveSystem(
         phases=[
@@ -256,7 +357,7 @@ def test_instance_bound_input_ref_may_point_to_node_in_another_phase() -> None:
 def test_instance_bound_input_ref_to_node_outside_phases_is_incomplete_graph() -> None:
     source = Source(value=3)
     sink = UnconnectedSink()
-    port(sink.Inputs.value).connect(source.Outputs.value)
+    port(sink.Inputs.value).connect(source.State.value)
 
     system = _single_phase_system(sink, strict=False)
 
@@ -307,7 +408,7 @@ def test_duplicate_implicit_names_do_not_break_instance_input_refs() -> None:
     source_a = Source(value=1)
     source_b = Source(value=2)
     sink = UnconnectedSink()
-    port(sink.Inputs.value).connect(source_b.Outputs.value)
+    port(sink.Inputs.value).connect(source_b.State.value)
 
     system = _single_phase_system(source_a, source_b, sink)
 
@@ -335,7 +436,7 @@ def test_guard_only_node_is_present_in_inferred_node_graph() -> None:
                 "work",
                 nodes=(worker, flag),
                 transitions=(
-                    If(V(flag.Outputs.ready), terminate, name="ready"),
+                    If(V(flag.State.ready), terminate, name="ready"),
                     Else(terminate, name="not-ready"),
                 ),
                 is_initial=True,
@@ -364,7 +465,7 @@ def test_instance_guard_source_may_point_to_node_in_another_phase() -> None:
                 "work",
                 nodes=(worker,),
                 transitions=(
-                    If(V(flag.Outputs.ready), terminate, name="ready"),
+                    If(V(flag.State.ready), terminate, name="ready"),
                     Else(terminate, name="not-ready"),
                 ),
             ),
@@ -384,7 +485,7 @@ def test_instance_guard_source_outside_all_phases_is_incomplete_graph() -> None:
                 "work",
                 nodes=(worker,),
                 transitions=(
-                    If(V(flag.Outputs.ready), terminate, name="ready"),
+                    If(V(flag.State.ready), terminate, name="ready"),
                     Else(terminate, name="not-ready"),
                 ),
                 is_initial=True,
@@ -415,7 +516,7 @@ def test_class_level_guard_ref_resolves_when_single_instance_exists_in_same_phas
                 "check",
                 nodes=(flag,),
                 transitions=(
-                    If(V(Flag.Outputs.ready), terminate, name="ready"),
+                    If(V(Flag.State.ready), terminate, name="ready"),
                     Else(terminate, name="not-ready"),
                 ),
                 is_initial=True,
@@ -442,7 +543,7 @@ def test_class_level_guard_ref_resolves_when_single_instance_exists_in_another_p
                 "work",
                 nodes=(worker,),
                 transitions=(
-                    If(V(Flag.Outputs.ready), terminate, name="ready"),
+                    If(V(Flag.State.ready), terminate, name="ready"),
                     Else(terminate, name="not-ready"),
                 ),
             ),
@@ -460,7 +561,7 @@ def test_class_level_guard_ref_is_ambiguous_with_two_instances_in_one_phase() ->
                     "check",
                     nodes=(Flag(name="flag_a"), Flag(name="flag_b")),
                     transitions=(
-                        If(V(Flag.Outputs.ready), terminate, name="ready"),
+                        If(V(Flag.State.ready), terminate, name="ready"),
                         Else(terminate, name="not-ready"),
                     ),
                     is_initial=True,
@@ -473,7 +574,7 @@ def test_class_level_guard_ref_is_ambiguous_with_two_instances_in_one_phase() ->
         and "ambiguous guard variable 'Flag.ready'" in issue.message
         and "flag_a.ready" in issue.message
         and "flag_b.ready" in issue.message
-        and "use instance output reference" in issue.message
+        and "use instance state reference" in issue.message
         for issue in exc_info.value.report.issues
     )
 
@@ -497,7 +598,7 @@ def test_class_level_guard_ref_is_ambiguous_with_two_instances_across_phases() -
                     "check",
                     nodes=(Worker(),),
                     transitions=(
-                        If(V(Flag.Outputs.ready), terminate, name="ready"),
+                        If(V(Flag.State.ready), terminate, name="ready"),
                         Else(terminate, name="not-ready"),
                     ),
                 ),
@@ -523,7 +624,7 @@ def test_instance_bound_guard_ref_selects_one_of_two_instances() -> None:
                 "check",
                 nodes=(flag_a, flag_b),
                 transitions=(
-                    If(V(flag_b.Outputs.ready), terminate, name="ready"),
+                    If(V(flag_b.State.ready), terminate, name="ready"),
                     Else(terminate, name="not-ready"),
                 ),
                 is_initial=True,
@@ -555,7 +656,7 @@ def test_instance_bound_guard_ref_selects_instance_across_phases() -> None:
                 "check",
                 nodes=(Worker(),),
                 transitions=(
-                    If(V(flag_b.Outputs.ready), terminate, name="ready"),
+                    If(V(flag_b.State.ready), terminate, name="ready"),
                     Else(terminate, name="not-ready"),
                 ),
             ),
@@ -577,8 +678,8 @@ def test_complex_guard_expression_collects_all_instance_sources() -> None:
                 nodes=(flag_a, flag_b, flag_c),
                 transitions=(
                     If(
-                        (V(flag_a.Outputs.ready) & ~V(flag_b.Outputs.blocked))
-                        | (V(flag_c.Outputs.level) > 3),
+                        (V(flag_a.State.ready) & ~V(flag_b.State.blocked))
+                        | (V(flag_c.State.level) > 3),
                         terminate,
                         name="complex",
                     ),
@@ -604,8 +705,8 @@ def test_complex_guard_expression_reports_missing_instance_source() -> None:
                 nodes=(flag_a, flag_c),
                 transitions=(
                     If(
-                        (V(flag_a.Outputs.ready) & ~V(flag_b.Outputs.blocked))
-                        | (V(flag_c.Outputs.level) > 3),
+                        (V(flag_a.State.ready) & ~V(flag_b.State.blocked))
+                        | (V(flag_c.State.level) > 3),
                         terminate,
                         name="complex",
                     ),
@@ -640,8 +741,8 @@ def test_elseif_guard_source_participates_in_graph_completeness() -> None:
                 "check",
                 nodes=(flag_a,),
                 transitions=(
-                    If(V(flag_a.Outputs.ready), "first", name="first"),
-                    ElseIf(V(flag_b.Outputs.ready), "second", name="second"),
+                    If(V(flag_a.State.ready), "first", name="first"),
+                    ElseIf(V(flag_b.State.ready), "second", name="second"),
                     Else(terminate, name="fallback"),
                 ),
                 is_initial=True,
@@ -669,7 +770,7 @@ def test_else_does_not_add_guard_sources() -> None:
                 "check",
                 nodes=(flag,),
                 transitions=(
-                    If(V(flag.Outputs.ready), "next", name="ready"),
+                    If(V(flag.State.ready), "next", name="ready"),
                     Else(terminate, name="fallback"),
                 ),
                 is_initial=True,
@@ -724,8 +825,8 @@ def test_python_lambda_guard_does_not_participate_in_source_graph() -> None:
 
 
 def test_elif_is_identical_to_elseif_transition_constructor() -> None:
-    transition = Elif(V(Flag.Outputs.ready), terminate)
-    elseif_transition = ElseIf(V(Flag.Outputs.ready), terminate)
+    transition = Elif(V(Flag.State.ready), terminate)
+    elseif_transition = ElseIf(V(Flag.State.ready), terminate)
 
     assert transition.kind == elseif_transition.kind
     assert transition.name == elseif_transition.name
@@ -748,8 +849,8 @@ def test_elif_participates_in_if_chains_like_elseif() -> None:
                 "route",
                 nodes=(mode,),
                 transitions=(
-                    If(V(mode.Outputs.ready), "ready", name="ready"),
-                    Elif(V(mode.Outputs.level) == 2, "level-two", name="level-two"),
+                    If(V(mode.State.ready), "ready", name="ready"),
+                    Elif(V(mode.State.level) == 2, "level-two", name="level-two"),
                     Else(terminate, name="fallback"),
                 ),
                 is_initial=True,
@@ -775,9 +876,9 @@ def test_elif_can_be_mixed_with_elseif_in_the_same_chain() -> None:
                 "route",
                 nodes=(mode,),
                 transitions=(
-                    If(V(mode.Outputs.ready), "ready", name="ready"),
-                    Elif(V(mode.Outputs.blocked), "blocked", name="blocked"),
-                    ElseIf(V(mode.Outputs.level) == 3, "level-three", name="level-three"),
+                    If(V(mode.State.ready), "ready", name="ready"),
+                    Elif(V(mode.State.blocked), "blocked", name="blocked"),
+                    ElseIf(V(mode.State.level) == 3, "level-three", name="level-three"),
                     Else(terminate, name="fallback"),
                 ),
                 is_initial=True,
@@ -801,7 +902,7 @@ def test_elif_requires_open_if_chain_like_elseif() -> None:
                     "bad",
                     nodes=(Flag(),),
                     transitions=(
-                        Elif(V(Flag.Outputs.ready), terminate),
+                        Elif(V(Flag.State.ready), terminate),
                         Else(terminate),
                     ),
                     is_initial=True,
@@ -823,9 +924,9 @@ def test_elif_after_else_is_compile_error_like_elseif() -> None:
                     "bad",
                     nodes=(Flag(),),
                     transitions=(
-                        If(V(Flag.Outputs.ready), terminate),
+                        If(V(Flag.State.ready), terminate),
                         Else(terminate),
-                        Elif(~V(Flag.Outputs.ready), terminate),
+                        Elif(~V(Flag.State.ready), terminate),
                     ),
                     is_initial=True,
                 )
@@ -840,44 +941,44 @@ def test_elif_after_else_is_compile_error_like_elseif() -> None:
 
 def test_multi_phase_pipeline_resolves_instance_inputs_and_guards_across_branches() -> None:
     class Sensor(Node):
-        class Outputs(NodeOutputs):
-            value: int = Output(initial=0)
-            ready: bool = Output(initial=True)
+        class State(NodeState):
+            value: int = Var(init=0)
+            ready: bool = Var(init=True)
 
         def __init__(self, value: int, *, name: str) -> None:
             super().__init__(name=name)
             self.value = value
 
-        def run(self) -> Outputs:
-            return self.Outputs(value=self.value, ready=True)
+        def update(self) -> State:
+            return self.State(value=self.value, ready=True)
 
     class Controller(Node):
         class Inputs(NodeInputs):
             value: int = Input()
 
-        class Outputs(NodeOutputs):
-            command: int = Output()
-            high: bool = Output(initial=True)
+        class State(NodeState):
+            command: int = Var()
+            high: bool = Var(init=True)
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(command=inputs.value + 10, high=inputs.value > 5)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(command=inputs.value + 10, high=inputs.value > 5)
 
     class Actuator(Node):
         class Inputs(NodeInputs):
             command: int = Input()
 
-        class Outputs(NodeOutputs):
-            applied: int = Output(initial=0)
+        class State(NodeState):
+            applied: int = Var(init=0)
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(applied=inputs.command)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(applied=inputs.command)
 
     primary = Sensor(7, name="primary")
     backup = Sensor(2, name="backup")
     controller = Controller(name="controller")
     actuator = Actuator(name="actuator")
-    port(controller.Inputs.value).connect(primary.Outputs.value)
-    port(actuator.Inputs.command).connect(controller.Outputs.command)
+    port(controller.Inputs.value).connect(primary.State.value)
+    port(actuator.Inputs.command).connect(controller.State.command)
 
     system = PhasedReactiveSystem(
         phases=[
@@ -885,8 +986,8 @@ def test_multi_phase_pipeline_resolves_instance_inputs_and_guards_across_branche
                 "sense",
                 nodes=(primary, backup),
                 transitions=(
-                    If(V(primary.Outputs.ready), "control", name="primary-ready"),
-                    ElseIf(V(backup.Outputs.ready), "control", name="backup-ready"),
+                    If(V(primary.State.ready), "control", name="primary-ready"),
+                    ElseIf(V(backup.State.ready), "control", name="backup-ready"),
                     Else(terminate, name="no-sensor"),
                 ),
                 is_initial=True,
@@ -895,7 +996,7 @@ def test_multi_phase_pipeline_resolves_instance_inputs_and_guards_across_branche
                 "control",
                 nodes=(controller,),
                 transitions=(
-                    If(V(controller.Outputs.high), "actuate", name="high"),
+                    If(V(controller.State.high), "actuate", name="high"),
                     Else(terminate, name="low"),
                 ),
             ),
@@ -920,28 +1021,28 @@ def test_multi_phase_pipeline_resolves_instance_inputs_and_guards_across_branche
 
 def test_complex_phase_graph_reports_all_missing_instance_guard_and_input_sources() -> None:
     class ExternalConfig(Node):
-        class Outputs(NodeOutputs):
-            enabled: bool = Output(initial=True)
-            gain: int = Output(initial=2)
+        class State(NodeState):
+            enabled: bool = Var(init=True)
+            gain: int = Var(init=2)
 
     class ExternalMode(Node):
-        class Outputs(NodeOutputs):
-            armed: bool = Output(initial=True)
+        class State(NodeState):
+            armed: bool = Var(init=True)
 
     class Processor(Node):
         class Inputs(NodeInputs):
             gain: int = Input()
 
-        class Outputs(NodeOutputs):
-            score: int = Output(initial=0)
+        class State(NodeState):
+            score: int = Var(init=0)
 
-        def run(self, inputs: Inputs) -> Outputs:
-            return self.Outputs(score=inputs.gain)
+        def update(self, inputs: Inputs) -> State:
+            return self.State(score=inputs.gain)
 
     config = ExternalConfig(name="config")
     mode = ExternalMode(name="mode")
     processor = Processor(name="processor")
-    port(processor.Inputs.gain).connect(config.Outputs.gain)
+    port(processor.Inputs.gain).connect(config.State.gain)
 
     system = PhasedReactiveSystem(
         phases=[
@@ -950,7 +1051,7 @@ def test_complex_phase_graph_reports_all_missing_instance_guard_and_input_source
                 nodes=(processor,),
                 transitions=(
                     If(
-                        V(config.Outputs.enabled) & V(mode.Outputs.armed),
+                        V(config.State.enabled) & V(mode.State.armed),
                         terminate,
                         name="external-ready",
                     ),
@@ -990,12 +1091,12 @@ def test_class_level_guard_is_ambiguous_even_when_duplicate_instances_live_in_di
     None
 ):
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            ready: bool = Output(initial=True)
+        class State(NodeState):
+            ready: bool = Var(init=True)
 
     class Work(Node):
-        class Outputs(NodeOutputs):
-            done: bool = Output(initial=False)
+        class State(NodeState):
+            done: bool = Var(init=False)
 
     with pytest.raises(CompileError) as exc_info:
         PhasedReactiveSystem(
@@ -1015,7 +1116,7 @@ def test_class_level_guard_is_ambiguous_even_when_duplicate_instances_live_in_di
                     "join",
                     nodes=(Work(),),
                     transitions=(
-                        If(V(Mode.Outputs.ready), terminate, name="ready"),
+                        If(V(Mode.State.ready), terminate, name="ready"),
                         Else(terminate, name="not-ready"),
                     ),
                 ),
@@ -1033,18 +1134,18 @@ def test_class_level_guard_is_ambiguous_even_when_duplicate_instances_live_in_di
 
 def test_instance_guard_keeps_branch_join_unambiguous_with_duplicate_node_classes() -> None:
     class Mode(Node):
-        class Outputs(NodeOutputs):
-            ready: bool = Output(initial=True)
+        class State(NodeState):
+            ready: bool = Var(init=True)
 
-        def run(self) -> Outputs:
-            return self.Outputs(ready=True)
+        def update(self) -> State:
+            return self.State(ready=True)
 
     class Work(Node):
-        class Outputs(NodeOutputs):
-            done: bool = Output(initial=False)
+        class State(NodeState):
+            done: bool = Var(init=False)
 
-        def run(self) -> Outputs:
-            return self.Outputs(done=True)
+        def update(self) -> State:
+            return self.State(done=True)
 
     left_mode = Mode(name="left_mode")
     right_mode = Mode(name="right_mode")
@@ -1063,7 +1164,7 @@ def test_instance_guard_keeps_branch_join_unambiguous_with_duplicate_node_classe
                 "join",
                 nodes=(work,),
                 transitions=(
-                    If(V(right_mode.Outputs.ready), terminate, name="ready"),
+                    If(V(right_mode.State.ready), terminate, name="ready"),
                     Else(terminate, name="not-ready"),
                 ),
             ),
@@ -1088,11 +1189,11 @@ def test_nested_elseif_chains_collect_sources_from_every_chain_segment() -> None
                 "route",
                 nodes=(gate_a, gate_b, gate_c),
                 transitions=(
-                    If(V(gate_a.Outputs.ready), "a", name="a"),
-                    ElseIf(V(gate_b.Outputs.ready), "b", name="b"),
+                    If(V(gate_a.State.ready), "a", name="a"),
+                    ElseIf(V(gate_b.State.ready), "b", name="b"),
                     Else(terminate, name="fallback"),
-                    If(V(missing_gate.Outputs.ready), "missing", name="missing"),
-                    ElseIf(V(gate_c.Outputs.ready), "c", name="c"),
+                    If(V(missing_gate.State.ready), "missing", name="missing"),
+                    ElseIf(V(gate_c.State.ready), "c", name="c"),
                     Else(terminate, name="second-fallback"),
                 ),
                 is_initial=True,

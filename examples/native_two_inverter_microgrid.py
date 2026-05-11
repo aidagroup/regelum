@@ -11,10 +11,10 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
+    Var,
     terminate,
 )
 
@@ -254,15 +254,15 @@ class SimulationClock(Node):
         self.dt = dt
 
     class Inputs(NodeInputs):
-        tick: int = Input(source="SimulationClock.Outputs.tick")
-        time_s: float = Input(source="SimulationClock.Outputs.time_s")
+        tick: int = Input(src="SimulationClock.State.tick")
+        time_s: float = Input(src="SimulationClock.State.time_s")
 
-    class Outputs(NodeOutputs):
-        tick: int = Output(initial=0)
-        time_s: float = Output(initial=0.0)
+    class State(NodeState):
+        tick: int = Var(init=0)
+        time_s: float = Var(init=0.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(tick=inputs.tick + 1, time_s=inputs.time_s + self.dt)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(tick=inputs.tick + 1, time_s=inputs.time_s + self.dt)
 
 
 class NativeDroopController(Node):
@@ -301,20 +301,20 @@ class NativeDroopController(Node):
         )
 
     class Inputs(NodeInputs):
-        master_current: PhaseVector = Input(source="MasterLcFilter.Outputs.inductor_i")
-        master_voltage: PhaseVector = Input(source="MicrogridBus.Outputs.bus_v")
-        slave_current: PhaseVector = Input(source="SlaveLclFilter.Outputs.inverter_side_i")
-        slave_voltage: PhaseVector = Input(source="SlaveLclFilter.Outputs.capacitor_v")
+        master_current: PhaseVector = Input(src="MasterLcFilter.State.inductor_i")
+        master_voltage: PhaseVector = Input(src="MicrogridBus.State.bus_v")
+        slave_current: PhaseVector = Input(src="SlaveLclFilter.State.inverter_side_i")
+        slave_voltage: PhaseVector = Input(src="SlaveLclFilter.State.capacitor_v")
 
-    class Outputs(NodeOutputs):
-        inverter1_v: PhaseVector = Output(initial=zeros3)
-        inverter2_v: PhaseVector = Output(initial=zeros3)
-        inverter1_modulation: PhaseVector = Output(initial=zeros3)
-        inverter2_modulation: PhaseVector = Output(initial=zeros3)
-        master_frequency_hz: float = Output(initial=50.0)
-        slave_frequency_hz: float = Output(initial=50.0)
+    class State(NodeState):
+        inverter1_v: PhaseVector = Var(init=zeros3)
+        inverter2_v: PhaseVector = Var(init=zeros3)
+        inverter1_modulation: PhaseVector = Var(init=zeros3)
+        inverter2_modulation: PhaseVector = Var(init=zeros3)
+        master_frequency_hz: float = Var(init=50.0)
+        slave_frequency_hz: float = Var(init=50.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         master_m, master_frequency = self._master_control(
             current=inputs.master_current,
             voltage=inputs.master_voltage,
@@ -323,7 +323,7 @@ class NativeDroopController(Node):
             current=inputs.slave_current,
             voltage=inputs.slave_voltage,
         )
-        return self.Outputs(
+        return self.State(
             inverter1_v=scale3(master_m, self.v_dc),
             inverter2_v=scale3(slave_m, self.v_dc),
             inverter1_modulation=master_m,
@@ -372,19 +372,19 @@ class MasterLcFilter(Node):
         self.resistance = resistance
 
     class Inputs(NodeInputs):
-        inverter_v: PhaseVector = Input(source=NativeDroopController.Outputs.inverter1_v)
-        bus_v: PhaseVector = Input(source="MicrogridBus.Outputs.bus_v")
-        inductor_i: PhaseVector = Input(source="MasterLcFilter.Outputs.inductor_i")
+        inverter_v: PhaseVector = Input(src=NativeDroopController.State.inverter1_v)
+        bus_v: PhaseVector = Input(src="MicrogridBus.State.bus_v")
+        inductor_i: PhaseVector = Input(src="MasterLcFilter.State.inductor_i")
 
-    class Outputs(NodeOutputs):
-        inductor_i: PhaseVector = Output(initial=zeros3)
-        current_to_bus: PhaseVector = Output(initial=zeros3)
+    class State(NodeState):
+        inductor_i: PhaseVector = Var(init=zeros3)
+        current_to_bus: PhaseVector = Var(init=zeros3)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         voltage = sub3(sub3(inputs.inverter_v, inputs.bus_v), scale3(inputs.inductor_i, self.resistance))
         di = scale3(voltage, 1.0 / self.inductance)
         next_i = euler3(inputs.inductor_i, di, self.dt)
-        return self.Outputs(inductor_i=next_i, current_to_bus=next_i)
+        return self.State(inductor_i=next_i, current_to_bus=next_i)
 
 
 class SlaveLclFilter(Node):
@@ -404,22 +404,22 @@ class SlaveLclFilter(Node):
         self.resistance = resistance
 
     class Inputs(NodeInputs):
-        inverter_v: PhaseVector = Input(source=NativeDroopController.Outputs.inverter2_v)
-        bus_v: PhaseVector = Input(source="MicrogridBus.Outputs.bus_v")
-        inverter_side_i: PhaseVector = Input(source="SlaveLclFilter.Outputs.inverter_side_i")
-        capacitor_v: PhaseVector = Input(source="SlaveLclFilter.Outputs.capacitor_v")
-        grid_side_i: PhaseVector = Input(source="SlaveLclFilter.Outputs.grid_side_i")
+        inverter_v: PhaseVector = Input(src=NativeDroopController.State.inverter2_v)
+        bus_v: PhaseVector = Input(src="MicrogridBus.State.bus_v")
+        inverter_side_i: PhaseVector = Input(src="SlaveLclFilter.State.inverter_side_i")
+        capacitor_v: PhaseVector = Input(src="SlaveLclFilter.State.capacitor_v")
+        grid_side_i: PhaseVector = Input(src="SlaveLclFilter.State.grid_side_i")
 
-    class Outputs(NodeOutputs):
-        inverter_side_i: PhaseVector = Output(initial=zeros3)
-        capacitor_v: PhaseVector = Output(initial=zeros3)
-        grid_side_i: PhaseVector = Output(initial=zeros3)
-        current_to_bus: PhaseVector = Output(initial=zeros3)
-        lcl1_capacitor1_v: float = Output(initial=0.0)
-        lcl1_capacitor2_v: float = Output(initial=0.0)
-        lcl1_capacitor3_v: float = Output(initial=0.0)
+    class State(NodeState):
+        inverter_side_i: PhaseVector = Var(init=zeros3)
+        capacitor_v: PhaseVector = Var(init=zeros3)
+        grid_side_i: PhaseVector = Var(init=zeros3)
+        current_to_bus: PhaseVector = Var(init=zeros3)
+        lcl1_capacitor1_v: float = Var(init=0.0)
+        lcl1_capacitor2_v: float = Var(init=0.0)
+        lcl1_capacitor3_v: float = Var(init=0.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         left_voltage = sub3(
             sub3(inputs.inverter_v, inputs.capacitor_v),
             scale3(inputs.inverter_side_i, self.resistance),
@@ -440,7 +440,7 @@ class SlaveLclFilter(Node):
         )
         cap_current = sub3(next_left_i, next_right_i)
         next_cap_v = euler3(inputs.capacitor_v, scale3(cap_current, 1.0 / self.capacitance), self.dt)
-        return self.Outputs(
+        return self.State(
             inverter_side_i=next_left_i,
             capacitor_v=next_cap_v,
             grid_side_i=next_right_i,
@@ -470,19 +470,19 @@ class LoadSideLcAndRlLoad(Node):
         self.base_resistance = base_resistance
 
     class Inputs(NodeInputs):
-        time_s: float = Input(source=SimulationClock.Outputs.time_s)
-        bus_v: PhaseVector = Input(source="MicrogridBus.Outputs.bus_v")
-        filter_i: PhaseVector = Input(source="LoadSideLcAndRlLoad.Outputs.filter_i")
-        load_bus_v: PhaseVector = Input(source="LoadSideLcAndRlLoad.Outputs.load_bus_v")
-        load_i: PhaseVector = Input(source="LoadSideLcAndRlLoad.Outputs.load_i")
+        time_s: float = Input(src=SimulationClock.State.time_s)
+        bus_v: PhaseVector = Input(src="MicrogridBus.State.bus_v")
+        filter_i: PhaseVector = Input(src="LoadSideLcAndRlLoad.State.filter_i")
+        load_bus_v: PhaseVector = Input(src="LoadSideLcAndRlLoad.State.load_bus_v")
+        load_i: PhaseVector = Input(src="LoadSideLcAndRlLoad.State.load_i")
 
-    class Outputs(NodeOutputs):
-        filter_i: PhaseVector = Output(initial=zeros3)
-        load_bus_v: PhaseVector = Output(initial=zeros3)
-        load_i: PhaseVector = Output(initial=zeros3)
-        current_from_bus: PhaseVector = Output(initial=zeros3)
+    class State(NodeState):
+        filter_i: PhaseVector = Var(init=zeros3)
+        load_bus_v: PhaseVector = Var(init=zeros3)
+        load_i: PhaseVector = Var(init=zeros3)
+        current_from_bus: PhaseVector = Var(init=zeros3)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         resistance = self.base_resistance if inputs.time_s < 0.2 else 2.0 * self.base_resistance
         filter_voltage = sub3(
             sub3(inputs.bus_v, inputs.load_bus_v),
@@ -501,7 +501,7 @@ class LoadSideLcAndRlLoad(Node):
             scale3(cap_current, 1.0 / self.filter_capacitance),
             self.dt,
         )
-        return self.Outputs(
+        return self.State(
             filter_i=next_filter_i,
             load_bus_v=next_load_bus_v,
             load_i=next_load_i,
@@ -515,39 +515,39 @@ class MicrogridBus(Node):
         self.bus_capacitance = bus_capacitance
 
     class Inputs(NodeInputs):
-        bus_v: PhaseVector = Input(source="MicrogridBus.Outputs.bus_v")
-        master_i: PhaseVector = Input(source=MasterLcFilter.Outputs.current_to_bus)
-        slave_i: PhaseVector = Input(source=SlaveLclFilter.Outputs.current_to_bus)
-        loadside_i: PhaseVector = Input(source=LoadSideLcAndRlLoad.Outputs.current_from_bus)
+        bus_v: PhaseVector = Input(src="MicrogridBus.State.bus_v")
+        master_i: PhaseVector = Input(src=MasterLcFilter.State.current_to_bus)
+        slave_i: PhaseVector = Input(src=SlaveLclFilter.State.current_to_bus)
+        loadside_i: PhaseVector = Input(src=LoadSideLcAndRlLoad.State.current_from_bus)
 
-    class Outputs(NodeOutputs):
-        bus_v: PhaseVector = Output(initial=zeros3)
+    class State(NodeState):
+        bus_v: PhaseVector = Var(init=zeros3)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         bus_current = sub3(add3(inputs.master_i, inputs.slave_i), inputs.loadside_i)
         bus_v = euler3(inputs.bus_v, scale3(bus_current, 1.0 / self.bus_capacitance), self.dt)
-        return self.Outputs(bus_v=bus_v)
+        return self.State(bus_v=bus_v)
 
 
 class NativeMicrogridLogger(Node):
     class Inputs(NodeInputs):
-        time_s: float = Input(source=SimulationClock.Outputs.time_s)
-        lcl1_capacitor1_v: float = Input(source=SlaveLclFilter.Outputs.lcl1_capacitor1_v)
-        lcl1_capacitor2_v: float = Input(source=SlaveLclFilter.Outputs.lcl1_capacitor2_v)
-        lcl1_capacitor3_v: float = Input(source=SlaveLclFilter.Outputs.lcl1_capacitor3_v)
-        samples: tuple[VoltageSample, ...] = Input(source="NativeMicrogridLogger.Outputs.samples")
+        time_s: float = Input(src=SimulationClock.State.time_s)
+        lcl1_capacitor1_v: float = Input(src=SlaveLclFilter.State.lcl1_capacitor1_v)
+        lcl1_capacitor2_v: float = Input(src=SlaveLclFilter.State.lcl1_capacitor2_v)
+        lcl1_capacitor3_v: float = Input(src=SlaveLclFilter.State.lcl1_capacitor3_v)
+        samples: tuple[VoltageSample, ...] = Input(src="NativeMicrogridLogger.State.samples")
 
-    class Outputs(NodeOutputs):
-        samples: tuple[VoltageSample, ...] = Output(initial=())
+    class State(NodeState):
+        samples: tuple[VoltageSample, ...] = Var(init=())
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         sample = (
             inputs.time_s,
             inputs.lcl1_capacitor1_v,
             inputs.lcl1_capacitor2_v,
             inputs.lcl1_capacitor3_v,
         )
-        return self.Outputs(samples=inputs.samples + (sample,))
+        return self.State(samples=inputs.samples + (sample,))
 
 
 def build_system() -> PhasedReactiveSystem:

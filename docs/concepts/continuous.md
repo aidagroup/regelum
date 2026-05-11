@@ -8,8 +8,8 @@ all objects in `Phase.nodes` are `rg.ODESystem` instances.
 ## Continuous Nodes
 
 Define continuous state with `rg.ODENode`.
-An ODE node declares a `State` namespace instead of ordinary `Outputs`.
-State variables are created with `rg.StateVar(initial=...)`, are readable by
+An ODE node declares a `State` namespace instead of ordinary `State`.
+State variables are created with `rg.Var(init=...)`, are readable by
 other nodes, and are committed back into system state after integration.
 
 ```python
@@ -19,10 +19,10 @@ import regelum as rg
 
 class Integrator(rg.ODENode):
     class Inputs(rg.NodeInputs):
-        u: float = rg.Input(source=Controller.Outputs.u)
+        u: float = rg.Input(src=Controller.State.u)
 
     class State(rg.NodeState):
-        x: float = rg.StateVar(initial=0.0)
+        x: float = rg.Var(init=0.0)
 
     def dstate(self, inputs: Inputs, state: State, *, time: object) -> State:
         return self.State(x=inputs.u + ca.sin(time))
@@ -50,7 +50,7 @@ def dstate(self, state): ...
 
 `time` may also be keyword-only, for example
 `dstate(self, inputs, state, *, time)`.
-The `time` value is the continuous solver time, not a sampled node output.
+The `time` value is the continuous solver time, not a sampled node state variable.
 
 When `dstate` declares input ports directly, those parameter names become the
 ODE node input names and can be connected like ordinary inputs:
@@ -58,13 +58,13 @@ ODE node input names and can be connected like ordinary inputs:
 ```python
 class Plant(rg.ODENode):
     class State(rg.NodeState):
-        x: float = rg.StateVar(initial=0.0)
+        x: float = rg.Var(init=0.0)
 
     def dstate(
         self,
         time,
         state: State,
-        u: float = rg.Input(source=Controller.Outputs.u),
+        u: float = rg.Input(src=Controller.State.u),
     ) -> State:
         return self.State(x=u - state.x + ca.sin(time))
 ```
@@ -75,7 +75,7 @@ Sources may be lazy references, just like ordinary node inputs:
 def dstate(
     self,
     state: State,
-    load: float = rg.Input(source=lambda: Load.State.current),
+    load: float = rg.Input(src=lambda: Load.State.current),
 ) -> State:
     ...
 ```
@@ -102,6 +102,10 @@ electrical = rg.ODESystem(
 `dt` is required for `ODESystem`.
 Pass it as a `Fraction`, an integer, or a decimal string.
 Floats are rejected so the runtime can compute exact scheduling ratios.
+Do not put `dt` on `ODENode`.
+An `ODENode` is an equation block inside an `ODESystem`, not a separately
+scheduled node; both instance-level `Integrator(dt="0.001")` and class-level
+`class Integrator(rg.ODENode): dt = "0.001"` are rejected.
 
 An ODE phase contains only ODE systems:
 
@@ -142,9 +146,9 @@ the old tick index:
 ```python
 class Logger(rg.Node):
     class Inputs(rg.NodeInputs):
-        tick: int = rg.Input(source=rg.Clock.tick)
-        time: float = rg.Input(source=rg.Clock.time)
-        x: float = rg.Input(source=Integrator.State.x)
+        tick: int = rg.Input(src=rg.Clock.tick)
+        time: float = rg.Input(src=rg.Clock.time)
+        x: float = rg.Input(src=Integrator.State.x)
 ```
 
 Multiple `ODESystem` objects in the same continuous phase are treated as
@@ -179,7 +183,7 @@ system = rg.PhasedReactiveSystem(
 
 Discrete nodes with `dt` use sample-and-hold semantics.
 If a node is not due on the current base tick, it is skipped and its previous
-outputs remain in state.
+state variables remain in state.
 
 ```python
 fast = Sensor()          # due every base tick
@@ -197,11 +201,11 @@ Use `rg.Clock.tick` and `rg.Clock.time` in inputs and guards:
 ```python
 class Sampler(rg.Node):
     class Inputs(rg.NodeInputs):
-        time: float = rg.Input(source=rg.Clock.time)
+        time: float = rg.Input(src=rg.Clock.time)
 
 
 rg.If(rg.V(rg.Clock.tick) >= 100, rg.terminate)
 ```
 
-`snapshot()` returns user node outputs and ODE state values.
+`snapshot()` returns user node state variables and ODE state values.
 Use `read(rg.Clock.tick)` or `read(rg.Clock.time)` to inspect clock fields.

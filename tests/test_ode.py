@@ -4,16 +4,16 @@ from typing import Any, cast
 import casadi as ca
 import pytest
 
-from regelum import Clock, Input, NodeInputs, NodeState, ODENode, ODESystem, StateVar
+from regelum import Clock, Input, NodeInputs, NodeState, ODENode, ODESystem, Var
 from regelum.ode import CasadiTraceError
 
 
 class SwitchNode(ODENode):
     class Inputs(NodeInputs):
-        time: float = Input(source=Clock.time)
+        time: float = Input(src=Clock.time)
 
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(self, inputs: Inputs, state: State) -> State:  # ty: ignore[invalid-method-override]
         return self.State(x=ca.if_else(inputs.time < 0.5, 1.0, -1.0))
@@ -21,7 +21,7 @@ class SwitchNode(ODENode):
 
 class TrigNode(ODENode):
     class State(NodeState):
-        x: float = StateVar(initial=1.0)
+        x: float = Var(init=1.0)
 
     def dstate(self, inputs: NodeInputs, state: State) -> State:  # ty: ignore[invalid-method-override]
         return self.State(x=-ca.sin(state.x))
@@ -29,7 +29,7 @@ class TrigNode(ODENode):
 
 class BadMathNode(ODENode):
     class State(NodeState):
-        x: float = StateVar(initial=1.0)
+        x: float = Var(init=1.0)
 
     def dstate(self, inputs: NodeInputs, state: State) -> State:  # ty: ignore[invalid-method-override]
         return self.State(x=-math.sin(state.x))
@@ -37,10 +37,10 @@ class BadMathNode(ODENode):
 
 class InputsStateTimeNode(ODENode):
     class Inputs(NodeInputs):
-        u: float = Input(source="u.value")
+        u: float = Input(src="u.value")
 
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(  # ty: ignore[invalid-method-override]
         self,
@@ -53,10 +53,10 @@ class InputsStateTimeNode(ODENode):
 
 class ReorderedInputsStateTimeNode(ODENode):
     class Inputs(NodeInputs):
-        u: float = Input(source="u.value")
+        u: float = Input(src="u.value")
 
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(  # ty: ignore[invalid-method-override]
         self,
@@ -69,10 +69,10 @@ class ReorderedInputsStateTimeNode(ODENode):
 
 class TypedOnlyInputsStateNode(ODENode):
     class Inputs(NodeInputs):
-        u: float = Input(source="u.value")
+        u: float = Input(src="u.value")
 
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(  # ty: ignore[invalid-method-override]
         self,
@@ -84,33 +84,33 @@ class TypedOnlyInputsStateNode(ODENode):
 
 class DirectDstateInputsNode(ODENode):
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(  # ty: ignore[invalid-method-override]
         self,
         time: Any,
         state: State,
-        a: float = Input(source="a.value"),
-        b: float = Input(source="b.value"),
+        a: float = Input(src="a.value"),
+        b: float = Input(src="b.value"),
     ) -> State:
         return self.State(x=state.x * 0.0 + a + 2.0 * b + time)
 
 
 class DirectLazyDstateInputsNode(ODENode):
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(  # ty: ignore[invalid-method-override]
         self,
         state: State,
-        u: float = Input(source=lambda: LazyDstateInputSource.State.u),
+        u: float = Input(src=lambda: LazyDstateInputSource.State.u),
     ) -> State:
         return self.State(x=state.x * 0.0 + u)
 
 
 class LazyDstateInputSource(ODENode):
     class State(NodeState):
-        u: float = StateVar(initial=4.0)
+        u: float = Var(init=4.0)
 
     def dstate(self, state: State) -> State:  # ty: ignore[invalid-method-override]
         return self.State(u=0.0 * state.u)
@@ -118,10 +118,10 @@ class LazyDstateInputSource(ODENode):
 
 class InputsTimeNode(ODENode):
     class Inputs(NodeInputs):
-        u: float = Input(source="u.value")
+        u: float = Input(src="u.value")
 
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(self, inputs: Inputs, time: Any) -> State:  # ty: ignore[invalid-method-override]
         return self.State(x=inputs.u + time)
@@ -129,7 +129,7 @@ class InputsTimeNode(ODENode):
 
 class TimeNode(ODENode):
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(self, time: Any) -> State:  # ty: ignore[invalid-method-override]
         return self.State(x=time)
@@ -137,10 +137,10 @@ class TimeNode(ODENode):
 
 class InputsNode(ODENode):
     class Inputs(NodeInputs):
-        u: float = Input(source="u.value")
+        u: float = Input(src="u.value")
 
     class State(NodeState):
-        x: float = StateVar(initial=0.0)
+        x: float = Var(init=0.0)
 
     def dstate(self, inputs: Inputs) -> State:  # ty: ignore[invalid-method-override]
         return self.State(x=inputs.u)
@@ -148,7 +148,7 @@ class InputsNode(ODENode):
 
 class StateNode(ODENode):
     class State(NodeState):
-        x: float = StateVar(initial=1.0)
+        x: float = Var(init=1.0)
 
     def dstate(self, state: State) -> State:  # ty: ignore[invalid-method-override]
         return self.State(x=state.x)
@@ -158,10 +158,10 @@ def test_casadi_backend_reuses_graph_with_new_parameters() -> None:
     node = SwitchNode()
     system = ODESystem(nodes=(node,), dt="0.1")
 
-    system.run(state_snapshot={"Clock.time": 0.0})
+    system.update(state_snapshot={"Clock.time": 0.0})
     assert cast(SwitchNode.State, node.state()).x == pytest.approx(0.1)
 
-    system.run(state_snapshot={"Clock.time": 1.0})
+    system.update(state_snapshot={"Clock.time": 1.0})
     assert cast(SwitchNode.State, node.state()).x == pytest.approx(0.0)
 
 
@@ -169,7 +169,7 @@ def test_casadi_backend_traces_casadi_primitives() -> None:
     node = TrigNode()
     system = ODESystem(nodes=(node,), dt="0.01")
 
-    system.run(state_snapshot={})
+    system.update(state_snapshot={})
 
     assert cast(TrigNode.State, node.state()).x < 1.0
 
@@ -179,7 +179,7 @@ def test_casadi_backend_reports_untraceable_dstate() -> None:
     system = ODESystem(nodes=(node,), dt="0.01")
 
     with pytest.raises(CasadiTraceError, match="casadi primitives"):
-        system.run(state_snapshot={})
+        system.update(state_snapshot={})
 
 
 def test_casadi_backend_supports_dstate_argument_subsets() -> None:
@@ -212,7 +212,7 @@ def test_casadi_backend_supports_dstate_argument_subsets() -> None:
     assert DirectDstateInputsNode._inputs.keys() == {"a", "b"}
     assert DirectLazyDstateInputsNode._inputs.keys() == {"u"}
 
-    system.run(state_snapshot={"u.value": 1.0, "a.value": 2.0, "b.value": 3.0})
+    system.update(state_snapshot={"u.value": 1.0, "a.value": 2.0, "b.value": 3.0})
 
     assert cast(InputsStateTimeNode.State, inputs_state_time.state()).x == pytest.approx(
         0.105,

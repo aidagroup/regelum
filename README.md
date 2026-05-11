@@ -17,19 +17,37 @@
 
 # regelum
 
-`regelum` is a framework for modeling **Phased Reactive Systems**:
-systems that execute one tick at a time, activate different groups of nodes in
+`regelum` is a framework for prototyping and simulating dynamic systems and
+general dataflows. It introduces **Phased Reactive Systems** (PRS): systems
+that execute one tick at a time, activate different groups of nodes in
 different phases, and move between phases with explicit transitions.
+
+Any algorithm written with `regelum` can be decomposed into a graph of phases
+with conditional transitions. Each phase is represented as a DAG of
+computational primitives called **nodes**: stateful computation units with two
+namespaces, `Inputs` and `State`. A state variable written by one node can be
+used as an input of another node, while a node can also read its own previous
+state directly in `update`.
+
+`regelum` deliberately leans on Python syntax sugar. The API is inspired by
+frameworks such as FastAPI, Typer, Pydantic, SQLModel, SQLAlchemy, FastStream,
+and others that made Python annotations, descriptors, nested classes, and
+declarative function signatures into compact framework DSLs. In `regelum`,
+`Node`, `State`, `Var`, `Input(src=...)`, and `update(...)` provide a concise
+way to write computation nodes while the built-in compiler/resolver derives
+the execution order and validates the graph.
 
 ## Overview
 
-- **Nodes** declare typed inputs and outputs.
+- **Nodes** declare typed inputs and state variables, then compute their next
+  state in `update`.
 - **Phases** decide which node instances are active together and how control
   moves between phases.
 - **Continuous nodes** declare ODE state and are integrated through
   `ODESystem` phases.
 - **Compilation** resolves links, schedules nodes, and catches structural
-  mistakes before runtime.
+  mistakes before runtime: unresolved inputs, ambiguous references, invalid
+  phase graphs, and computations that cannot be guaranteed to resolve.
 
 The best entry point is the Learn overview:
 
@@ -43,34 +61,48 @@ import regelum as rg
 
 
 class TemperatureSensor(rg.Node):
-    class Outputs(rg.NodeOutputs):
-        temperature: float = rg.Output(initial=19.0)
+    class State(rg.NodeState):
+        temperature: float = rg.Var(init=19.0)
 
-    def run(self) -> Outputs:
-        return self.Outputs(temperature=21.5)
+    def update(self) -> State:
+        return self.State(temperature=21.5)
 
 
 class HeaterController(rg.Node):
     class Inputs(rg.NodeInputs):
         temperature: float = rg.Input(
-            source=TemperatureSensor.Outputs.temperature,
+            src=TemperatureSensor.State.temperature,
         )
 
-    class Outputs(rg.NodeOutputs):
+    class State(rg.NodeState):
         heater_on: bool
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(heater_on=inputs.temperature < 22.0)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(heater_on=inputs.temperature < 22.0)
+
+
+class HeatingCycles(rg.Node):
+    class Inputs(rg.NodeInputs):
+        heater_on: bool = rg.Input(src=HeaterController.State.heater_on)
+
+    class State(rg.NodeState):
+        count: int = rg.Var(init=0)
+
+    def update(self, inputs: Inputs, prev_state: State) -> State:
+        return self.State(
+            count=prev_state.count + int(inputs.heater_on),
+        )
 
 
 sensor = TemperatureSensor(name="room_sensor")
 controller = HeaterController(name="heater_controller")
+cycles = HeatingCycles(name="heating_cycles")
 
 system = rg.PhasedReactiveSystem(
     phases=[
         rg.Phase(
             "control",
-            nodes=(sensor, controller),
+            nodes=(sensor, controller, cycles),
             transitions=(rg.Goto(rg.terminate),),
             is_initial=True,
         ),
@@ -78,7 +110,7 @@ system = rg.PhasedReactiveSystem(
 )
 
 system.step()
-print(system.read(controller.Outputs.heater_on))
+print(system.read(controller.State.heater_on))
 ```
 
 ## Installation

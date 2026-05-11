@@ -28,6 +28,9 @@ regelum-native-one-to-one-microgrid = "regelum.examples.native_one_to_one_microg
 regelum-native-one-to-one-microgrid-ode-api = "regelum.examples.native_one_to_one_microgrid_ode_api:main"
 regelum-compare-one-to-one-microgrid = "regelum.examples.compare_one_to_one_microgrid:main"
 
+[tool.hatch.build.targets.sdist]
+only-include = ["src", "examples", "README.md", "pyproject.toml"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/regelum", "examples"]
 

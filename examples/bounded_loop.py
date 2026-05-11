@@ -23,11 +23,11 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
@@ -44,13 +44,13 @@ class Accumulator(Node):
         self.step_size = step_size
 
     class Inputs(NodeInputs):
-        counter: int = Input(source="Accumulator.counter")
+        counter: int = Input(src="Accumulator.counter")
 
-    class Outputs(NodeOutputs):
-        counter: int = Output(initial=0)
+    class State(NodeState):
+        counter: int = Var(init=0)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(counter=inputs.counter + self.step_size)
+    def update(self, inputs: Inputs) -> State:
+        return self.State(counter=inputs.counter + self.step_size)
 
 
 def build_system(

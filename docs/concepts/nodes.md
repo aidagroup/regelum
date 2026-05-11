@@ -45,8 +45,8 @@ The graph is high-level; each phase is itself made of smaller pieces called
 | <span class="phase-label phase-label--play">play</span> | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
 
 At node level, the same model looks like this.
-Solid arrows show that one node reads another node's output; dashed
-arrows from `state` show self-reads, where a node reads its own output from
+Solid arrows show that one node reads another node's state variable; dashed
+arrows from `state` show self-reads, where a node reads its own state variable from
 the previous tick.
 The node colors correspond to the phase colors in the table above:
 
@@ -96,21 +96,21 @@ flowchart LR
     ```
 
 This page zooms in on those nodes — what a node is, how it declares its
-inputs and outputs, how to instantiate it, and how its `run` method is
+inputs and state variables, how to instantiate it, and how its `update` method is
 wired up.
 
 ## What is a Node?
 
 A node is the **atomic unit of computation** in `regelum`: it reads named
-input variables, writes named output variables, and implements a `run` method
-that computes the next output values.
+input variables, writes named state variable variables, and implements a `update` method
+that computes the next state variable values.
 
-Each node declares its interface in terms of **inputs** and **outputs**.
+Each node declares its interface in terms of **inputs** and **state variables**.
 Inputs say which values the node reads.
-Outputs say which values the node writes and, when needed, how those values
+State say which values the node writes and, when needed, how those values
 are initialized before the first tick.
-The `run` method is the node's one-step computation: the runtime gives it
-resolved inputs, and the method must return an `Outputs` object.
+The `update` method is the node's one-step computation: the runtime gives it
+resolved inputs, and the method must return an `State` object.
 
 !!! note "Nodes are classes; phases receive instances"
 
@@ -123,7 +123,7 @@ resolved inputs, and the method must return an `Outputs` object.
     through values from previous ticks.
     However, the nodes passed to a single phase must form a DAG with respect
     to the read relation: draw an edge `Node X --> Node Y` when at least one
-    output of `Node X` is an input of `Node Y` in that phase.
+    state variable of `Node X` is an input of `Node Y` in that phase.
     This lets the runtime compile the phase and automatically resolve an
     execution order.
 
@@ -140,16 +140,16 @@ class MediaSession(rg.Node):
 
     class Inputs(rg.NodeInputs):
         previous: float = rg.Input(
-            source=lambda: MediaSession.Outputs.buffer_seconds
+            src=lambda: MediaSession.State.buffer_seconds
         )
-        fetched: float = rg.Input(source=Decoder.Outputs.fetched_seconds)
+        fetched: float = rg.Input(src=Decoder.State.fetched_seconds)
 
-    class Outputs(rg.NodeOutputs):
-        buffer_seconds: float = rg.Output(initial=10.0)
+    class State(rg.NodeState):
+        buffer_seconds: float = rg.Var(init=10.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         next_buffer = inputs.previous + inputs.fetched - TICK_DT_SECONDS
-        return self.Outputs(buffer_seconds=max(0.0, next_buffer))
+        return self.State(buffer_seconds=max(0.0, next_buffer))
 
 
 session = MediaSession()
@@ -157,14 +157,14 @@ session = MediaSession()
 
 Let us break down what happens here.
 `Inputs` declares variables the node reads.
-`previous` reads `MediaSession.Outputs.buffer_seconds`, so this is a
+`previous` reads `MediaSession.State.buffer_seconds`, so this is a
 self-read from the previous tick.
-`fetched` reads `Decoder.Outputs.fetched_seconds`, so `MediaSession` depends
+`fetched` reads `Decoder.State.fetched_seconds`, so `MediaSession` depends
 on `Decoder` in the `play` phase.
-`Outputs` declares variables the node writes.
+`State` declares variables the node writes.
 `buffer_seconds` is initialized with `10.0` because the first tick needs a
-buffer value before `MediaSession` has run.
-Finally, `run` receives the input snapshot and returns an output snapshot:
+buffer value before `MediaSession` has updated.
+Finally, `update` receives the input snapshot and returns a state variable snapshot:
 the node computes the next buffer level and writes it as `buffer_seconds`.
 
 ??? example "Full file: `examples/video_player.py`"
@@ -177,36 +177,36 @@ the node computes the next buffer level and writes it as `buffer_seconds`.
 
 A node in `regelum` is a Python class inherited from `rg.Node`.
 The class declares the node's API: which variables it reads, which variables
-it writes, and how one execution transforms inputs into outputs.
+it writes, and how one execution transforms inputs into state variables.
 
 Every non-trivial node should make two namespaces explicit:
 
 - `Inputs` lists the variables the node reads.
-- `Outputs` lists the variables the node writes.
+- `State` lists the variables the node writes.
 
 Those namespaces are ordinary nested Python classes, subclassing
-`rg.NodeInputs` and `rg.NodeOutputs`.
+`rg.NodeInputs` and `rg.NodeState`.
 This means the interface can be declared before any node instance exists:
-`MediaSession.Outputs.buffer_seconds` is a valid output reference at class
+`MediaSession.State.buffer_seconds` is a valid state reference at class
 declaration time, even before `session = MediaSession()` is constructed.
 
 ```python
 class MediaSession(rg.Node):
     class Inputs(rg.NodeInputs):
-        fetched: float = rg.Input(source=Decoder.Outputs.fetched_seconds)
+        fetched: float = rg.Input(src=Decoder.State.fetched_seconds)
 
-    class Outputs(rg.NodeOutputs):
-        buffer_seconds: float = rg.Output(initial=10.0)
+    class State(rg.NodeState):
+        buffer_seconds: float = rg.Var(init=10.0)
 ```
 
 The runtime detects these namespaces by base class, not by name.
-`Inputs` and `Outputs` are the conventional names, and each node may declare
-at most one input namespace and at most one output namespace.
+`Inputs` and `State` are the conventional names, and each node may declare
+at most one input namespace and at most one state namespace.
 
-### Inputs and output references
+### Inputs and state references
 
-An input is connected to the output it reads.
-The common form is `rg.Input(source=...)`, where `source` points at an output:
+An input is connected to the state variable it reads.
+The common form is `rg.Input(src=...)`, where `src` points at a state variable:
 
 ```python
 class Network(rg.Node):
@@ -215,14 +215,14 @@ class Network(rg.Node):
 
 class Decoder(rg.Node):
     class Inputs(rg.NodeInputs):
-        bandwidth_kbps: float = rg.Input(source=Network.Outputs.bandwidth_kbps)
+        bandwidth_kbps: float = rg.Input(src=Network.State.bandwidth_kbps)
 ```
 
-`Network.Outputs.bandwidth_kbps` is a class-level reference.
+`Network.State.bandwidth_kbps` is a class-level reference.
 It is concise and works when there is exactly one `Network` producer in the
 compiled system.
 If multiple instances of the same node class exist, use an instance-bound
-reference such as `network.Outputs.bandwidth_kbps`, or connect the ports after
+reference such as `network.State.bandwidth_kbps`, or connect the ports after
 instantiation.
 
 ```python
@@ -237,7 +237,7 @@ network_backup = Network(name="backup")
 class Decoder(rg.Node):
     class Inputs(rg.NodeInputs):
         bandwidth_kbps: float = rg.Input(
-            source=network_main.Outputs.bandwidth_kbps
+            src=network_main.State.bandwidth_kbps
         )
 ```
 
@@ -266,7 +266,7 @@ Unconnected inputs are compile errors unless connected later with
 
 Sometimes the producer cannot be referenced directly at class-body evaluation
 time.
-This happens when a node reads its own output, or when a producer class is
+This happens when a node reads its own state variable, or when a producer class is
 defined later in the file.
 Use a zero-argument callable for those cases:
 
@@ -274,7 +274,7 @@ Use a zero-argument callable for those cases:
 class MediaSession(rg.Node):
     class Inputs(rg.NodeInputs):
         previous: float = rg.Input(
-            source=lambda: MediaSession.Outputs.buffer_seconds
+            src=lambda: MediaSession.State.buffer_seconds
         )
 ```
 
@@ -286,35 +286,35 @@ not available yet.
 
 Self-referential inputs are how a node carries state across ticks.
 Here `MediaSession` reads the `buffer_seconds` value it wrote in the previous
-tick, then writes the next value in `run`.
+tick, then writes the next value in `update`.
 
-### Outputs
+### State
 
-Outputs are declared by subclassing `rg.NodeOutputs`.
-Each output is owned by exactly one node, so there is never ambiguity about
+State are declared by subclassing `rg.NodeState`.
+Each state variable is owned by exactly one node, so there is never ambiguity about
 who produced a value.
 This rules out write/write races by construction.
 
 ```python
-class Outputs(rg.NodeOutputs):
-    buffer_seconds: float = rg.Output(initial=10.0)
+class State(rg.NodeState):
+    buffer_seconds: float = rg.Var(init=10.0)
 ```
 
-A bare output annotation is shorthand for an output without an initial value:
+A bare state variable annotation is shorthand for a state variable without an initial value:
 
 ```python
-class Outputs(rg.NodeOutputs):
+class State(rg.NodeState):
     fetched_seconds: float
 ```
 
 `Decoder.fetched_seconds` can be declared this way because it is produced in
 `play` before `MediaSession` reads it in the same phase.
-Compilation rejects bare outputs that are read before they can be produced.
+Compilation rejects bare state variables that are read before they can be produced.
 
 ### Post-instantiation connections
 
 Connections do not have to be fully described inside the node class.
-You can instantiate nodes first and then link an input to a concrete output
+You can instantiate nodes first and then link an input to a concrete state variable
 with `port(...).connect(...)`.
 This is useful when identity matters, especially in multi-instance systems.
 
@@ -323,41 +323,41 @@ session_main = MediaSession(name="main")
 session_pip = MediaSession(name="pip")
 policy = QualityPolicy()
 
-rg.port(policy.Inputs.buffer_seconds).connect(session_main.Outputs.buffer_seconds)
+rg.port(policy.Inputs.buffer_seconds).connect(session_main.State.buffer_seconds)
 ```
 
 The `port(...)` wrapper exposes `.connect(...)` while preserving the normal
 descriptor syntax for type checkers and readers.
 Both directions of `.connect(...)` are accepted as long as one side is an
-input and the other side is an output:
+input and the other side is a state variable:
 
 ```python
-rg.port(policy.Inputs.buffer_seconds).connect(session_main.Outputs.buffer_seconds)
-rg.port(session_main.Outputs.buffer_seconds).connect(policy.Inputs.buffer_seconds)
+rg.port(policy.Inputs.buffer_seconds).connect(session_main.State.buffer_seconds)
+rg.port(session_main.State.buffer_seconds).connect(policy.Inputs.buffer_seconds)
 ```
 
-Input-to-input and output-to-output connections are errors.
+Input-to-input and state variable-to-state variable connections are errors.
 If a class-level reference becomes ambiguous because several producers match,
 the fix is to use an instance-bound reference or an explicit post-instantiation
 connection.
 
 ### Initial values
 
-System state stores output values.
+System state stores state variable values.
 Inputs read either values produced earlier in the same phase or values already
 present in state.
-An output needs an initial value when it may be read before the first time its
+An state variable needs an initial value when it may be read before the first time its
 node runs.
 
 ```python
 class MediaSession(rg.Node):
-    class Outputs(rg.NodeOutputs):
-        buffer_seconds: float = rg.Output(initial=10.0)
+    class State(rg.NodeState):
+        buffer_seconds: float = rg.Var(init=10.0)
 ```
 
 `buffer_seconds` is read by `QualityPolicy` in `decide` before
-`MediaSession` writes it in `play`, so it needs `initial=10.0`.
-The same idea applies to persistent outputs such as
+`MediaSession` writes it in `play`, so it needs `init=10.0`.
+The same idea applies to persistent state variables such as
 `Network.bandwidth_kbps`, `BitrateController.value`, and
 `QualityPolicy.stalling`.
 
@@ -365,7 +365,7 @@ Initial values can be written in three forms.
 Use a direct value when the value is static:
 
 ```python
-buffer_seconds: float = rg.Output(initial=10.0)
+buffer_seconds: float = rg.Var(init=10.0)
 ```
 
 Use a zero-argument callable for fresh mutable objects.
@@ -373,8 +373,8 @@ This avoids accidentally sharing one list between systems:
 
 ```python
 class Logger(rg.Node):
-    class Outputs(rg.NodeOutputs):
-        history: list[Logger.Sample] = rg.Output(initial=lambda: [])
+    class State(rg.NodeState):
+        history: list[Logger.Sample] = rg.Var(init=lambda: [])
 ```
 
 Use a one-argument callable when the initial value depends on the node
@@ -396,9 +396,9 @@ class MediaSession(rg.Node):
         super().__init__(name=name)
         self.initial_buffer = initial_buffer
 
-    class Outputs(rg.NodeOutputs):
-        buffer_seconds: float = rg.Output(
-            initial=lambda self: cast(MediaSession, self).initial_buffer,
+    class State(rg.NodeState):
+        buffer_seconds: float = rg.Var(
+            init=lambda self: cast(MediaSession, self).initial_buffer,
         )
 
 
@@ -413,28 +413,28 @@ full_start = MediaSession(initial_buffer=10.0)
     ```python
     system.reset(
         initial_state={
-            MediaSession.Outputs.buffer_seconds: 5.0,
-            BitrateController.Outputs.value: 720,
+            MediaSession.State.buffer_seconds: 5.0,
+            BitrateController.State.value: 720,
         }
     )
     ```
 
-    Once a system is instantiated, compilation has already resolved all output
-    paths and can tell you which outputs define the initial state surface.
-    Use `system.compile_report.minimal_initial_outputs` to inspect the outputs
+    Once a system is instantiated, compilation has already resolved all state variable
+    paths and can tell you which state variables define the initial state surface.
+    Use `system.compile_report.minimal_initial_state_vars` to inspect the state variables
     that actually need initial values for this compiled graph, and
-    `system.compile_report.required_initial_outputs` to inspect the outputs
+    `system.compile_report.required_initial_state_vars` to inspect the state variables
     that must be supplied because no declaration provides an initial value.
 
     ```python
     system = build_system()
     report = system.compile_report
 
-    print(report.minimal_initial_outputs)
-    print(report.required_initial_outputs)
+    print(report.minimal_initial_state_vars)
+    print(report.required_initial_state_vars)
     ```
 
-    If `required_initial_outputs` is non-empty, provide those values in
+    If `required_initial_state_vars` is non-empty, provide those values in
     `initial_state` before running or resetting the system.
     See [Compile report](compilation.md#compile-report) for inspecting the
     compiled initial-state requirements and [Reset](compilation.md#reset) for
@@ -442,32 +442,32 @@ full_start = MediaSession(initial_buffer=10.0)
 
 ### Run methods
 
-`run` computes outputs for one execution of the node.
-The canonical form receives the input namespace and returns the output
+`update` computes state variables for one execution of the node.
+The canonical form receives the input namespace and returns the state variable
 namespace:
 
 ```python
-def run(self, inputs: Inputs) -> Outputs:
-    return self.Outputs(buffer_seconds=...)
+def update(self, inputs: Inputs) -> State:
+    return self.State(buffer_seconds=...)
 ```
 
-No-input nodes may write `run(self)`.
-Compact nodes may declare inputs directly on `run`; this is useful for small
+No-input nodes may write `update(self)`.
+Compact nodes may declare inputs directly on `update`; this is useful for small
 nodes with one or two inputs:
 
 ```python
 class TickCounter(rg.Node):
-    class Outputs(rg.NodeOutputs):
-        tick: int = rg.Output(initial=0)
+    class State(rg.NodeState):
+        tick: int = rg.Var(init=0)
 
-    def run(
+    def update(
         self,
-        tick: int = rg.Input(source=lambda: TickCounter.Outputs.tick),
-    ) -> Outputs:
-        return self.Outputs(tick=tick + 1)
+        tick: int = rg.Input(src=lambda: TickCounter.State.tick),
+    ) -> State:
+        return self.State(tick=tick + 1)
 ```
 
-Do not mix compact `run` inputs with a `NodeInputs` namespace in the same
+Do not mix compact `update` inputs with a `NodeInputs` namespace in the same
 node.
 
 ### System clock inputs
@@ -479,8 +479,8 @@ Read it through `rg.Clock.tick` and `rg.Clock.time`:
 ```python
 class Network(rg.Node):
     class Inputs(rg.NodeInputs):
-        tick: int = rg.Input(source=rg.Clock.tick)
-        time: float = rg.Input(source=rg.Clock.time)
+        tick: int = rg.Input(src=rg.Clock.tick)
+        time: float = rg.Input(src=rg.Clock.time)
 ```
 
 `Clock.tick` is the integer tick index. `Clock.time` is the physical time
@@ -492,36 +492,36 @@ The clock can also be used in guards, for example
 ### Mutating inputs
 
 Inputs are normal Python objects.
-If an input value is mutable, `run` receives a reference to that object.
+If an input value is mutable, `update` receives a reference to that object.
 The video player's `Logger` intentionally uses this for its own persistent
 history: it reads its own previous `history`, appends one record, and writes
-the same list back as the next output value.
+the same list back as the next state variable value.
 
 ```python
 class Logger(rg.Node):
     class Inputs(rg.NodeInputs):
         history: list[Logger.Sample] = rg.Input(
-            source=lambda: Logger.Outputs.history
+            src=lambda: Logger.State.history
         )
 
-    class Outputs(rg.NodeOutputs):
-        history: list[Logger.Sample] = rg.Output(initial=lambda: [])
+    class State(rg.NodeState):
+        history: list[Logger.Sample] = rg.Var(init=lambda: [])
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         inputs.history.append(record)
-        return self.Outputs(history=inputs.history)
+        return self.State(history=inputs.history)
 ```
 
-Even in this in-place pattern, `run` must still return an `Outputs` object.
-The returned output namespace is the only supported way to commit writes back
+Even in this in-place pattern, `update` must still return an `State` object.
+The returned state namespace is the only supported way to commit writes back
 to system state.
 
 This pattern is acceptable when the input is a self-read: the node is
 mutating its own carried state.
 Do not mutate inputs that belong to another node.
-That creates hidden side effects outside the output contract, and Python
+That creates hidden side effects outside the state variable contract, and Python
 cannot reliably catch it at compile time.
-Treat foreign inputs as read-only; mutating them inside `run` is against the
+Treat foreign inputs as read-only; mutating them inside `update` is against the
 style guide.
 
 ## Instances and names
@@ -556,15 +556,15 @@ Custom constructors should forward `name` to `Node`.
 
 - A node class declares behavior and port shape.
 - A node instance owns runtime identity and configuration.
-- `run` must always return the node output namespace.
+- `update` must always return the node state namespace.
 - Node instances, not node classes, are assigned to phases.
-- Inputs read outputs.
-- Outputs define state values.
+- Inputs read state variables.
+- State define state values.
 - Bare input annotations create unconnected inputs.
-- Bare output annotations create outputs without initial values.
+- Bare state variable annotations create state variables without initial values.
 - Class-level references must resolve to exactly one producer.
 - Use instance-bound references or `port(...).connect(...)` to remove
   ambiguity.
-- Previous-state outputs need initial values.
-- Intermediate outputs may omit initial values.
+- Previous-state variables need initial values.
+- Intermediate state variables may omit initial values.
 - Mutable defaults should use callables.

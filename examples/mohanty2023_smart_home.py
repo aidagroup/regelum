@@ -7,10 +7,10 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
+    Var,
     terminate,
 )
 
@@ -81,42 +81,42 @@ class SmartHomeEvidence(Node):
         self.evidence = evidence
 
     class Inputs(NodeInputs):
-        tick: int = Input(source="SmartHomeEvidence.Outputs.tick")
+        tick: int = Input(src="SmartHomeEvidence.State.tick")
 
-    class Outputs(NodeOutputs):
-        tick: int = Output(initial=0, domain=range(0, 8))
-        smoke_detector_ok: bool = Output(
-            initial=lambda: SmartHomeEvidence.initial_evidence.smoke_detector_ok
+    class State(NodeState):
+        tick: int = Var(init=0, domain=range(0, 8))
+        smoke_detector_ok: bool = Var(
+            init=lambda: SmartHomeEvidence.initial_evidence.smoke_detector_ok
         )
-        smoke_battery_ok: bool = Output(
-            initial=lambda: SmartHomeEvidence.initial_evidence.smoke_battery_ok
+        smoke_battery_ok: bool = Var(
+            init=lambda: SmartHomeEvidence.initial_evidence.smoke_battery_ok
         )
-        smoke_detected: bool = Output(
-            initial=lambda: SmartHomeEvidence.initial_evidence.smoke_detected
+        smoke_detected: bool = Var(
+            init=lambda: SmartHomeEvidence.initial_evidence.smoke_detected
         )
-        heat_detector_ok: bool = Output(
-            initial=lambda: SmartHomeEvidence.initial_evidence.heat_detector_ok
+        heat_detector_ok: bool = Var(
+            init=lambda: SmartHomeEvidence.initial_evidence.heat_detector_ok
         )
-        heat_battery_ok: bool = Output(
-            initial=lambda: SmartHomeEvidence.initial_evidence.heat_battery_ok
+        heat_battery_ok: bool = Var(
+            init=lambda: SmartHomeEvidence.initial_evidence.heat_battery_ok
         )
-        high_temperature: bool = Output(
-            initial=lambda: SmartHomeEvidence.initial_evidence.high_temperature
+        high_temperature: bool = Var(
+            init=lambda: SmartHomeEvidence.initial_evidence.high_temperature
         )
-        leak_detector_ok: bool = Output(
-            initial=lambda: SmartHomeEvidence.initial_evidence.leak_detector_ok
+        leak_detector_ok: bool = Var(
+            init=lambda: SmartHomeEvidence.initial_evidence.leak_detector_ok
         )
-        leak_battery_ok: bool = Output(
-            initial=lambda: SmartHomeEvidence.initial_evidence.leak_battery_ok
+        leak_battery_ok: bool = Var(
+            init=lambda: SmartHomeEvidence.initial_evidence.leak_battery_ok
         )
-        leak_detected: bool = Output(
-            initial=lambda: SmartHomeEvidence.initial_evidence.leak_detected
+        leak_detected: bool = Var(
+            init=lambda: SmartHomeEvidence.initial_evidence.leak_detected
         )
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         index = min(inputs.tick, len(self.evidence) - 1)
         evidence = self.evidence[index]
-        return self.Outputs(
+        return self.State(
             tick=inputs.tick + 1,
             smoke_detector_ok=evidence.smoke_detector_ok,
             smoke_battery_ok=evidence.smoke_battery_ok,
@@ -132,22 +132,22 @@ class SmartHomeEvidence(Node):
 
 class FireDetectionSystem(Node):
     class Inputs(NodeInputs):
-        smoke_detector_ok: bool = Input(source=SmartHomeEvidence.Outputs.smoke_detector_ok)
-        smoke_battery_ok: bool = Input(source=SmartHomeEvidence.Outputs.smoke_battery_ok)
-        smoke_detected: bool = Input(source=SmartHomeEvidence.Outputs.smoke_detected)
-        heat_detector_ok: bool = Input(source=SmartHomeEvidence.Outputs.heat_detector_ok)
-        heat_battery_ok: bool = Input(source=SmartHomeEvidence.Outputs.heat_battery_ok)
-        high_temperature: bool = Input(source=SmartHomeEvidence.Outputs.high_temperature)
+        smoke_detector_ok: bool = Input(src=SmartHomeEvidence.State.smoke_detector_ok)
+        smoke_battery_ok: bool = Input(src=SmartHomeEvidence.State.smoke_battery_ok)
+        smoke_detected: bool = Input(src=SmartHomeEvidence.State.smoke_detected)
+        heat_detector_ok: bool = Input(src=SmartHomeEvidence.State.heat_detector_ok)
+        heat_battery_ok: bool = Input(src=SmartHomeEvidence.State.heat_battery_ok)
+        high_temperature: bool = Input(src=SmartHomeEvidence.State.high_temperature)
 
-    class Outputs(NodeOutputs):
-        fds_state: int = Output(initial=S0, domain=range(8))
-        smoke_alarm_requested: bool = Output(initial=False)
-        fire_alarm_requested: bool = Output(initial=False)
-        sprinkler_requested: bool = Output(initial=False)
-        fds_notify_user: bool = Output(initial=False)
-        fds_urgent_notify_user: bool = Output(initial=False)
+    class State(NodeState):
+        fds_state: int = Var(init=S0, domain=range(8))
+        smoke_alarm_requested: bool = Var(init=False)
+        fire_alarm_requested: bool = Var(init=False)
+        sprinkler_requested: bool = Var(init=False)
+        fds_notify_user: bool = Var(init=False)
+        fds_urgent_notify_user: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         smoke_unit_ok = inputs.smoke_detector_ok and inputs.smoke_battery_ok
         heat_unit_ok = inputs.heat_detector_ok and inputs.heat_battery_ok
 
@@ -166,7 +166,7 @@ class FireDetectionSystem(Node):
         else:
             state = S7
 
-        return self.Outputs(
+        return self.State(
             fds_state=state,
             smoke_alarm_requested=state in (S1, S4),
             fire_alarm_requested=state in (S2, S6),
@@ -178,17 +178,17 @@ class FireDetectionSystem(Node):
 
 class LeakDetectionSystem(Node):
     class Inputs(NodeInputs):
-        leak_detector_ok: bool = Input(source=SmartHomeEvidence.Outputs.leak_detector_ok)
-        leak_battery_ok: bool = Input(source=SmartHomeEvidence.Outputs.leak_battery_ok)
-        leak_detected: bool = Input(source=SmartHomeEvidence.Outputs.leak_detected)
+        leak_detector_ok: bool = Input(src=SmartHomeEvidence.State.leak_detector_ok)
+        leak_battery_ok: bool = Input(src=SmartHomeEvidence.State.leak_battery_ok)
+        leak_detected: bool = Input(src=SmartHomeEvidence.State.leak_detected)
 
-    class Outputs(NodeOutputs):
-        lds_state: int = Output(initial=LS0, domain=range(3))
-        valve_close_requested: bool = Output(initial=False)
-        lds_notify_user: bool = Output(initial=False)
-        lds_urgent_notify_user: bool = Output(initial=False)
+    class State(NodeState):
+        lds_state: int = Var(init=LS0, domain=range(3))
+        valve_close_requested: bool = Var(init=False)
+        lds_notify_user: bool = Var(init=False)
+        lds_urgent_notify_user: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         leak_unit_ok = inputs.leak_detector_ok and inputs.leak_battery_ok
         if not leak_unit_ok:
             state = LS2
@@ -196,7 +196,7 @@ class LeakDetectionSystem(Node):
             state = LS1
         else:
             state = LS0
-        return self.Outputs(
+        return self.State(
             lds_state=state,
             valve_close_requested=state == LS1,
             lds_notify_user=state == LS1,
@@ -206,29 +206,29 @@ class LeakDetectionSystem(Node):
 
 class ConflictResolver(Node):
     class Inputs(NodeInputs):
-        fds_state: int = Input(source=FireDetectionSystem.Outputs.fds_state)
-        lds_state: int = Input(source=LeakDetectionSystem.Outputs.lds_state)
-        sprinkler_requested: bool = Input(source=FireDetectionSystem.Outputs.sprinkler_requested)
+        fds_state: int = Input(src=FireDetectionSystem.State.fds_state)
+        lds_state: int = Input(src=LeakDetectionSystem.State.lds_state)
+        sprinkler_requested: bool = Input(src=FireDetectionSystem.State.sprinkler_requested)
         valve_close_requested: bool = Input(
-            source=LeakDetectionSystem.Outputs.valve_close_requested
+            src=LeakDetectionSystem.State.valve_close_requested
         )
-        fds_notify_user: bool = Input(source=FireDetectionSystem.Outputs.fds_notify_user)
+        fds_notify_user: bool = Input(src=FireDetectionSystem.State.fds_notify_user)
         fds_urgent_notify_user: bool = Input(
-            source=FireDetectionSystem.Outputs.fds_urgent_notify_user
+            src=FireDetectionSystem.State.fds_urgent_notify_user
         )
-        lds_notify_user: bool = Input(source=LeakDetectionSystem.Outputs.lds_notify_user)
+        lds_notify_user: bool = Input(src=LeakDetectionSystem.State.lds_notify_user)
         lds_urgent_notify_user: bool = Input(
-            source=LeakDetectionSystem.Outputs.lds_urgent_notify_user
+            src=LeakDetectionSystem.State.lds_urgent_notify_user
         )
 
-    class Outputs(NodeOutputs):
-        system_substate: int = Output(initial=SS0, domain=range(3))
-        final_sprinkler_on: bool = Output(initial=False)
-        final_water_valve_closed: bool = Output(initial=False)
-        final_notify_user: bool = Output(initial=False)
-        final_urgent_notify_user: bool = Output(initial=False)
+    class State(NodeState):
+        system_substate: int = Var(init=SS0, domain=range(3))
+        final_sprinkler_on: bool = Var(init=False)
+        final_water_valve_closed: bool = Var(init=False)
+        final_notify_user: bool = Var(init=False)
+        final_urgent_notify_user: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         if inputs.lds_state == LS2:
             substate = SS2
             close_valve = False
@@ -239,7 +239,7 @@ class ConflictResolver(Node):
             substate = SS0
             close_valve = False
 
-        return self.Outputs(
+        return self.State(
             system_substate=substate,
             final_sprinkler_on=inputs.sprinkler_requested,
             final_water_valve_closed=close_valve,
@@ -257,23 +257,23 @@ class ConflictResolver(Node):
 
 class ActionDispatcher(Node):
     class Inputs(NodeInputs):
-        final_sprinkler_on: bool = Input(source=ConflictResolver.Outputs.final_sprinkler_on)
+        final_sprinkler_on: bool = Input(src=ConflictResolver.State.final_sprinkler_on)
         final_water_valve_closed: bool = Input(
-            source=ConflictResolver.Outputs.final_water_valve_closed
+            src=ConflictResolver.State.final_water_valve_closed
         )
-        final_notify_user: bool = Input(source=ConflictResolver.Outputs.final_notify_user)
+        final_notify_user: bool = Input(src=ConflictResolver.State.final_notify_user)
         final_urgent_notify_user: bool = Input(
-            source=ConflictResolver.Outputs.final_urgent_notify_user
+            src=ConflictResolver.State.final_urgent_notify_user
         )
 
-    class Outputs(NodeOutputs):
-        sprinkler_on: bool = Output(initial=False)
-        water_valve_closed: bool = Output(initial=False)
-        notify_user: bool = Output(initial=False)
-        urgent_notify_user: bool = Output(initial=False)
+    class State(NodeState):
+        sprinkler_on: bool = Var(init=False)
+        water_valve_closed: bool = Var(init=False)
+        notify_user: bool = Var(init=False)
+        urgent_notify_user: bool = Var(init=False)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(
+    def update(self, inputs: Inputs) -> State:
+        return self.State(
             sprinkler_on=inputs.final_sprinkler_on,
             water_valve_closed=inputs.final_water_valve_closed,
             notify_user=inputs.final_notify_user,
@@ -283,22 +283,22 @@ class ActionDispatcher(Node):
 
 class SafetyLogger(Node):
     class Inputs(NodeInputs):
-        tick: int = Input(source=SmartHomeEvidence.Outputs.tick)
-        fds_state: int = Input(source=FireDetectionSystem.Outputs.fds_state)
-        lds_state: int = Input(source=LeakDetectionSystem.Outputs.lds_state)
-        system_substate: int = Input(source=ConflictResolver.Outputs.system_substate)
-        sprinkler_on: bool = Input(source=ActionDispatcher.Outputs.sprinkler_on)
-        water_valve_closed: bool = Input(source=ActionDispatcher.Outputs.water_valve_closed)
-        notify_user: bool = Input(source=ActionDispatcher.Outputs.notify_user)
-        urgent_notify_user: bool = Input(source=ActionDispatcher.Outputs.urgent_notify_user)
+        tick: int = Input(src=SmartHomeEvidence.State.tick)
+        fds_state: int = Input(src=FireDetectionSystem.State.fds_state)
+        lds_state: int = Input(src=LeakDetectionSystem.State.lds_state)
+        system_substate: int = Input(src=ConflictResolver.State.system_substate)
+        sprinkler_on: bool = Input(src=ActionDispatcher.State.sprinkler_on)
+        water_valve_closed: bool = Input(src=ActionDispatcher.State.water_valve_closed)
+        notify_user: bool = Input(src=ActionDispatcher.State.notify_user)
+        urgent_notify_user: bool = Input(src=ActionDispatcher.State.urgent_notify_user)
         log: tuple[tuple[int, int, int, int, bool, bool, bool, bool], ...] = Input(
-            source="SafetyLogger.Outputs.log"
+            src="SafetyLogger.State.log"
         )
 
-    class Outputs(NodeOutputs):
-        log: tuple[tuple[int, int, int, int, bool, bool, bool, bool], ...] = Output(initial=())
+    class State(NodeState):
+        log: tuple[tuple[int, int, int, int, bool, bool, bool, bool], ...] = Var(init=())
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         sample = (
             inputs.tick,
             inputs.fds_state,
@@ -322,7 +322,7 @@ class SafetyLogger(Node):
                 urgent=inputs.urgent_notify_user,
             )
         )
-        return self.Outputs(log=inputs.log + (sample,))
+        return self.State(log=inputs.log + (sample,))
 
 
 def build_system(

@@ -44,8 +44,8 @@ The graph has four phases:
 | <span class="phase-label phase-label--play">play</span> | `Decoder`, `MediaSession`, `Logger` | Compute downloaded seconds, integrate the buffer, log. |
 
 At node level, the same model looks like this.
-Solid arrows show that one node reads another node's output; dashed
-arrows from `state` show self-reads, where a node reads its own output from
+Solid arrows show that one node reads another node's state variable; dashed
+arrows from `state` show self-reads, where a node reads its own state variable from
 the previous tick.
 The node colors correspond to the phase colors in the table above:
 
@@ -106,7 +106,7 @@ A phase is defined by two things:
 - **transitions** — the outgoing edges that choose the next phase, or
   terminate the current tick.
 
-The nodes inside one phase must form a DAG with respect to their input/output
+The nodes inside one phase must form a DAG with respect to their input/state
 dependencies.
 This is what lets the compiler resolve a deterministic topological order for
 the phase.
@@ -259,47 +259,47 @@ rg.Phase(
     "decide",
     nodes=(policy,),
     transitions=(
-        rg.If(rg.V(policy.Outputs.stalling), "drop_quality", name="stalling"),
+        rg.If(rg.V(policy.State.stalling), "drop_quality", name="stalling"),
         rg.Else("play", name="healthy"),
     ),
 )
 ```
 
-`policy.Outputs.stalling` is an output reference, not the current boolean
+`policy.State.stalling` is a state reference, not the current boolean
 value.
-`rg.V(policy.Outputs.stalling)` means: read this output value when the
+`rg.V(policy.State.stalling)` means: read this state variable value when the
 transition is evaluated.
 
 Expressions that contain `rg.V(...)` build **symbolic guards** under the hood.
 Use this form for transition guards by default: if a guard depends on a node
-output, wrap that output reference with `rg.V(...)`.
-Symbolic guards can also compare output values or terminate a tick:
+state variable, wrap that state reference with `rg.V(...)`.
+Symbolic guards can also compare state variable values or terminate a tick:
 
 ```python
-rg.If(rg.V(MediaSession.Outputs.buffer_seconds) < 2.0, "buffer_warning")
-rg.If(rg.V(policy.Outputs.force_stop), rg.terminate, name="force_stop")
+rg.If(rg.V(MediaSession.State.buffer_seconds) < 2.0, "buffer_warning")
+rg.If(rg.V(policy.State.force_stop), rg.terminate, name="force_stop")
 ```
 
 Keeping guards symbolic is what lets `regelum` reason about transitions
 during graph compilation instead of treating them as opaque Python code.
-The compiler can see which outputs the guard depends on and can check whether
+The compiler can see which state variables the guard depends on and can check whether
 the transition graph has structural problems, such as an ambiguous next phase
 or a path that may fail to terminate where this can be proven.
 Under the hood, this analysis is backed by
 [Z3](https://github.com/Z3Prover/z3), an SMT solver.
 
-`V(...)` accepts the same kinds of output references as inputs:
+`V(...)` accepts the same kinds of state references as inputs:
 
-- output descriptors, such as
-  `rg.V(MediaSession.Outputs.buffer_seconds)`;
-- instance-bound output ports, such as
-  `rg.V(session.Outputs.buffer_seconds)`;
+- state descriptors, such as
+  `rg.V(MediaSession.State.buffer_seconds)`;
+- instance-bound state ports, such as
+  `rg.V(session.State.buffer_seconds)`;
 - lazy callables, such as
-  `rg.V(lambda: MediaSession.Outputs.buffer_seconds)`;
+  `rg.V(lambda: MediaSession.State.buffer_seconds)`;
 - string references, such as
   `rg.V("MediaSession.buffer_seconds")`.
 
-Enum outputs can be compared directly inside symbolic predicates:
+Enum state variables can be compared directly inside symbolic predicates:
 
 ```python
 from enum import Enum
@@ -310,7 +310,7 @@ class PlaybackMode(Enum):
     PAUSED = "paused"
 
 
-rg.If(rg.V(state.Outputs.mode) == PlaybackMode.PLAYING, "play")
+rg.If(rg.V(state.State.mode) == PlaybackMode.PLAYING, "play")
 ```
 
 Python callables, including lambdas, can also be used as predicates when the
@@ -328,8 +328,8 @@ A larger system might extend the chain with `Elif`:
 
 ```python
 transitions = (
-    rg.If(rg.V(policy.Outputs.stalling), "drop_quality"),
-    rg.Elif(rg.V(policy.Outputs.healthy_steady), "upgrade_quality"),
+    rg.If(rg.V(policy.State.stalling), "drop_quality"),
+    rg.Elif(rg.V(policy.State.healthy_steady), "upgrade_quality"),
     rg.Else("play"),
 )
 ```
@@ -345,10 +345,10 @@ For example, this transition tuple contains three chains: a single `If`, an
 
 ```python
 transitions = (
-    rg.If(rg.V(network.Outputs.disconnected), "pause", name="offline"),
-    rg.If(rg.V(policy.Outputs.stalling), "drop_quality", name="stalling"),
-    rg.Elif(rg.V(policy.Outputs.can_upgrade), "upgrade_quality", name="upgrade"),
-    rg.If(rg.V(logger.Outputs.should_flush), "flush_logs", name="flush_logs"),
+    rg.If(rg.V(network.State.disconnected), "pause", name="offline"),
+    rg.If(rg.V(policy.State.stalling), "drop_quality", name="stalling"),
+    rg.Elif(rg.V(policy.State.can_upgrade), "upgrade_quality", name="upgrade"),
+    rg.If(rg.V(logger.State.should_flush), "flush_logs", name="flush_logs"),
 )
 ```
 
@@ -366,10 +366,10 @@ ambiguous.
 
     ```python
     transitions = (
-        rg.If(rg.V(network.Outputs.disconnected), "pause", name="offline"),
+        rg.If(rg.V(network.State.disconnected), "pause", name="offline"),
         rg.Else("decide_quality", name="online"),
 
-        rg.If(rg.V(policy.Outputs.stalling), "drop_quality", name="stalling"),
+        rg.If(rg.V(policy.State.stalling), "drop_quality", name="stalling"),
         rg.Else("play", name="healthy"),
     )
     ```

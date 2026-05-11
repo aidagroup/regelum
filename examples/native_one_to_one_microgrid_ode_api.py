@@ -13,13 +13,14 @@ from regelum import (
     Input,
     Node,
     NodeInputs,
-    NodeOutputs,
-    Output,
+    NodeState,
+    ODENode,
+    ODESystem,
     Phase,
     PhasedReactiveSystem,
+    Var,
     terminate,
 )
-from regelum.ode import NodeState, ODENode, ODESystem, StateVar
 
 PhaseVector = tuple[float, float, float]
 VoltageSample = tuple[float, float, float, float]
@@ -323,20 +324,20 @@ class ODEAPIDroopController(Node):
         )
 
     class Inputs(NodeInputs):
-        master_current: PhaseVector = Input(source=lambda: Lc1Filter.State.inductor_i)
-        master_voltage: PhaseVector = Input(source=lambda: Lc1Filter.State.capacitor_v)
-        slave_current: PhaseVector = Input(source=lambda: Lcl1Filter.State.inverter_side_i)
-        slave_voltage: PhaseVector = Input(source=lambda: Lcl1Filter.State.capacitor_v)
+        master_current: PhaseVector = Input(src=lambda: Lc1Filter.State.inductor_i)
+        master_voltage: PhaseVector = Input(src=lambda: Lc1Filter.State.capacitor_v)
+        slave_current: PhaseVector = Input(src=lambda: Lcl1Filter.State.inverter_side_i)
+        slave_voltage: PhaseVector = Input(src=lambda: Lcl1Filter.State.capacitor_v)
 
-    class Outputs(NodeOutputs):
-        inverter1_v: PhaseVector = Output(initial=zeros3)
-        inverter2_v: PhaseVector = Output(initial=zeros3)
-        inverter1_modulation: PhaseVector = Output(initial=zeros3)
-        inverter2_modulation: PhaseVector = Output(initial=zeros3)
-        master_frequency_hz: float = Output(initial=50.0)
-        slave_frequency_hz: float = Output(initial=50.0)
+    class State(NodeState):
+        inverter1_v: PhaseVector = Var(init=zeros3)
+        inverter2_v: PhaseVector = Var(init=zeros3)
+        inverter1_modulation: PhaseVector = Var(init=zeros3)
+        inverter2_modulation: PhaseVector = Var(init=zeros3)
+        master_frequency_hz: float = Var(init=50.0)
+        slave_frequency_hz: float = Var(init=50.0)
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         master_m, master_frequency = self._master_control(
             current=inputs.master_current,
             voltage=inputs.master_voltage,
@@ -345,7 +346,7 @@ class ODEAPIDroopController(Node):
             current=inputs.slave_current,
             voltage=inputs.slave_voltage,
         )
-        return self.Outputs(
+        return self.State(
             inverter1_v=scale3(master_m, self.v_dc),
             inverter2_v=scale3(slave_m, self.v_dc),
             inverter1_modulation=master_m,
@@ -396,13 +397,13 @@ class Inverter1(Node):
         self.gain = 0.5 * v_dc
 
     class Inputs(NodeInputs):
-        modulation: PhaseVector = Input(source=ODEAPIDroopController.Outputs.inverter1_modulation)
+        modulation: PhaseVector = Input(src=ODEAPIDroopController.State.inverter1_modulation)
 
-    class Outputs(NodeOutputs):
-        phase_v: PhaseVector = Output(initial=zeros3)
+    class State(NodeState):
+        phase_v: PhaseVector = Var(init=zeros3)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(phase_v=scale3(inputs.modulation, self.gain))
+    def update(self, inputs: Inputs) -> State:
+        return self.State(phase_v=scale3(inputs.modulation, self.gain))
 
 
 class Inverter2(Node):
@@ -410,13 +411,13 @@ class Inverter2(Node):
         self.gain = 0.5 * v_dc
 
     class Inputs(NodeInputs):
-        modulation: PhaseVector = Input(source=ODEAPIDroopController.Outputs.inverter2_modulation)
+        modulation: PhaseVector = Input(src=ODEAPIDroopController.State.inverter2_modulation)
 
-    class Outputs(NodeOutputs):
-        phase_v: PhaseVector = Output(initial=zeros3)
+    class State(NodeState):
+        phase_v: PhaseVector = Var(init=zeros3)
 
-    def run(self, inputs: Inputs) -> Outputs:
-        return self.Outputs(phase_v=scale3(inputs.modulation, self.gain))
+    def update(self, inputs: Inputs) -> State:
+        return self.State(phase_v=scale3(inputs.modulation, self.gain))
 
 
 class Lc1Filter(ODENode):
@@ -425,13 +426,13 @@ class Lc1Filter(ODENode):
         self.capacitance = capacitance
 
     class Inputs(NodeInputs):
-        inverter_v: PhaseVector = Input(source=Inverter1.Outputs.phase_v)
-        lcl1_grid_side_i: PhaseVector = Input(source=lambda: Lcl1Filter.State.grid_side_i)
-        lc2_inductor_i: PhaseVector = Input(source=lambda: Lc2Filter.State.inductor_i)
+        inverter_v: PhaseVector = Input(src=Inverter1.State.phase_v)
+        lcl1_grid_side_i: PhaseVector = Input(src=lambda: Lcl1Filter.State.grid_side_i)
+        lc2_inductor_i: PhaseVector = Input(src=lambda: Lc2Filter.State.inductor_i)
 
     class State(NodeState):
-        capacitor_v: PhaseVector = StateVar(initial=zeros3)
-        inductor_i: PhaseVector = StateVar(initial=zeros3)
+        capacitor_v: PhaseVector = Var(init=zeros3)
+        inductor_i: PhaseVector = Var(init=zeros3)
 
     def dstate(self, inputs: Inputs, state: State) -> State:
         return self.State(
@@ -452,13 +453,13 @@ class Lcl1Filter(ODENode):
         self.capacitance = capacitance
 
     class Inputs(NodeInputs):
-        inverter_v: PhaseVector = Input(source=Inverter2.Outputs.phase_v)
-        bus_v: PhaseVector = Input(source=Lc1Filter.State.capacitor_v)
+        inverter_v: PhaseVector = Input(src=Inverter2.State.phase_v)
+        bus_v: PhaseVector = Input(src=Lc1Filter.State.capacitor_v)
 
     class State(NodeState):
-        capacitor_v: PhaseVector = StateVar(initial=zeros3)
-        inverter_side_i: PhaseVector = StateVar(initial=zeros3)
-        grid_side_i: PhaseVector = StateVar(initial=zeros3)
+        capacitor_v: PhaseVector = Var(init=zeros3)
+        inverter_side_i: PhaseVector = Var(init=zeros3)
+        grid_side_i: PhaseVector = Var(init=zeros3)
 
     def dstate(self, inputs: Inputs, state: State) -> State:
         return self.State(
@@ -483,12 +484,12 @@ class Lc2Filter(ODENode):
         self.capacitance = capacitance
 
     class Inputs(NodeInputs):
-        bus_v: PhaseVector = Input(source=Lc1Filter.State.capacitor_v)
-        load_i: PhaseVector = Input(source=lambda: Rl1Load.State.load_i)
+        bus_v: PhaseVector = Input(src=Lc1Filter.State.capacitor_v)
+        load_i: PhaseVector = Input(src=lambda: Rl1Load.State.load_i)
 
     class State(NodeState):
-        capacitor_v: PhaseVector = StateVar(initial=zeros3)
-        inductor_i: PhaseVector = StateVar(initial=zeros3)
+        capacitor_v: PhaseVector = Var(init=zeros3)
+        inductor_i: PhaseVector = Var(init=zeros3)
 
     def dstate(self, inputs: Inputs, state: State) -> State:
         return self.State(
@@ -514,10 +515,10 @@ class Rl1Load(ODENode):
         self.inductance = inductance
 
     class Inputs(NodeInputs):
-        capacitor_v: PhaseVector = Input(source=Lc2Filter.State.capacitor_v)
+        capacitor_v: PhaseVector = Input(src=Lc2Filter.State.capacitor_v)
 
     class State(NodeState):
-        load_i: PhaseVector = StateVar(initial=zeros3)
+        load_i: PhaseVector = Var(init=zeros3)
 
     def dstate(self, inputs: Inputs, state: State, *, time: float) -> State:
         resistance = ca.if_else(time < 0.2, self.resistance, 2.0 * self.resistance)
@@ -531,21 +532,21 @@ class Rl1Load(ODENode):
 
 class ODEAPIMicrogridLogger(Node):
     class Inputs(NodeInputs):
-        time_s: float = Input(source=Clock.time)
-        lcl1_capacitor_v: PhaseVector = Input(source=Lcl1Filter.State.capacitor_v)
-        samples: tuple[VoltageSample, ...] = Input(source="ODEAPIMicrogridLogger.Outputs.samples")
+        time_s: float = Input(src=Clock.time)
+        lcl1_capacitor_v: PhaseVector = Input(src=Lcl1Filter.State.capacitor_v)
+        samples: tuple[VoltageSample, ...] = Input(src="ODEAPIMicrogridLogger.State.samples")
 
-    class Outputs(NodeOutputs):
-        samples: tuple[VoltageSample, ...] = Output(initial=())
+    class State(NodeState):
+        samples: tuple[VoltageSample, ...] = Var(init=())
 
-    def run(self, inputs: Inputs) -> Outputs:
+    def update(self, inputs: Inputs) -> State:
         sample = (
             inputs.time_s,
             inputs.lcl1_capacitor_v[0],
             inputs.lcl1_capacitor_v[1],
             inputs.lcl1_capacitor_v[2],
         )
-        return self.Outputs(samples=inputs.samples + (sample,))
+        return self.State(samples=inputs.samples + (sample,))
 
 
 def build_system() -> PhasedReactiveSystem:

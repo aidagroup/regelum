@@ -44,11 +44,11 @@ from regelum import (
     If,
     Input,
     Node,
-    NodeOutputs,
-    Output,
+    NodeState,
     Phase,
     PhasedReactiveSystem,
     V,
+    Var,
     terminate,
 )
 
@@ -147,14 +147,14 @@ class ScenarioProfile(Node):
         self.wind_power_profile_kw = wind_power_profile_kw or _fig9_wind_power_profile_kw
         self.load_power_profile_kw = load_power_profile_kw or _fig9_load_power_profile_kw
 
-    class Outputs(NodeOutputs):
-        time_s: float = Output(initial=lambda self: cast(ScenarioProfile, self).init_time_s)
-        wind_available_kw: float = Output(initial=3.0)
-        load_kw: float = Output(initial=28.0)
+    class State(NodeState):
+        time_s: float = Var(init=lambda self: cast(ScenarioProfile, self).init_time_s)
+        wind_available_kw: float = Var(init=3.0)
+        load_kw: float = Var(init=28.0)
 
-    def run(self, time_s: float = Input(source=lambda: ScenarioProfile.Outputs.time_s)) -> Outputs:
+    def update(self, time_s: float = Input(src=lambda: ScenarioProfile.State.time_s)) -> State:
         next_time = time_s + self.params.dt_s
-        return self.Outputs(
+        return self.State(
             time_s=next_time,
             wind_available_kw=self.wind_power_profile_kw(next_time),
             load_kw=self.load_power_profile_kw(next_time),
@@ -174,45 +174,45 @@ class WindTurbinePmsgAveraged(Node):
         self.params = params
         self.mppt_tau_s = mppt_tau_s
 
-    class Outputs(NodeOutputs):
-        dc_power_kw: float = Output(initial=3.0)
-        dc_current_a: float = Output(initial=0.0)
-        boost_duty: float = Output(initial=0.20)
-        boost_inductor_current_a: float = Output(initial=0.0)
-        previous_wt_power_w: float = Output(initial=3000.0)
-        pmsg_direct_current_a: float = Output(initial=0.0)
-        pmsg_quadrature_current_a: float = Output(initial=0.0)
-        pmsg_direct_voltage_v: float = Output(initial=0.0)
-        pmsg_quadrature_voltage_v: float = Output(initial=0.0)
-        pmsg_electromagnetic_torque_nm: float = Output(initial=0.0)
-        pmsg_rotor_speed_rpm: float = Output(initial=12500.0)
-        pmsg_electrical_power_kw: float = Output(initial=0.0)
-        rectifier_dc_voltage_v: float = Output(initial=288.0)
-        rectifier_dc_current_a: float = Output(initial=0.0)
+    class State(NodeState):
+        dc_power_kw: float = Var(init=3.0)
+        dc_current_a: float = Var(init=0.0)
+        boost_duty: float = Var(init=0.20)
+        boost_inductor_current_a: float = Var(init=0.0)
+        previous_wt_power_w: float = Var(init=3000.0)
+        pmsg_direct_current_a: float = Var(init=0.0)
+        pmsg_quadrature_current_a: float = Var(init=0.0)
+        pmsg_direct_voltage_v: float = Var(init=0.0)
+        pmsg_quadrature_voltage_v: float = Var(init=0.0)
+        pmsg_electromagnetic_torque_nm: float = Var(init=0.0)
+        pmsg_rotor_speed_rpm: float = Var(init=12500.0)
+        pmsg_electrical_power_kw: float = Var(init=0.0)
+        rectifier_dc_voltage_v: float = Var(init=288.0)
+        rectifier_dc_current_a: float = Var(init=0.0)
 
-    def run(
+    def update(
         self,
-        wind_available_kw: float = Input(source=ScenarioProfile.Outputs.wind_available_kw),
-        dc_voltage_v: float = Input(source=lambda: DcLinkCapacitor.Outputs.voltage_v),
-        dc_power_kw: float = Input(source=lambda: WindTurbinePmsgAveraged.Outputs.dc_power_kw),
-        dc_current_a: float = Input(source=lambda: WindTurbinePmsgAveraged.Outputs.dc_current_a),
-        boost_duty: float = Input(source=lambda: WindTurbinePmsgAveraged.Outputs.boost_duty),
+        wind_available_kw: float = Input(src=ScenarioProfile.State.wind_available_kw),
+        dc_voltage_v: float = Input(src=lambda: DcLinkCapacitor.State.voltage_v),
+        dc_power_kw: float = Input(src=lambda: WindTurbinePmsgAveraged.State.dc_power_kw),
+        dc_current_a: float = Input(src=lambda: WindTurbinePmsgAveraged.State.dc_current_a),
+        boost_duty: float = Input(src=lambda: WindTurbinePmsgAveraged.State.boost_duty),
         boost_inductor_current_a: float = Input(
-            source=lambda: WindTurbinePmsgAveraged.Outputs.boost_inductor_current_a
+            src=lambda: WindTurbinePmsgAveraged.State.boost_inductor_current_a
         ),
         previous_wt_power_w: float = Input(
-            source=lambda: WindTurbinePmsgAveraged.Outputs.previous_wt_power_w
+            src=lambda: WindTurbinePmsgAveraged.State.previous_wt_power_w
         ),
         pmsg_direct_current_a: float = Input(
-            source=lambda: WindTurbinePmsgAveraged.Outputs.pmsg_direct_current_a
+            src=lambda: WindTurbinePmsgAveraged.State.pmsg_direct_current_a
         ),
         pmsg_quadrature_current_a: float = Input(
-            source=lambda: WindTurbinePmsgAveraged.Outputs.pmsg_quadrature_current_a
+            src=lambda: WindTurbinePmsgAveraged.State.pmsg_quadrature_current_a
         ),
         pmsg_rotor_speed_rpm: float = Input(
-            source=lambda: WindTurbinePmsgAveraged.Outputs.pmsg_rotor_speed_rpm
+            src=lambda: WindTurbinePmsgAveraged.State.pmsg_rotor_speed_rpm
         ),
-    ) -> Outputs:
+    ) -> State:
         rotor_speed_rad_s = max(pmsg_rotor_speed_rpm * 2.0 * pi / 60.0, 1.0)
         mechanical_power_kw = _clamp(wind_available_kw, 0.0, self.params.wind_rated_power_kw)
         mechanical_torque_nm = 1000.0 * mechanical_power_kw / rotor_speed_rad_s
@@ -309,7 +309,7 @@ class WindTurbinePmsgAveraged(Node):
         response = _first_order_response(self.params.dt_s, self.mppt_tau_s)
         power_next = dc_power_kw + response * (target_kw - dc_power_kw)
         current_next = 1000.0 * power_next / max(dc_voltage_v, 1.0)
-        return self.Outputs(
+        return self.State(
             dc_power_kw=power_next,
             dc_current_a=current_next,
             boost_duty=duty_next,
@@ -347,28 +347,28 @@ class WindTurbinePmsgAveraged(Node):
 
 
 class WaterTreatmentLoad(Node):
-    class Outputs(NodeOutputs):
-        load_kw: float = Output(initial=28.0)
+    class State(NodeState):
+        load_kw: float = Var(init=28.0)
 
-    def run(self, load_kw: float = Input(source=ScenarioProfile.Outputs.load_kw)) -> Outputs:
-        return self.Outputs(load_kw=load_kw)
+    def update(self, load_kw: float = Input(src=ScenarioProfile.State.load_kw)) -> State:
+        return self.State(load_kw=load_kw)
 
 
 class PowerFlowSupervisor(Node):
     """Fig. 6 state-flow supervisor for DG breaker/governor/AVR mode logic."""
 
-    class Outputs(NodeOutputs):
-        mode: MicrogridMode = Output(initial=MicrogridMode.DG_CHARGING)
-        diesel_enabled: bool = Output(initial=True)
-        dump_load_enabled: bool = Output(initial=False)
+    class State(NodeState):
+        mode: MicrogridMode = Var(init=MicrogridMode.DG_CHARGING)
+        diesel_enabled: bool = Var(init=True)
+        dump_load_enabled: bool = Var(init=False)
 
-    def run(
+    def update(
         self,
-        soc_percent: float = Input(source=lambda: BatteryThevenin.Outputs.soc_percent),
-        wind_power_kw: float = Input(source=WindTurbinePmsgAveraged.Outputs.dc_power_kw),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_kw),
-        diesel_enabled: bool = Input(source=lambda: PowerFlowSupervisor.Outputs.diesel_enabled),
-    ) -> Outputs:
+        soc_percent: float = Input(src=lambda: BatteryThevenin.State.soc_percent),
+        wind_power_kw: float = Input(src=WindTurbinePmsgAveraged.State.dc_power_kw),
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_kw),
+        diesel_enabled: bool = Input(src=lambda: PowerFlowSupervisor.State.diesel_enabled),
+    ) -> State:
         if diesel_enabled:
             diesel_next = soc_percent < 70.0
         else:
@@ -386,7 +386,7 @@ class PowerFlowSupervisor(Node):
         else:
             mode = MicrogridMode.WT_BATTERY_DISCHARGING
 
-        return self.Outputs(
+        return self.State(
             mode=mode,
             diesel_enabled=diesel_next,
             dump_load_enabled=dump_load_enabled,
@@ -398,29 +398,29 @@ class DieselSynchronousGeneratorReduced(Node):
         self.params = params
         self.speed_tau_s = speed_tau_s
 
-    class Outputs(NodeOutputs):
-        ac_power_kw: float = Output(initial=50.0)
-        speed_rpm: float = Output(initial=1800.0)
-        terminal_voltage_v: float = Output(initial=460.0)
-        governor_integral: float = Output(initial=0.0)
-        avr_integral: float = Output(initial=0.0)
-        excitation_voltage_v: float = Output(initial=1.0)
-        stator_current_a: float = Output(initial=62.0)
+    class State(NodeState):
+        ac_power_kw: float = Var(init=50.0)
+        speed_rpm: float = Var(init=1800.0)
+        terminal_voltage_v: float = Var(init=460.0)
+        governor_integral: float = Var(init=0.0)
+        avr_integral: float = Var(init=0.0)
+        excitation_voltage_v: float = Var(init=1.0)
+        stator_current_a: float = Var(init=62.0)
 
-    def run(
+    def update(
         self,
-        diesel_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.diesel_enabled),
+        diesel_enabled: bool = Input(src=PowerFlowSupervisor.State.diesel_enabled),
         speed_rpm: float = Input(
-            source=lambda: DieselSynchronousGeneratorReduced.Outputs.speed_rpm
+            src=lambda: DieselSynchronousGeneratorReduced.State.speed_rpm
         ),
-        pcc_voltage_v: float = Input(source=lambda: PccBus.Outputs.voltage_v),
+        pcc_voltage_v: float = Input(src=lambda: PccBus.State.voltage_v),
         governor_integral: float = Input(
-            source=lambda: DieselSynchronousGeneratorReduced.Outputs.governor_integral
+            src=lambda: DieselSynchronousGeneratorReduced.State.governor_integral
         ),
         avr_integral: float = Input(
-            source=lambda: DieselSynchronousGeneratorReduced.Outputs.avr_integral
+            src=lambda: DieselSynchronousGeneratorReduced.State.avr_integral
         ),
-    ) -> Outputs:
+    ) -> State:
         target_speed = self.params.diesel_rated_speed_rpm if diesel_enabled else 0.0
         response = _first_order_response(self.params.dt_s, self.speed_tau_s)
         speed_error = target_speed - speed_rpm
@@ -445,7 +445,7 @@ class DieselSynchronousGeneratorReduced(Node):
         stator_current = abs(
             _ac_power_to_line_current_peak(power_kw, self.params.sg_rated_voltage_v)
         )
-        return self.Outputs(
+        return self.State(
             ac_power_kw=power_kw,
             speed_rpm=speed_next,
             terminal_voltage_v=pcc_voltage_v if diesel_enabled else 0.0,
@@ -461,22 +461,22 @@ class PowerBalanceReference(Node):
         self.max_charge_kw = max_charge_kw
         self.max_discharge_kw = max_discharge_kw
 
-    class Outputs(NodeOutputs):
-        battery_power_reference_kw: float = Output(initial=20.0)
-        inverter_ac_power_reference_kw: float = Output(initial=-8.0)
-        dump_load_power_kw: float = Output(initial=0.0)
-        unserved_power_kw: float = Output(initial=0.0)
+    class State(NodeState):
+        battery_power_reference_kw: float = Var(init=20.0)
+        inverter_ac_power_reference_kw: float = Var(init=-8.0)
+        dump_load_power_kw: float = Var(init=0.0)
+        unserved_power_kw: float = Var(init=0.0)
 
-    def run(
+    def update(
         self,
-        wind_power_kw: float = Input(source=WindTurbinePmsgAveraged.Outputs.dc_power_kw),
+        wind_power_kw: float = Input(src=WindTurbinePmsgAveraged.State.dc_power_kw),
         diesel_power_kw: float = Input(
-            source=DieselSynchronousGeneratorReduced.Outputs.ac_power_kw
+            src=DieselSynchronousGeneratorReduced.State.ac_power_kw
         ),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_kw),
-        soc_percent: float = Input(source=lambda: BatteryThevenin.Outputs.soc_percent),
-        dump_load_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.dump_load_enabled),
-    ) -> Outputs:
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_kw),
+        soc_percent: float = Input(src=lambda: BatteryThevenin.State.soc_percent),
+        dump_load_enabled: bool = Input(src=PowerFlowSupervisor.State.dump_load_enabled),
+    ) -> State:
         surplus_kw = wind_power_kw + diesel_power_kw - load_power_kw
         inverter_ac_reference_kw = load_power_kw - diesel_power_kw
         dump_load_kw = max(0.0, surplus_kw) if dump_load_enabled else 0.0
@@ -485,7 +485,7 @@ class PowerBalanceReference(Node):
         max_discharge_kw = self.max_discharge_kw if soc_percent > 0.0 else 0.0
         battery_ref_kw = _clamp(surplus_after_dump_kw, -max_discharge_kw, max_charge_kw)
         unserved_kw = surplus_after_dump_kw - battery_ref_kw
-        return self.Outputs(
+        return self.State(
             battery_power_reference_kw=battery_ref_kw,
             inverter_ac_power_reference_kw=inverter_ac_reference_kw,
             dump_load_power_kw=dump_load_kw,
@@ -516,34 +516,34 @@ class BatteryDcDcConverter(Node):
         self.voltage_correction_limit_a = voltage_correction_limit_a
         self.current_tau_s = current_tau_s
 
-    class Outputs(NodeOutputs):
-        battery_current_a: float = Output(initial=-43.0)
-        battery_power_kw: float = Output(initial=10.75)
-        duty: float = Output(initial=0.5)
-        battery_current_reference_a: float = Output(initial=-43.0)
-        current_error_integral: float = Output(initial=0.0)
-        inductor_current_a: float = Output(initial=-43.0)
-        voltage_error_integral: float = Output(initial=0.0)
+    class State(NodeState):
+        battery_current_a: float = Var(init=-43.0)
+        battery_power_kw: float = Var(init=10.75)
+        duty: float = Var(init=0.5)
+        battery_current_reference_a: float = Var(init=-43.0)
+        current_error_integral: float = Var(init=0.0)
+        inductor_current_a: float = Var(init=-43.0)
+        voltage_error_integral: float = Var(init=0.0)
 
-    def run(
+    def update(
         self,
         battery_power_reference_kw: float = Input(
-            source=PowerBalanceReference.Outputs.battery_power_reference_kw
+            src=PowerBalanceReference.State.battery_power_reference_kw
         ),
-        dc_voltage_v: float = Input(source=lambda: DcLinkCapacitor.Outputs.voltage_v),
+        dc_voltage_v: float = Input(src=lambda: DcLinkCapacitor.State.voltage_v),
         battery_terminal_voltage_v: float = Input(
-            source=lambda: BatteryThevenin.Outputs.terminal_voltage_v
+            src=lambda: BatteryThevenin.State.terminal_voltage_v
         ),
         battery_current_a: float = Input(
-            source=lambda: BatteryDcDcConverter.Outputs.battery_current_a
+            src=lambda: BatteryDcDcConverter.State.battery_current_a
         ),
         voltage_error_integral: float = Input(
-            source=lambda: BatteryDcDcConverter.Outputs.voltage_error_integral
+            src=lambda: BatteryDcDcConverter.State.voltage_error_integral
         ),
         current_error_integral: float = Input(
-            source=lambda: BatteryDcDcConverter.Outputs.current_error_integral
+            src=lambda: BatteryDcDcConverter.State.current_error_integral
         ),
-    ) -> Outputs:
+    ) -> State:
         battery_voltage = max(abs(battery_terminal_voltage_v), 1.0)
         feedforward_current_a = -1000.0 * battery_power_reference_kw / battery_voltage
         voltage_error_v = self.params.dc_link_reference_v - dc_voltage_v
@@ -582,7 +582,7 @@ class BatteryDcDcConverter(Node):
             battery_current_reference_a - battery_current_a
         )
         battery_power_kw = -battery_voltage * current_next / 1000.0
-        return self.Outputs(
+        return self.State(
             battery_current_a=current_next,
             battery_power_kw=battery_power_kw,
             duty=duty,
@@ -598,18 +598,18 @@ class BatteryThevenin(Node):
         self.params = params
         self.init_soc_percent = init_soc_percent
 
-    class Outputs(NodeOutputs):
-        soc_percent: float = Output(
-            initial=lambda self: cast(BatteryThevenin, self).init_soc_percent
+    class State(NodeState):
+        soc_percent: float = Var(
+            init=lambda self: cast(BatteryThevenin, self).init_soc_percent
         )
-        open_circuit_voltage_v: float = Output(initial=250.0)
-        terminal_voltage_v: float = Output(initial=250.0)
+        open_circuit_voltage_v: float = Var(init=250.0)
+        terminal_voltage_v: float = Var(init=250.0)
 
-    def run(
+    def update(
         self,
-        battery_current_a: float = Input(source=BatteryDcDcConverter.Outputs.battery_current_a),
-        soc_percent: float = Input(source=lambda: BatteryThevenin.Outputs.soc_percent),
-    ) -> Outputs:
+        battery_current_a: float = Input(src=BatteryDcDcConverter.State.battery_current_a),
+        soc_percent: float = Input(src=lambda: BatteryThevenin.State.soc_percent),
+    ) -> State:
         capacity_ah = (
             1000.0 * self.params.battery_capacity_kwh / self.params.battery_nominal_voltage_v
         )
@@ -622,7 +622,7 @@ class BatteryThevenin(Node):
             self.params.battery_full_voltage_v - self.params.battery_cutoff_voltage_v
         ) * (soc_next / 100.0)
         terminal = ocv - self.params.battery_internal_resistance_ohm * battery_current_a
-        return self.Outputs(
+        return self.State(
             soc_percent=soc_next,
             open_circuit_voltage_v=ocv,
             terminal_voltage_v=terminal,
@@ -639,25 +639,25 @@ class DcLinkCapacitor(Node):
         self.params = params
         self.initial_voltage_v = initial_voltage_v
 
-    class Outputs(NodeOutputs):
-        voltage_v: float = Output(
-            initial=lambda self: cast(DcLinkCapacitor, self).initial_voltage_v
+    class State(NodeState):
+        voltage_v: float = Var(
+            init=lambda self: cast(DcLinkCapacitor, self).initial_voltage_v
         )
-        net_power_kw: float = Output(initial=0.0)
+        net_power_kw: float = Var(init=0.0)
 
-    def run(
+    def update(
         self,
-        wind_power_kw: float = Input(source=WindTurbinePmsgAveraged.Outputs.dc_power_kw),
+        wind_power_kw: float = Input(src=WindTurbinePmsgAveraged.State.dc_power_kw),
         inverter_dc_power_kw: float = Input(
-            source=lambda: VoltageSourceInverter.Outputs.dc_power_kw
+            src=lambda: VoltageSourceInverter.State.dc_power_kw
         ),
-        dump_load_power_kw: float = Input(source=PowerBalanceReference.Outputs.dump_load_power_kw),
-        battery_current_a: float = Input(source=BatteryDcDcConverter.Outputs.battery_current_a),
+        dump_load_power_kw: float = Input(src=PowerBalanceReference.State.dump_load_power_kw),
+        battery_current_a: float = Input(src=BatteryDcDcConverter.State.battery_current_a),
         battery_terminal_voltage_v: float = Input(
-            source=lambda: BatteryThevenin.Outputs.terminal_voltage_v
+            src=lambda: BatteryThevenin.State.terminal_voltage_v
         ),
-        voltage_v: float = Input(source=lambda: DcLinkCapacitor.Outputs.voltage_v),
-    ) -> Outputs:
+        voltage_v: float = Input(src=lambda: DcLinkCapacitor.State.voltage_v),
+    ) -> State:
         battery_to_dc_kw = battery_terminal_voltage_v * battery_current_a / 1000.0
         dc_damping_kw = self.params.dc_link_damping_kw_per_v * (
             voltage_v - self.params.dc_link_reference_v
@@ -670,7 +670,7 @@ class DcLinkCapacitor(Node):
             - dc_damping_kw
         )
         voltage_next = self._integrate_voltage(voltage_v, net_power_kw)
-        return self.Outputs(
+        return self.State(
             voltage_v=voltage_next,
             net_power_kw=net_power_kw,
         )
@@ -704,66 +704,66 @@ class VoltageSourceInverter(Node):
         self.modulation_tau_s = 0.035
         self.dc_power_tau_s = params.dt_s
 
-    class Outputs(NodeOutputs):
-        ac_power_kw: float = Output(initial=-8.0)
-        dc_power_kw: float = Output(initial=-7.8)
-        inverter_current_peak_a: float = Output(initial=-14.0)
-        phase_a_voltage_v: float = Output(initial=0.0)
-        phase_b_voltage_v: float = Output(initial=0.0)
-        phase_c_voltage_v: float = Output(initial=0.0)
-        modulation_a: float = Output(initial=0.0)
-        modulation_b: float = Output(initial=0.0)
-        modulation_c: float = Output(initial=0.0)
-        theta_rad: float = Output(initial=0.0)
-        pll_frequency_hz: float = Output(initial=60.0)
-        direct_current_a: float = Output(initial=0.0)
-        quadrature_current_a: float = Output(initial=0.0)
-        direct_current_reference_a: float = Output(initial=0.0)
-        quadrature_current_reference_a: float = Output(initial=0.0)
-        direct_current_integral_a_s: float = Output(initial=0.0)
-        quadrature_current_integral_a_s: float = Output(initial=0.0)
-        voltage_integral_v_s: float = Output(initial=0.0)
+    class State(NodeState):
+        ac_power_kw: float = Var(init=-8.0)
+        dc_power_kw: float = Var(init=-7.8)
+        inverter_current_peak_a: float = Var(init=-14.0)
+        phase_a_voltage_v: float = Var(init=0.0)
+        phase_b_voltage_v: float = Var(init=0.0)
+        phase_c_voltage_v: float = Var(init=0.0)
+        modulation_a: float = Var(init=0.0)
+        modulation_b: float = Var(init=0.0)
+        modulation_c: float = Var(init=0.0)
+        theta_rad: float = Var(init=0.0)
+        pll_frequency_hz: float = Var(init=60.0)
+        direct_current_a: float = Var(init=0.0)
+        quadrature_current_a: float = Var(init=0.0)
+        direct_current_reference_a: float = Var(init=0.0)
+        quadrature_current_reference_a: float = Var(init=0.0)
+        direct_current_integral_a_s: float = Var(init=0.0)
+        quadrature_current_integral_a_s: float = Var(init=0.0)
+        voltage_integral_v_s: float = Var(init=0.0)
 
-    def run(
+    def update(
         self,
         ac_power_reference_kw: float = Input(
-            source=PowerBalanceReference.Outputs.inverter_ac_power_reference_kw
+            src=PowerBalanceReference.State.inverter_ac_power_reference_kw
         ),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_kw),
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_kw),
         diesel_power_kw: float = Input(
-            source=DieselSynchronousGeneratorReduced.Outputs.ac_power_kw
+            src=DieselSynchronousGeneratorReduced.State.ac_power_kw
         ),
-        diesel_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.diesel_enabled),
-        dc_voltage_v: float = Input(source=lambda: DcLinkCapacitor.Outputs.voltage_v),
-        pcc_voltage_v: float = Input(source=lambda: PccBus.Outputs.voltage_v),
-        pcc_frequency_hz: float = Input(source=lambda: PccBus.Outputs.frequency_hz),
-        ac_power_kw: float = Input(source=lambda: LcFilterTransformer.Outputs.inverter_ac_power_kw),
+        diesel_enabled: bool = Input(src=PowerFlowSupervisor.State.diesel_enabled),
+        dc_voltage_v: float = Input(src=lambda: DcLinkCapacitor.State.voltage_v),
+        pcc_voltage_v: float = Input(src=lambda: PccBus.State.voltage_v),
+        pcc_frequency_hz: float = Input(src=lambda: PccBus.State.frequency_hz),
+        ac_power_kw: float = Input(src=lambda: LcFilterTransformer.State.inverter_ac_power_kw),
         previous_dc_power_kw: float = Input(
-            source=lambda: VoltageSourceInverter.Outputs.dc_power_kw
+            src=lambda: VoltageSourceInverter.State.dc_power_kw
         ),
         inverter_phase_a_current_a: float = Input(
-            source=lambda: LcFilterTransformer.Outputs.inductor_a_current_a
+            src=lambda: LcFilterTransformer.State.inductor_a_current_a
         ),
         inverter_phase_b_current_a: float = Input(
-            source=lambda: LcFilterTransformer.Outputs.inductor_b_current_a
+            src=lambda: LcFilterTransformer.State.inductor_b_current_a
         ),
         inverter_phase_c_current_a: float = Input(
-            source=lambda: LcFilterTransformer.Outputs.inductor_c_current_a
+            src=lambda: LcFilterTransformer.State.inductor_c_current_a
         ),
-        theta_rad: float = Input(source=lambda: VoltageSourceInverter.Outputs.theta_rad),
+        theta_rad: float = Input(src=lambda: VoltageSourceInverter.State.theta_rad),
         direct_integral_a_s: float = Input(
-            source=lambda: VoltageSourceInverter.Outputs.direct_current_integral_a_s
+            src=lambda: VoltageSourceInverter.State.direct_current_integral_a_s
         ),
         quadrature_integral_a_s: float = Input(
-            source=lambda: VoltageSourceInverter.Outputs.quadrature_current_integral_a_s
+            src=lambda: VoltageSourceInverter.State.quadrature_current_integral_a_s
         ),
         voltage_integral_v_s: float = Input(
-            source=lambda: VoltageSourceInverter.Outputs.voltage_integral_v_s
+            src=lambda: VoltageSourceInverter.State.voltage_integral_v_s
         ),
-        modulation_a: float = Input(source=lambda: VoltageSourceInverter.Outputs.modulation_a),
-        modulation_b: float = Input(source=lambda: VoltageSourceInverter.Outputs.modulation_b),
-        modulation_c: float = Input(source=lambda: VoltageSourceInverter.Outputs.modulation_c),
-    ) -> Outputs:
+        modulation_a: float = Input(src=lambda: VoltageSourceInverter.State.modulation_a),
+        modulation_b: float = Input(src=lambda: VoltageSourceInverter.State.modulation_b),
+        modulation_c: float = Input(src=lambda: VoltageSourceInverter.State.modulation_c),
+    ) -> State:
         previous_theta_rad = theta_rad
         theta_next = (theta_rad + 2.0 * pi * pcc_frequency_hz * self.params.dt_s) % (2.0 * pi)
         phase_voltage_peak_v = sqrt(2.0 / 3.0) * max(abs(pcc_voltage_v), 1.0)
@@ -893,7 +893,7 @@ class VoltageSourceInverter(Node):
             ac_power_reference_kw,
             self.params.ac_bus_v_ll_rms,
         )
-        return self.Outputs(
+        return self.State(
             ac_power_kw=ac_power_next,
             dc_power_kw=dc_power_kw,
             inverter_current_peak_a=current_peak_next_a,
@@ -922,34 +922,34 @@ class LcFilterTransformer(Node):
         self.params = params
         self.power_tau_s = power_tau_s
 
-    class Outputs(NodeOutputs):
-        pcc_power_kw: float = Output(initial=-7.7)
-        inverter_ac_power_kw: float = Output(initial=-8.0)
-        filter_current_peak_a: float = Output(initial=0.0)
-        inductor_a_current_a: float = Output(initial=0.0)
-        inductor_b_current_a: float = Output(initial=0.0)
-        inductor_c_current_a: float = Output(initial=0.0)
-        capacitor_a_voltage_v: float = Output(initial=0.0)
-        capacitor_b_voltage_v: float = Output(initial=-325.0)
-        capacitor_c_voltage_v: float = Output(initial=325.0)
+    class State(NodeState):
+        pcc_power_kw: float = Var(init=-7.7)
+        inverter_ac_power_kw: float = Var(init=-8.0)
+        filter_current_peak_a: float = Var(init=0.0)
+        inductor_a_current_a: float = Var(init=0.0)
+        inductor_b_current_a: float = Var(init=0.0)
+        inductor_c_current_a: float = Var(init=0.0)
+        capacitor_a_voltage_v: float = Var(init=0.0)
+        capacitor_b_voltage_v: float = Var(init=-325.0)
+        capacitor_c_voltage_v: float = Var(init=325.0)
 
-    def run(
+    def update(
         self,
-        phase_a_voltage_v: float = Input(source=VoltageSourceInverter.Outputs.phase_a_voltage_v),
-        phase_b_voltage_v: float = Input(source=VoltageSourceInverter.Outputs.phase_b_voltage_v),
-        phase_c_voltage_v: float = Input(source=VoltageSourceInverter.Outputs.phase_c_voltage_v),
-        theta_rad: float = Input(source=VoltageSourceInverter.Outputs.theta_rad),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_kw),
+        phase_a_voltage_v: float = Input(src=VoltageSourceInverter.State.phase_a_voltage_v),
+        phase_b_voltage_v: float = Input(src=VoltageSourceInverter.State.phase_b_voltage_v),
+        phase_c_voltage_v: float = Input(src=VoltageSourceInverter.State.phase_c_voltage_v),
+        theta_rad: float = Input(src=VoltageSourceInverter.State.theta_rad),
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_kw),
         diesel_power_kw: float = Input(
-            source=DieselSynchronousGeneratorReduced.Outputs.ac_power_kw
+            src=DieselSynchronousGeneratorReduced.State.ac_power_kw
         ),
-        i_la_a: float = Input(source=lambda: LcFilterTransformer.Outputs.inductor_a_current_a),
-        i_lb_a: float = Input(source=lambda: LcFilterTransformer.Outputs.inductor_b_current_a),
-        i_lc_a: float = Input(source=lambda: LcFilterTransformer.Outputs.inductor_c_current_a),
-        v_ca_v: float = Input(source=lambda: LcFilterTransformer.Outputs.capacitor_a_voltage_v),
-        v_cb_v: float = Input(source=lambda: LcFilterTransformer.Outputs.capacitor_b_voltage_v),
-        v_cc_v: float = Input(source=lambda: LcFilterTransformer.Outputs.capacitor_c_voltage_v),
-    ) -> Outputs:
+        i_la_a: float = Input(src=lambda: LcFilterTransformer.State.inductor_a_current_a),
+        i_lb_a: float = Input(src=lambda: LcFilterTransformer.State.inductor_b_current_a),
+        i_lc_a: float = Input(src=lambda: LcFilterTransformer.State.inductor_c_current_a),
+        v_ca_v: float = Input(src=lambda: LcFilterTransformer.State.capacitor_a_voltage_v),
+        v_cb_v: float = Input(src=lambda: LcFilterTransformer.State.capacitor_b_voltage_v),
+        v_cc_v: float = Input(src=lambda: LcFilterTransformer.State.capacitor_c_voltage_v),
+    ) -> State:
         load_a_a, load_b_a, load_c_a = _constant_power_phase_currents(
             power_kw=load_power_kw,
             v_a_v=v_ca_v,
@@ -1000,7 +1000,7 @@ class LcFilterTransformer(Node):
             self.params.transformer_efficiency,
         )
         current_peak = max(abs(i_la_next), abs(i_lb_next), abs(i_lc_next))
-        return self.Outputs(
+        return self.State(
             pcc_power_kw=pcc_power_kw,
             inverter_ac_power_kw=inverter_power_kw,
             filter_current_peak_a=current_peak,
@@ -1039,25 +1039,25 @@ class PccBus(Node):
         self.params = params
         self.voltage_tau_s = voltage_tau_s
 
-    class Outputs(NodeOutputs):
-        voltage_v: float = Output(initial=460.0)
-        frequency_hz: float = Output(initial=60.0)
-        ac_power_error_kw: float = Output(initial=0.0)
+    class State(NodeState):
+        voltage_v: float = Var(init=460.0)
+        frequency_hz: float = Var(init=60.0)
+        ac_power_error_kw: float = Var(init=0.0)
 
-    def run(
+    def update(
         self,
-        inverter_pcc_power_kw: float = Input(source=LcFilterTransformer.Outputs.pcc_power_kw),
+        inverter_pcc_power_kw: float = Input(src=LcFilterTransformer.State.pcc_power_kw),
         diesel_power_kw: float = Input(
-            source=DieselSynchronousGeneratorReduced.Outputs.ac_power_kw
+            src=DieselSynchronousGeneratorReduced.State.ac_power_kw
         ),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_kw),
-        dc_voltage_v: float = Input(source=DcLinkCapacitor.Outputs.voltage_v),
-        v_ca_v: float = Input(source=LcFilterTransformer.Outputs.capacitor_a_voltage_v),
-        v_cb_v: float = Input(source=LcFilterTransformer.Outputs.capacitor_b_voltage_v),
-        v_cc_v: float = Input(source=LcFilterTransformer.Outputs.capacitor_c_voltage_v),
-        voltage_v: float = Input(source=lambda: PccBus.Outputs.voltage_v),
-        frequency_hz: float = Input(source=lambda: PccBus.Outputs.frequency_hz),
-    ) -> Outputs:
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_kw),
+        dc_voltage_v: float = Input(src=DcLinkCapacitor.State.voltage_v),
+        v_ca_v: float = Input(src=LcFilterTransformer.State.capacitor_a_voltage_v),
+        v_cb_v: float = Input(src=LcFilterTransformer.State.capacitor_b_voltage_v),
+        v_cc_v: float = Input(src=LcFilterTransformer.State.capacitor_c_voltage_v),
+        voltage_v: float = Input(src=lambda: PccBus.State.voltage_v),
+        frequency_hz: float = Input(src=lambda: PccBus.State.frequency_hz),
+    ) -> State:
         ac_error_kw = inverter_pcc_power_kw + diesel_power_kw - load_power_kw
         response = _first_order_response(self.params.dt_s, self.voltage_tau_s)
         measured_vll_rms = _phase_to_line_rms(v_ca_v, v_cb_v, v_cc_v)
@@ -1073,7 +1073,7 @@ class PccBus(Node):
             + 0.00025 * (dc_voltage_v - self.params.dc_link_reference_v)
             + 0.0002 * ac_error_kw
         )
-        return self.Outputs(
+        return self.State(
             voltage_v=voltage_v + response * (voltage_target - voltage_v),
             frequency_hz=frequency_hz + response * (frequency_target - frequency_hz),
             ac_power_error_kw=ac_error_kw,
@@ -1081,100 +1081,100 @@ class PccBus(Node):
 
 
 class ReconstructionLogger(Node):
-    class Outputs(NodeOutputs):
-        samples: list[dict[str, float | str | bool]] = Output(initial=list)
+    class State(NodeState):
+        samples: list[dict[str, float | str | bool]] = Var(init=list)
 
-    def run(
+    def update(
         self,
-        time_s: float = Input(source=ScenarioProfile.Outputs.time_s),
-        mode: MicrogridMode = Input(source=PowerFlowSupervisor.Outputs.mode),
-        wind_power_kw: float = Input(source=WindTurbinePmsgAveraged.Outputs.dc_power_kw),
-        wind_current_a: float = Input(source=WindTurbinePmsgAveraged.Outputs.dc_current_a),
+        time_s: float = Input(src=ScenarioProfile.State.time_s),
+        mode: MicrogridMode = Input(src=PowerFlowSupervisor.State.mode),
+        wind_power_kw: float = Input(src=WindTurbinePmsgAveraged.State.dc_power_kw),
+        wind_current_a: float = Input(src=WindTurbinePmsgAveraged.State.dc_current_a),
         pmsg_direct_current_a: float = Input(
-            source=WindTurbinePmsgAveraged.Outputs.pmsg_direct_current_a
+            src=WindTurbinePmsgAveraged.State.pmsg_direct_current_a
         ),
         pmsg_quadrature_current_a: float = Input(
-            source=WindTurbinePmsgAveraged.Outputs.pmsg_quadrature_current_a
+            src=WindTurbinePmsgAveraged.State.pmsg_quadrature_current_a
         ),
         pmsg_direct_voltage_v: float = Input(
-            source=WindTurbinePmsgAveraged.Outputs.pmsg_direct_voltage_v
+            src=WindTurbinePmsgAveraged.State.pmsg_direct_voltage_v
         ),
         pmsg_quadrature_voltage_v: float = Input(
-            source=WindTurbinePmsgAveraged.Outputs.pmsg_quadrature_voltage_v
+            src=WindTurbinePmsgAveraged.State.pmsg_quadrature_voltage_v
         ),
         pmsg_electromagnetic_torque_nm: float = Input(
-            source=WindTurbinePmsgAveraged.Outputs.pmsg_electromagnetic_torque_nm
+            src=WindTurbinePmsgAveraged.State.pmsg_electromagnetic_torque_nm
         ),
         pmsg_rotor_speed_rpm: float = Input(
-            source=WindTurbinePmsgAveraged.Outputs.pmsg_rotor_speed_rpm
+            src=WindTurbinePmsgAveraged.State.pmsg_rotor_speed_rpm
         ),
         pmsg_electrical_power_kw: float = Input(
-            source=WindTurbinePmsgAveraged.Outputs.pmsg_electrical_power_kw
+            src=WindTurbinePmsgAveraged.State.pmsg_electrical_power_kw
         ),
         rectifier_dc_voltage_v: float = Input(
-            source=WindTurbinePmsgAveraged.Outputs.rectifier_dc_voltage_v
+            src=WindTurbinePmsgAveraged.State.rectifier_dc_voltage_v
         ),
         rectifier_dc_current_a: float = Input(
-            source=WindTurbinePmsgAveraged.Outputs.rectifier_dc_current_a
+            src=WindTurbinePmsgAveraged.State.rectifier_dc_current_a
         ),
-        boost_duty: float = Input(source=WindTurbinePmsgAveraged.Outputs.boost_duty),
+        boost_duty: float = Input(src=WindTurbinePmsgAveraged.State.boost_duty),
         boost_inductor_current_a: float = Input(
-            source=WindTurbinePmsgAveraged.Outputs.boost_inductor_current_a
+            src=WindTurbinePmsgAveraged.State.boost_inductor_current_a
         ),
         diesel_power_kw: float = Input(
-            source=DieselSynchronousGeneratorReduced.Outputs.ac_power_kw
+            src=DieselSynchronousGeneratorReduced.State.ac_power_kw
         ),
-        diesel_speed_rpm: float = Input(source=DieselSynchronousGeneratorReduced.Outputs.speed_rpm),
+        diesel_speed_rpm: float = Input(src=DieselSynchronousGeneratorReduced.State.speed_rpm),
         diesel_excitation_voltage_v: float = Input(
-            source=DieselSynchronousGeneratorReduced.Outputs.excitation_voltage_v
+            src=DieselSynchronousGeneratorReduced.State.excitation_voltage_v
         ),
-        load_power_kw: float = Input(source=WaterTreatmentLoad.Outputs.load_kw),
-        battery_power_kw: float = Input(source=BatteryDcDcConverter.Outputs.battery_power_kw),
-        battery_current_a: float = Input(source=BatteryDcDcConverter.Outputs.battery_current_a),
+        load_power_kw: float = Input(src=WaterTreatmentLoad.State.load_kw),
+        battery_power_kw: float = Input(src=BatteryDcDcConverter.State.battery_power_kw),
+        battery_current_a: float = Input(src=BatteryDcDcConverter.State.battery_current_a),
         battery_current_reference_a: float = Input(
-            source=BatteryDcDcConverter.Outputs.battery_current_reference_a
+            src=BatteryDcDcConverter.State.battery_current_reference_a
         ),
-        battery_converter_duty: float = Input(source=BatteryDcDcConverter.Outputs.duty),
+        battery_converter_duty: float = Input(src=BatteryDcDcConverter.State.duty),
         battery_converter_inductor_current_a: float = Input(
-            source=BatteryDcDcConverter.Outputs.inductor_current_a
+            src=BatteryDcDcConverter.State.inductor_current_a
         ),
         battery_terminal_voltage_v: float = Input(
-            source=BatteryThevenin.Outputs.terminal_voltage_v
+            src=BatteryThevenin.State.terminal_voltage_v
         ),
-        dump_load_power_kw: float = Input(source=PowerBalanceReference.Outputs.dump_load_power_kw),
-        unserved_power_kw: float = Input(source=PowerBalanceReference.Outputs.unserved_power_kw),
-        soc_percent: float = Input(source=BatteryThevenin.Outputs.soc_percent),
-        dc_bus_voltage_v: float = Input(source=DcLinkCapacitor.Outputs.voltage_v),
-        dc_net_power_kw: float = Input(source=DcLinkCapacitor.Outputs.net_power_kw),
-        inverter_ac_power_kw: float = Input(source=VoltageSourceInverter.Outputs.ac_power_kw),
-        inverter_dc_power_kw: float = Input(source=VoltageSourceInverter.Outputs.dc_power_kw),
+        dump_load_power_kw: float = Input(src=PowerBalanceReference.State.dump_load_power_kw),
+        unserved_power_kw: float = Input(src=PowerBalanceReference.State.unserved_power_kw),
+        soc_percent: float = Input(src=BatteryThevenin.State.soc_percent),
+        dc_bus_voltage_v: float = Input(src=DcLinkCapacitor.State.voltage_v),
+        dc_net_power_kw: float = Input(src=DcLinkCapacitor.State.net_power_kw),
+        inverter_ac_power_kw: float = Input(src=VoltageSourceInverter.State.ac_power_kw),
+        inverter_dc_power_kw: float = Input(src=VoltageSourceInverter.State.dc_power_kw),
         inverter_direct_current_a: float = Input(
-            source=VoltageSourceInverter.Outputs.direct_current_a
+            src=VoltageSourceInverter.State.direct_current_a
         ),
         inverter_quadrature_current_a: float = Input(
-            source=VoltageSourceInverter.Outputs.quadrature_current_a
+            src=VoltageSourceInverter.State.quadrature_current_a
         ),
         inverter_direct_current_reference_a: float = Input(
-            source=VoltageSourceInverter.Outputs.direct_current_reference_a
+            src=VoltageSourceInverter.State.direct_current_reference_a
         ),
         inverter_quadrature_current_reference_a: float = Input(
-            source=VoltageSourceInverter.Outputs.quadrature_current_reference_a
+            src=VoltageSourceInverter.State.quadrature_current_reference_a
         ),
         inverter_pll_frequency_hz: float = Input(
-            source=VoltageSourceInverter.Outputs.pll_frequency_hz
+            src=VoltageSourceInverter.State.pll_frequency_hz
         ),
-        transformer_power_kw: float = Input(source=LcFilterTransformer.Outputs.pcc_power_kw),
-        pcc_power_error_kw: float = Input(source=PccBus.Outputs.ac_power_error_kw),
-        pcc_voltage_v: float = Input(source=PccBus.Outputs.voltage_v),
-        frequency_hz: float = Input(source=PccBus.Outputs.frequency_hz),
+        transformer_power_kw: float = Input(src=LcFilterTransformer.State.pcc_power_kw),
+        pcc_power_error_kw: float = Input(src=PccBus.State.ac_power_error_kw),
+        pcc_voltage_v: float = Input(src=PccBus.State.voltage_v),
+        frequency_hz: float = Input(src=PccBus.State.frequency_hz),
         inverter_current_a: float = Input(
-            source=VoltageSourceInverter.Outputs.inverter_current_peak_a
+            src=VoltageSourceInverter.State.inverter_current_peak_a
         ),
-        diesel_enabled: bool = Input(source=PowerFlowSupervisor.Outputs.diesel_enabled),
+        diesel_enabled: bool = Input(src=PowerFlowSupervisor.State.diesel_enabled),
         samples: list[dict[str, float | str | bool]] = Input(
-            source=lambda: ReconstructionLogger.Outputs.samples
+            src=lambda: ReconstructionLogger.State.samples
         ),
-    ) -> Outputs:
+    ) -> State:
         samples.append(
             {
                 "time": time_s,
@@ -1225,7 +1225,7 @@ class ReconstructionLogger(Node):
                 "diesel_enabled": diesel_enabled,
             }
         )
-        return self.Outputs(samples=samples)
+        return self.State(samples=samples)
 
 
 def build_system(
@@ -1245,27 +1245,27 @@ def build_system(
                 nodes=(supervisor,),
                 transitions=(
                     If(
-                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.WT_CHARGING,
+                        V(PowerFlowSupervisor.State.mode) == MicrogridMode.WT_CHARGING,
                         "sources",
                         name="wt_charging",
                     ),
                     ElseIf(
-                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.WT_BATTERY_DISCHARGING,
+                        V(PowerFlowSupervisor.State.mode) == MicrogridMode.WT_BATTERY_DISCHARGING,
                         "sources",
                         name="wt_battery_discharging",
                     ),
                     ElseIf(
-                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.DG_CHARGING,
+                        V(PowerFlowSupervisor.State.mode) == MicrogridMode.DG_CHARGING,
                         "sources",
                         name="dg_charging",
                     ),
                     ElseIf(
-                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.DG_WT_FAST_CHARGING,
+                        V(PowerFlowSupervisor.State.mode) == MicrogridMode.DG_WT_FAST_CHARGING,
                         "sources",
                         name="dg_wt_fast_charging",
                     ),
                     ElseIf(
-                        V(PowerFlowSupervisor.Outputs.mode) == MicrogridMode.DUMP_LOAD,
+                        V(PowerFlowSupervisor.State.mode) == MicrogridMode.DUMP_LOAD,
                         "sources",
                         name="dump_load",
                     ),
@@ -1416,7 +1416,7 @@ def _write_verification_report(
         "",
         "Generated by `examples/dubuisson2019_simulink_reconstruction.py`.",
         "",
-        "## Outputs",
+        "## State",
         "",
         "- `fig9_reconstruction_trace.csv`: simulation trace from `PhasedReactiveSystem.run(...)`.",
         "- `fig9_reconstruction.pdf`: Fig. 9 style plot from trace columns only.",
@@ -1444,9 +1444,9 @@ def _write_verification_report(
         "- Wind mechanical power scenario reconstructed from the paper event description: no wind before 7 s, ramp 7-8 s, constant 8-11 s, ramp down 11-15 s, constant 15-16 s, ramp up 16-18 s.",
         "- Initial SOC is an initial condition selected to match the paper's near-70% transition region; it is not an output trace injection.",
         "",
-        "## Computed Fig. 9 Outputs",
+        "## Computed Fig. 9 State",
         "",
-        "Battery current, WT current, inverter current, DG current, DC bus voltage, SOC, frequency, and load voltage magnitude are all computed from node outputs in the simulation trace. They are not read from target CSVs.",
+        "Battery current, WT current, inverter current, DG current, DC bus voltage, SOC, frequency, and load voltage magnitude are all computed from node state variables in the simulation trace. They are not read from target CSVs.",
         "",
         "## Remaining Averaged Assumptions",
         "",
