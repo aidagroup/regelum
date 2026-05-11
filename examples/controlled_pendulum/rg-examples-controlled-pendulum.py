@@ -171,7 +171,7 @@ def _(ca, cast, math, rg):
     return (run_response,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # Controlled pendulum

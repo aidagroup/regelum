@@ -1,6 +1,6 @@
 # Controlled Pendulum
 
-[Open in molab](https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/controlled_pendulum/app.py){ .md-button .md-button--primary target="_blank" }
+[Open in molab](https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/controlled_pendulum/rg-examples-controlled-pendulum.py){ .md-button .md-button--primary target="_blank" }
 [Run locally](#open-in-marimo){ .md-button }
 
 This example keeps the pendulum plant explicit, then adds a controller as a
@@ -8,10 +8,12 @@ separate stateful node. The important timing detail is sample-and-hold: the
 plant integrates at `dt=0.01`, while the controller updates at `dt=0.05`.
 Between controller updates the plant reads the held torque state.
 
+![Pendulum plant with torque](../assets/examples/pendulum/pendulum.svg)
+
 Run locally:
 
 ```bash
-uv run marimo edit examples/controlled_pendulum/app.py
+uv run marimo edit examples/controlled_pendulum/rg-examples-controlled-pendulum.py
 ```
 
 ## Dynamics
@@ -112,7 +114,7 @@ flowchart LR
 
 Open the notebook in molab:
 
-[Open in molab](https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/controlled_pendulum/app.py){ .md-button .md-button--primary target="_blank" }
+[Open in molab](https://molab.marimo.io/github/aidagroup/regelum/blob/main/examples/controlled_pendulum/rg-examples-controlled-pendulum.py){ .md-button .md-button--primary target="_blank" }
 
 Molab opens the notebook from the published `main` branch and installs
 `regelum` from PyPI, plus plotting dependencies, using the notebook's inline
@@ -121,7 +123,7 @@ dependency metadata.
 Run the notebook locally from the repository root:
 
 ```bash
-uv run marimo edit examples/controlled_pendulum/app.py
+uv run marimo edit examples/controlled_pendulum/rg-examples-controlled-pendulum.py
 ```
 
 The local command opens the current working copy, including changes that have

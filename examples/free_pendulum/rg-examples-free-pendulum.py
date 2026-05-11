@@ -6,6 +6,7 @@
 #     "regelum>=0.3.1",
 # ]
 # ///
+
 import marimo
 
 __generated_with = "0.23.5"
@@ -135,7 +136,7 @@ def _(ca, cast, math, rg):
     return (run_response,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # Free pendulum

@@ -7,7 +7,7 @@ state is sampled and held between controller updates.
 Run it as an interactive notebook:
 
 ```bash
-uv run marimo edit examples/controlled_pendulum/app.py
+uv run marimo edit examples/controlled_pendulum/rg-examples-controlled-pendulum.py
 ```
 
 Run the same example as standalone Python:

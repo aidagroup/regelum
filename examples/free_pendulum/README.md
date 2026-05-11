@@ -7,7 +7,7 @@ reactive system. The plant is integrated with `dt=0.01`; the observer publishes
 Run it as an interactive notebook:
 
 ```bash
-uv run marimo edit examples/free_pendulum/app.py
+uv run marimo edit examples/free_pendulum/rg-examples-free-pendulum.py
 ```
 
 Run the same example as standalone Python:
