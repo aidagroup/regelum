@@ -836,8 +836,8 @@ When the runtime reaches a continuous phase:</p>
 <ol>
 <li>it builds the current input snapshot;</li>
 <li>it traces or reuses the CasADi graph <code>f(t, x, p)</code> and its Jacobian;</li>
-<li>it integrates each due <code>ODESystem</code> from the current clock time to
-   <code>time + ODESystem.dt</code>;</li>
+<li>it integrates each <code>ODESystem</code> from the current clock time to
+   <code>time + base_dt</code>;</li>
 <li>it writes every internal <code>ODENode.State</code> value into system state;</li>
 <li>it advances <code>Clock.time</code> immediately, before the next phase runs.</li>
 </ol>
@@ -855,6 +855,15 @@ separate systems. They are valid only when they are independent. Continuous
 state dependencies across <code>ODESystem</code> boundaries would imply operator
 splitting/sample-and-hold semantics, so <code>regelum</code> currently rejects them
 instead of silently choosing an execution order.</p>
+<p>If a system contains a continuous phase, the compiler also checks that the
+phase route reaches a continuous phase exactly once per tick. This is a
+symbolic feasibility check over transition guards: <code>update</code> implementations
+are treated as arbitrary Python, so after each phase every state variable
+written by that phase is modeled as a fresh symbolic value. A conditional route
+that can terminate without the continuous phase, or can reach it twice, is a
+compile error. Integrate continuous dynamics every base tick; use ordinary
+<code>Node.dt</code> for slower discrete controllers whose state is sampled and held by
+the plant.</p>
 <h2 id="base-time-and-scheduling">Base Time And Scheduling</h2>
 <p>Every system has a base time step.
 The default is <code>base_dt="auto"</code>.</p>
@@ -863,7 +872,8 @@ If all explicitly scheduled discrete nodes have a larger common period, the
 compiler emits an idle-tick warning and suggests an explicit <code>base_dt</code>.</p>
 <p>For a system with continuous dynamics, <code>auto</code> computes the greatest common
 divisor of all explicit discrete node <code>dt</code> values and all <code>ODESystem.dt</code>
-values.
+values. <code>ODESystem.dt</code> contributes to the common time grid; runtime integration
+still happens every tick over <code>base_dt</code>.
 Every node period must be an integer multiple of <code>base_dt</code>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">controller</span> <span class="o">=</span> <span class="n">Controller</span><span class="p">(</span><span class="n">dt</span><span class="o">=</span><span class="s2">&quot;0.01&quot;</span><span class="p">)</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">electrical</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">ODESystem</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">plant</span><span class="p">,),</span> <span class="n">dt</span><span class="o">=</span><span class="s2">&quot;0.001&quot;</span><span class="p">)</span>
@@ -879,8 +889,11 @@ state variables remain in state.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">fast</span> <span class="o">=</span> <span class="n">Sensor</span><span class="p">()</span>          <span class="c1"># due every base tick</span>
 <a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">slow</span> <span class="o">=</span> <span class="n">Controller</span><span class="p">(</span><span class="n">dt</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># due on ticks 0, 2, 4, ...</span>
 </code></pre></div>
-<p>The same scheduling rule applies to continuous systems: <code>period_ticks</code> is
-<code>dt / base_dt</code>, and due checks use <code>Clock.tick % period_ticks == 0</code>.</p>
+<p>Continuous systems are not skipped by their own <code>dt</code>.
+Each <code>ODESystem</code> in the continuous phase integrates every tick on <code>base_dt</code>.
+This models sample-and-hold: slower discrete nodes update only on their
+schedule, and continuous dynamics read their held state values between those
+updates.</p>
 <h2 id="system-clock">System Clock</h2>
 <p>The system clock is a reserved source, not a node.
 Use <code>rg.Clock.tick</code> and <code>rg.Clock.time</code> in inputs and guards:</p>
