@@ -19,12 +19,11 @@ def _():
     from typing import cast
 
     import casadi as ca
-    import marimo as mo
     import matplotlib.pyplot as plt
 
     import regelum as rg
 
-    return ca, cast, math, mo, plt, rg
+    return ca, cast, math, plt, rg
 
 
 @app.cell
@@ -57,7 +56,7 @@ def _(ca, cast, math, rg):
         def dstate(self, state: State) -> State:  # ty: ignore[invalid-method-override]
             theta_dot = state.omega
             omega_dot = (
-                -self.gravity / self.length * ca.sin(state.theta)
+                -(3.0 * self.gravity) / (2.0 * self.length) * ca.sin(state.theta)
                 - self.damping * state.omega
             )
             return self.State(theta=theta_dot, omega=omega_dot)
@@ -68,9 +67,9 @@ def _(ca, cast, math, rg):
             omega: float = rg.Input(src=FreePendulum.State.omega)
 
         class State(rg.NodeState):
-            sin_angle: float = rg.Var(init=0.0)
-            cos_angle: float = rg.Var(init=1.0)
-            angular_velocity: float = rg.Var(init=0.0)
+            sin_angle: float
+            cos_angle: float
+            angular_velocity: float
 
         def update(self, inputs: Inputs) -> State:
             return self.State(
@@ -81,9 +80,6 @@ def _(ca, cast, math, rg):
 
     class Logger(rg.Node):
         class Inputs(rg.NodeInputs):
-            samples: tuple[tuple[float, float, float, float, float], ...] = rg.Input(
-                src=lambda: Logger.State.samples
-            )
             time: float = rg.Input(src=rg.Clock.time)
             theta: float = rg.Input(src=FreePendulum.State.theta)
             sin_angle: float = rg.Input(src=Observer.State.sin_angle)
@@ -91,9 +87,9 @@ def _(ca, cast, math, rg):
             angular_velocity: float = rg.Input(src=Observer.State.angular_velocity)
 
         class State(rg.NodeState):
-            samples: tuple[tuple[float, float, float, float, float], ...] = rg.Var(init=())
+            samples: list[tuple[float, float, float, float, float]] = rg.Var(init=list)
 
-        def update(self, inputs: Inputs) -> State:
+        def update(self, inputs: Inputs, prev_state: State) -> State:
             sample = (
                 inputs.time,
                 inputs.theta,
@@ -101,7 +97,8 @@ def _(ca, cast, math, rg):
                 inputs.cos_angle,
                 inputs.angular_velocity,
             )
-            return self.State(samples=(*inputs.samples, sample))
+            prev_state.samples.append(sample)
+            return self.State(samples=prev_state.samples)
 
     def build_system() -> rg.PhasedReactiveSystem:
         pendulum = FreePendulum()
@@ -125,35 +122,15 @@ def _(ca, cast, math, rg):
             base_dt=BASE_DT,
         )
 
-    def run_response(steps: int = 700) -> tuple[tuple[float, float, float, float, float], ...]:
+    def run_response(steps: int = 700) -> list[tuple[float, float, float, float, float]]:
         system = build_system()
         system.run(steps)
         return cast(
-            tuple[tuple[float, float, float, float, float], ...],
+            list[tuple[float, float, float, float, float]],
             system.read(Logger.State.samples),
         )
 
     return (run_response,)
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    # Free pendulum
-
-    ![Pendulum plant](https://raw.githubusercontent.com/aidagroup/regelum/main/docs/assets/examples/pendulum/pendulum.svg)
-
-    The plant is a damped pendulum without external torque:
-
-    \[
-    \dot{\theta} = \omega,\qquad
-    \dot{\omega} = -\frac{g}{\ell}\sin(\theta) - d\omega .
-    \]
-
-    The observer node publishes \(\sin(\theta)\), \(\cos(\theta)\), and
-    angular velocity from the plant state.
-    """)
-    return
 
 
 @app.cell
@@ -179,6 +156,7 @@ def _(plt, run_response):
     fig.tight_layout()
     fig
     return
+
 
 if __name__ == "__main__":
     app.run()

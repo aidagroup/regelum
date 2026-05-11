@@ -36,7 +36,7 @@ class FreePendulum(rg.ODENode):
     def dstate(self, state: State) -> State:  # ty: ignore[invalid-method-override]
         theta_dot = state.omega
         omega_dot = (
-            -self.gravity / self.length * ca.sin(state.theta)
+            -(3.0 * self.gravity) / (2.0 * self.length) * ca.sin(state.theta)
             - self.damping * state.omega
         )
         return self.State(theta=theta_dot, omega=omega_dot)
@@ -48,9 +48,9 @@ class Observer(rg.Node):
         omega: float = rg.Input(src=FreePendulum.State.omega)
 
     class State(rg.NodeState):
-        sin_angle: float = rg.Var(init=0.0)
-        cos_angle: float = rg.Var(init=1.0)
-        angular_velocity: float = rg.Var(init=0.0)
+        sin_angle: float
+        cos_angle: float
+        angular_velocity: float
 
     def update(self, inputs: Inputs) -> State:
         return self.State(
@@ -62,9 +62,6 @@ class Observer(rg.Node):
 
 class Logger(rg.Node):
     class Inputs(rg.NodeInputs):
-        samples: tuple[tuple[float, float, float, float, float], ...] = rg.Input(
-            src=lambda: Logger.State.samples
-        )
         time: float = rg.Input(src=rg.Clock.time)
         theta: float = rg.Input(src=FreePendulum.State.theta)
         sin_angle: float = rg.Input(src=Observer.State.sin_angle)
@@ -72,9 +69,9 @@ class Logger(rg.Node):
         angular_velocity: float = rg.Input(src=Observer.State.angular_velocity)
 
     class State(rg.NodeState):
-        samples: tuple[tuple[float, float, float, float, float], ...] = rg.Var(init=())
+        samples: list[tuple[float, float, float, float, float]] = rg.Var(init=list)
 
-    def update(self, inputs: Inputs) -> State:
+    def update(self, inputs: Inputs, prev_state: State) -> State:
         sample = (
             inputs.time,
             inputs.theta,
@@ -82,7 +79,8 @@ class Logger(rg.Node):
             inputs.cos_angle,
             inputs.angular_velocity,
         )
-        return self.State(samples=(*inputs.samples, sample))
+        prev_state.samples.append(sample)
+        return self.State(samples=prev_state.samples)
 
 
 def build_system() -> rg.PhasedReactiveSystem:
@@ -108,11 +106,11 @@ def build_system() -> rg.PhasedReactiveSystem:
     )
 
 
-def run_response(steps: int = 700) -> tuple[tuple[float, float, float, float, float], ...]:
+def run_response(steps: int = 700) -> list[tuple[float, float, float, float, float]]:
     system = build_system()
     system.run(steps)
     return cast(
-        tuple[tuple[float, float, float, float, float], ...],
+        list[tuple[float, float, float, float, float]],
         system.read(Logger.State.samples),
     )
 

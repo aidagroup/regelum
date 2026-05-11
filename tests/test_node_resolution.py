@@ -245,6 +245,34 @@ def test_previous_state_requires_initial_value_or_initial_state() -> None:
     assert system.read(counter.State.count) == 11
 
 
+def test_bare_state_annotations_declare_vars_without_initial_values() -> None:
+    class Source(Node):
+        class State(NodeState):
+            value: int = Var(init=2)
+
+        def update(self) -> State:
+            return self.State(value=3)
+
+    class Doubler(Node):
+        class Inputs(NodeInputs):
+            value: int = Input(src=Source.State.value)
+
+        class State(NodeState):
+            doubled: int
+
+        def update(self, inputs: Inputs) -> State:
+            return self.State(doubled=inputs.value * 2)
+
+    source = Source()
+    doubler = Doubler()
+    system = _single_phase_system(source, doubler)
+
+    assert system.compile_report.ok
+    assert "Doubler.doubled" in system.compile_report.state_vars_without_initial
+    system.run(steps=1)
+    assert system.read(doubler.State.doubled) == 6
+
+
 def test_class_level_input_ref_resolves_when_single_instance_exists() -> None:
     source = Source(value=7)
     sink = Sink()
