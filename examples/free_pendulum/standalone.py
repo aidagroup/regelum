@@ -42,7 +42,7 @@ class FreePendulum(rg.ODENode):
         return self.State(theta=theta_dot, omega=omega_dot)
 
 
-class FreeObserver(rg.Node):
+class Observer(rg.Node):
     class Inputs(rg.NodeInputs):
         theta: float = rg.Input(src=FreePendulum.State.theta)
         omega: float = rg.Input(src=FreePendulum.State.omega)
@@ -60,16 +60,16 @@ class FreeObserver(rg.Node):
         )
 
 
-class FreeLogger(rg.Node):
+class Logger(rg.Node):
     class Inputs(rg.NodeInputs):
         samples: tuple[tuple[float, float, float, float, float], ...] = rg.Input(
-            src=lambda: FreeLogger.State.samples
+            src=lambda: Logger.State.samples
         )
         time: float = rg.Input(src=rg.Clock.time)
         theta: float = rg.Input(src=FreePendulum.State.theta)
-        sin_angle: float = rg.Input(src=FreeObserver.State.sin_angle)
-        cos_angle: float = rg.Input(src=FreeObserver.State.cos_angle)
-        angular_velocity: float = rg.Input(src=FreeObserver.State.angular_velocity)
+        sin_angle: float = rg.Input(src=Observer.State.sin_angle)
+        cos_angle: float = rg.Input(src=Observer.State.cos_angle)
+        angular_velocity: float = rg.Input(src=Observer.State.angular_velocity)
 
     class State(rg.NodeState):
         samples: tuple[tuple[float, float, float, float, float], ...] = rg.Var(init=())
@@ -87,8 +87,8 @@ class FreeLogger(rg.Node):
 
 def build_system() -> rg.PhasedReactiveSystem:
     pendulum = FreePendulum()
-    observer = FreeObserver()
-    logger = FreeLogger()
+    observer = Observer()
+    logger = Logger()
     plant = rg.ODESystem(nodes=(pendulum,), dt=BASE_DT)
     return rg.PhasedReactiveSystem(
         phases=[
@@ -113,7 +113,7 @@ def run_response(steps: int = 700) -> tuple[tuple[float, float, float, float, fl
     system.run(steps)
     return cast(
         tuple[tuple[float, float, float, float, float], ...],
-        system.read(FreeLogger.State.samples),
+        system.read(Logger.State.samples),
     )
 
 
@@ -129,4 +129,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

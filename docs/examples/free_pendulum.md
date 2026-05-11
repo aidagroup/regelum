@@ -42,7 +42,7 @@ class FreePendulum(rg.ODENode):
         return self.State(theta=theta_dot, omega=omega_dot)
 ```
 
-`FreeObserver` reads plant state and publishes \(\sin(\theta)\),
+`Observer` reads plant state and publishes \(\sin(\theta)\),
 \(\cos(\theta)\), and \(\omega\).
 
 ## Phase Graph
@@ -64,8 +64,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    clock["Clock"] --> logger["FreeLogger"]
-    pendulum["FreePendulum"] --> observer["FreeObserver"]
+    clock["Clock"] --> logger["Logger"]
+    pendulum["FreePendulum"] --> observer["Observer"]
     pendulum --> logger
     observer --> logger
 
@@ -84,15 +84,15 @@ flowchart LR
 | Phase | Nodes | Role |
 | --- | --- | --- |
 | <span class="phase-label phase-label--plant">plant</span> | `ODESystem(FreePendulum)` | Integrates the torque-free differential equation. |
-| <span class="phase-label phase-label--observe">observe</span> | `FreeObserver`, `FreeLogger` | Publishes observer signals and records samples for plotting. |
+| <span class="phase-label phase-label--observe">observe</span> | `Observer`, `Logger` | Publishes observer signals and records samples for plotting. |
 
 ## Node Table
 
 | Node | State | Inputs |
 | --- | --- | --- |
 | <span class="node-label node-label--pendulum">FreePendulum</span> | `theta`, `omega` | none |
-| <span class="node-label node-label--observer">FreeObserver</span> | `sin_angle`, `cos_angle`, `angular_velocity` | `FreePendulum.State.theta`, `FreePendulum.State.omega` |
-| <span class="node-label node-label--logger">FreeLogger</span> | `samples` | `Clock.time`, plant state, observer state |
+| <span class="node-label node-label--observer">Observer</span> | `sin_angle`, `cos_angle`, `angular_velocity` | `FreePendulum.State.theta`, `FreePendulum.State.omega` |
+| <span class="node-label node-label--logger">Logger</span> | `samples` | `Clock.time`, plant state, observer state |
 
 ## Open In Marimo
 
