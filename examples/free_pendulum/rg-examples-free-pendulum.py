@@ -141,6 +141,8 @@ def _(mo):
     mo.md(r"""
     # Free pendulum
 
+    ![Pendulum plant](https://raw.githubusercontent.com/aidagroup/regelum/main/docs/assets/examples/pendulum/pendulum.svg)
+
     The plant is a damped pendulum without external torque:
 
     \[

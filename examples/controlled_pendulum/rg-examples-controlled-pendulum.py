@@ -176,6 +176,8 @@ def _(mo):
     mo.md(r"""
     # Controlled pendulum
 
+    ![Pendulum plant with torque](https://raw.githubusercontent.com/aidagroup/regelum/main/docs/assets/examples/pendulum/pendulum.svg)
+
     The second plant adds an external torque \(\tau\):
 
     \[
