@@ -4,9 +4,11 @@ import inspect
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, cast, get_type_hints
+from dataclasses import field as dataclass_field
+from typing import Any, Literal, cast, get_type_hints
 
 import casadi as ca
+import numpy as np
 from scipy.integrate import solve_ivp
 
 from regelum.core import (
@@ -23,7 +25,8 @@ from regelum.core import (
 )
 
 Scalar = int | float
-StateValue = Scalar | tuple["StateValue", ...] | list["StateValue"]
+StateValue = Scalar | tuple["StateValue", ...] | list["StateValue"] | np.ndarray[Any, Any]
+OdeBackend = Literal["scipy", "casadi"]
 
 
 class CasadiTraceError(RuntimeError):
@@ -52,7 +55,7 @@ class ODENode(Node):
     def state(self) -> NodeState:
         if self.__class__._state_namespace_cls is None:
             raise RuntimeError(f"{self.__class__.__name__} has no State namespace.")
-        return self.__class__._state_namespace_cls(**self._ode_state_values)
+        return cast(NodeState, self.__class__._state_namespace_cls(**self._ode_state_values))
 
     def dstate(self, inputs: Any, state: Any, **kwargs: Any) -> Any:
         raise NotImplementedError
@@ -65,22 +68,39 @@ class ODENode(Node):
 class _StateField:
     node: ODENode
     name: str
-    shape: Any
+    shape: "_ShapeSpec"
     size: int
 
 
 @dataclass(frozen=True)
 class _ParameterField:
     path: str
-    shape: Any
+    shape: "_ShapeSpec"
     size: int
 
 
-@dataclass(frozen=True)
+@dataclass
 class _CasadiGraph:
     parameter_fields: tuple[_ParameterField, ...]
     rhs_function: ca.Function
     jacobian_function: ca.Function
+    integrator_dae: dict[str, Any]
+    integrators: dict[float, ca.Function] = dataclass_field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _ShapeSpec:
+    kind: Literal["scalar", "list", "tuple", "ndarray"]
+    dims: tuple[int, ...]
+
+    @property
+    def size(self) -> int:
+        if not self.dims:
+            return 1
+        size = 1
+        for dim in self.dims:
+            size *= dim
+        return size
 
 
 class ODESystem(Node):
@@ -92,14 +112,37 @@ class ODESystem(Node):
         nodes: Sequence[ODENode],
         dt: Any,
         method: str = "LSODA",
+        backend: OdeBackend = "scipy",
+        options: dict[str, Any] | None = None,
     ) -> None:
+        if backend not in ("scipy", "casadi"):
+            raise ValueError("ODESystem.backend must be 'scipy' or 'casadi'.")
+        if backend == "casadi" and method == "LSODA":
+            raise ValueError(
+                "ODESystem backend='casadi' cannot use method='LSODA'; "
+                "use a CasADi integrator plugin such as method='cvodes'."
+            )
         self.nodes = tuple(nodes)
         self.dt = _parse_time_step(dt, field_name="ODESystem.dt")
         self.method = method
+        self.backend = backend
+        self.options = dict(options or {})
+        if self.backend == "casadi":
+            reserved = {"t0", "tf", "grid", "output_t0"} & set(self.options)
+            if reserved:
+                raise ValueError(
+                    "CasADi ODESystem options must not define integration time "
+                    f"options {sorted(reserved)}; Regelum controls time via Clock.time."
+                )
         self._time_s = 0.0
         self._casadi_graph: _CasadiGraph | None = None
         self._fields = tuple(
-            _StateField(node=node, name=name, shape=_shape(value), size=len(_flatten(value)))
+            _StateField(
+                node=node,
+                name=name,
+                shape=_shape(value, field_name=f"{node.node_id}.{name}"),
+                size=len(_flatten(value, field_name=f"{node.node_id}.{name}")),
+            )
             for node in self.nodes
             for name, value in node._ode_state_values.items()
         )
@@ -112,21 +155,34 @@ class ODESystem(Node):
         time_start: float | None = None,
         time_stop: float | None = None,
     ) -> dict[str, Any]:
+        if time_start is None or time_stop is None:
+            raise ValueError(
+                "ODESystem.update requires time_start and time_stop; "
+                "run ODESystem through PhasedReactiveSystem or pass the global time interval."
+            )
         x0 = self._pack_state()
         graph = self._get_casadi_graph(state_snapshot)
         parameters = self._pack_parameters(graph.parameter_fields, state_snapshot)
-        start = self._time_s if time_start is None else time_start
-        stop = start + float(self.dt) if time_stop is None else time_stop
-        result = solve_ivp(
-            lambda time_s, state: _casadi_vector(graph.rhs_function(time_s, state, parameters)),
-            (start, stop),
-            x0,
-            method=self.method,
-            jac=lambda _time_s, state: _casadi_matrix(
-                graph.jacobian_function(_time_s, state, parameters)
-            ),
-        )
-        self._unpack_state([float(value) for value in result.y[:, -1]])
+        start = float(time_start)
+        stop = float(time_stop)
+        if self.backend == "scipy":
+            result = solve_ivp(
+                lambda time_s, state: _casadi_vector(
+                    graph.rhs_function(time_s, state, parameters)
+                ),
+                (start, stop),
+                x0,
+                method=self.method,
+                jac=lambda _time_s, state: _casadi_matrix(
+                    graph.jacobian_function(_time_s, state, parameters)
+                ),
+                **self.options,
+            )
+            self._unpack_state([float(value) for value in result.y[:, -1]])
+        else:
+            integrator = self._get_casadi_integrator(graph, stop - start)
+            result = integrator(x0=x0, p=[start, *parameters])
+            self._unpack_state(_casadi_vector(result["xf"]))
         self._time_s = stop
         return {}
 
@@ -138,14 +194,20 @@ class ODESystem(Node):
     def _pack_state(self) -> list[float]:
         values: list[float] = []
         for field in self._fields:
-            values.extend(_flatten(field.node._ode_state_values[field.name]))
+            values.extend(
+                float(value)
+                for value in _flatten(
+                    field.node._ode_state_values[field.name],
+                    field_name=f"{field.node.node_id}.{field.name}",
+                )
+            )
         return values
 
     def _unpack_state(self, values: Sequence[float]) -> None:
         offset = 0
         for field in self._fields:
             chunk = values[offset : offset + field.size]
-            field.node._ode_state_values[field.name] = _unflatten(chunk, field.shape)
+            field.node._ode_state_values[field.name] = _restore_value(chunk, field.shape)
             offset += field.size
 
     def _dstate_from_current_node_state(
@@ -160,17 +222,50 @@ class ODESystem(Node):
                 snapshot[f"{node.node_id}.{name}"] = value
                 snapshot[f"{node.__class__.__name__}.{name}"] = value
 
-        derivatives: list[float] = []
+        derivatives: list[Any] = []
+        fields_by_node = {
+            node: tuple(field for field in self._fields if field.node is node) for node in self.nodes
+        }
         for node in self.nodes:
             inputs = _build_node_inputs(node, snapshot)
             state = node.state()
             dstate = _call_dstate(node, inputs=inputs, state=state, time=time)
-            derivatives.extend(
-                value
-                for name in node.__class__._state_vars
-                for value in _flatten(getattr(dstate, name))
-            )
+            for field in fields_by_node[node]:
+                flattened = _flatten(
+                    getattr(dstate, field.name),
+                    field_name=f"{node.node_id}.{field.name}",
+                    allow_bool=False,
+                )
+                if len(flattened) != field.size:
+                    raise ValueError(
+                        f"{node.__class__.__name__}.dstate returned {len(flattened)} values "
+                        f"for {field.name!r}, expected {field.size} from init shape."
+                    )
+                derivatives.extend(flattened)
         return derivatives
+
+    def _trace_dstate(
+        self,
+        *,
+        state_snapshot: StateSnapshot,
+        parameter_fields: tuple[_ParameterField, ...],
+        x: ca.MX,
+        p: ca.MX,
+        time: Any,
+    ) -> ca.MX:
+        parameter_snapshot = dict(state_snapshot)
+        offset = 0
+        for field in parameter_fields:
+            chunk = [p[index] for index in range(offset, offset + field.size)]
+            parameter_snapshot[field.path] = _casadi_view(chunk, field.shape)
+            offset += field.size
+
+        offset = 0
+        for field in self._fields:
+            chunk = [x[index] for index in range(offset, offset + field.size)]
+            field.node._ode_state_values[field.name] = _casadi_view(chunk, field.shape)
+            offset += field.size
+        return ca.vertcat(*self._dstate_from_current_node_state(parameter_snapshot, time=time))
 
     def _build_casadi_graph(
         self,
@@ -182,26 +277,33 @@ class ODESystem(Node):
             x = ca.MX.sym("x", len(self._pack_state()))
             parameter_fields = self._parameter_fields(state_snapshot)
             p = ca.MX.sym("p", sum(field.size for field in parameter_fields))
-            parameter_snapshot = dict(state_snapshot)
-            offset = 0
-            for field in parameter_fields:
-                chunk = [p[index] for index in range(offset, offset + field.size)]
-                parameter_snapshot[field.path] = _unflatten(chunk, field.shape)
-                offset += field.size
-
-            offset = 0
-            for field in self._fields:
-                chunk = [x[index] for index in range(offset, offset + field.size)]
-                field.node._ode_state_values[field.name] = _unflatten(chunk, field.shape)
-                offset += field.size
-            dstate = ca.vertcat(
-                *self._dstate_from_current_node_state(parameter_snapshot, time=time)
+            dstate = self._trace_dstate(
+                state_snapshot=state_snapshot,
+                parameter_fields=parameter_fields,
+                x=x,
+                p=p,
+                time=time,
+            )
+            integrator_p = ca.MX.sym("p", 1 + sum(field.size for field in parameter_fields))
+            tau = ca.MX.sym("tau")
+            integrator_dstate = self._trace_dstate(
+                state_snapshot=state_snapshot,
+                parameter_fields=parameter_fields,
+                x=x,
+                p=integrator_p[1:],
+                time=integrator_p[0] + tau,
             )
             jacobian = ca.jacobian(dstate, x)
             return _CasadiGraph(
                 parameter_fields=parameter_fields,
                 rhs_function=ca.Function("ode_rhs", [time, x, p], [dstate]),
                 jacobian_function=ca.Function("ode_jacobian", [time, x, p], [jacobian]),
+                integrator_dae={
+                    "x": x,
+                    "p": integrator_p,
+                    "t": tau,
+                    "ode": integrator_dstate,
+                },
             )
         except Exception as exc:
             raise CasadiTraceError(
@@ -236,8 +338,13 @@ class ODESystem(Node):
                 if path not in state_snapshot:
                     raise KeyError(f"Cannot build CasADi ODE graph: missing input source {path!r}.")
                 value = state_snapshot[path]
+                shape = _shape(value, field_name=path, allow_bool=True)
                 fields.append(
-                    _ParameterField(path=path, shape=_shape(value), size=len(_flatten(value)))
+                    _ParameterField(
+                        path=path,
+                        shape=shape,
+                        size=len(_flatten(value, field_name=path, allow_bool=True)),
+                    )
                 )
                 seen.add(path)
         return tuple(fields)
@@ -249,8 +356,36 @@ class ODESystem(Node):
     ) -> list[float]:
         values: list[float] = []
         for field in fields:
-            values.extend(float(value) for value in _flatten(state_snapshot[field.path]))
+            value = state_snapshot[field.path]
+            shape = _shape(value, field_name=field.path, allow_bool=True)
+            if shape != field.shape:
+                raise ValueError(
+                    f"ODE input {field.path!r} changed shape from {field.shape.dims} "
+                    f"to {shape.dims}; input shapes must stay fixed after graph build."
+                )
+            values.extend(
+                float(value)
+                for value in _flatten(value, field_name=field.path, allow_bool=True)
+            )
         return values
+
+    def _get_casadi_integrator(self, graph: _CasadiGraph, duration: float) -> ca.Function:
+        if duration <= 0:
+            raise ValueError("ODESystem integration interval must have positive duration.")
+        try:
+            return graph.integrators[duration]
+        except KeyError:
+            name = f"ode_integrator_{len(graph.integrators)}"
+            integrator = ca.integrator(
+                name,
+                self.method,
+                graph.integrator_dae,
+                0.0,
+                duration,
+                self.options,
+            )
+            graph.integrators[duration] = integrator
+            return integrator
 
 
 def _install_dstate_input_ports(node_cls: type[ODENode]) -> None:
@@ -452,48 +587,140 @@ def _normalize_path(path: str) -> str:
     return path
 
 
-def _flatten(value: Any) -> list[Any]:
-    if isinstance(value, (int, float)) or _is_casadi_value(value):
+def _flatten(value: Any, *, field_name: str, allow_bool: bool = False) -> list[Any]:
+    if _is_numeric_scalar(value, allow_bool=allow_bool) or _is_casadi_scalar(value):
         return [value]
+    if _is_casadi_value(value):
+        rows, cols = cast(tuple[int, int], value.shape)
+        return [value[row, col] for row in range(rows) for col in range(cols)]
+    if isinstance(value, np.ndarray):
+        _shape(value, field_name=field_name, allow_bool=allow_bool)
+        return list(value.reshape((-1,)))
     if isinstance(value, (tuple, list)):
+        _shape(value, field_name=field_name, allow_bool=allow_bool)
         flattened: list[Any] = []
         for item in value:
-            flattened.extend(_flatten(item))
+            flattened.extend(_flatten(item, field_name=field_name, allow_bool=allow_bool))
         return flattened
-    raise TypeError(f"ODE state values must be numeric scalars or tuples/lists, got {value!r}.")
+    raise TypeError(
+        f"ODE values for {field_name} must be numeric scalars, list/tuple arrays, "
+        f"numpy arrays, or CasADi values; got {value!r}."
+    )
 
 
-def _shape(value: Any) -> Any:
-    if isinstance(value, (int, float)):
-        return None
-    if isinstance(value, tuple):
-        return ("tuple", tuple(_shape(item) for item in value))
-    if isinstance(value, list):
-        return ("list", tuple(_shape(item) for item in value))
-    raise TypeError(f"ODE state values must be numeric scalars or tuples/lists, got {value!r}.")
+def _shape(value: Any, *, field_name: str, allow_bool: bool = False) -> _ShapeSpec:
+    if _is_numeric_scalar(value, allow_bool=allow_bool) or _is_casadi_scalar(value):
+        return _ShapeSpec("scalar", ())
+    if _is_casadi_value(value):
+        rows, cols = cast(tuple[int, int], value.shape)
+        if rows == 0 or cols == 0:
+            raise ValueError(f"ODE value {field_name} must not be empty.")
+        if cols == 1:
+            return _ShapeSpec("ndarray", (rows,))
+        return _ShapeSpec("ndarray", (rows, cols))
+    if isinstance(value, np.ndarray):
+        if value.size == 0:
+            raise ValueError(f"ODE value {field_name} must not be an empty array.")
+        if value.ndim > 2:
+            raise ValueError(f"ODE value {field_name} must be scalar, 1D, or 2D; got {value.ndim}D.")
+        for item in value.reshape((-1,)):
+            if not _is_numeric_scalar(item, allow_bool=allow_bool):
+                raise TypeError(f"ODE array {field_name} must contain only numeric values.")
+        return _ShapeSpec("ndarray", tuple(int(dim) for dim in value.shape))
+    if isinstance(value, (tuple, list)):
+        if not value:
+            raise ValueError(f"ODE value {field_name} must not be an empty array.")
+        dims = _sequence_dims(value, field_name=field_name, allow_bool=allow_bool, depth=1)
+        return _ShapeSpec("tuple" if isinstance(value, tuple) else "list", dims)
+    raise TypeError(
+        f"ODE values for {field_name} must be numeric scalars, list/tuple arrays, "
+        f"numpy arrays, or CasADi values; got {value!r}."
+    )
 
 
-def _unflatten(values: Sequence[float], shape: Any) -> Any:
-    value, used = _unflatten_at(values, shape, 0)
-    if used != len(values):
-        raise ValueError("Unused values while unpacking ODE state.")
-    return value
+def _sequence_dims(
+    value: Sequence[Any],
+    *,
+    field_name: str,
+    allow_bool: bool,
+    depth: int,
+) -> tuple[int, ...]:
+    if not value:
+        raise ValueError(f"ODE value {field_name} must not contain empty arrays.")
+    nested = [isinstance(item, (tuple, list)) for item in value]
+    if any(nested):
+        if not all(nested):
+            raise ValueError(f"ODE value {field_name} must not mix scalars and arrays.")
+        if depth >= 2:
+            raise ValueError(f"ODE value {field_name} must be scalar, 1D, or 2D.")
+        child_dims = [
+            _sequence_dims(
+                cast(Sequence[Any], item),
+                field_name=field_name,
+                allow_bool=allow_bool,
+                depth=depth + 1,
+            )
+            for item in value
+        ]
+        first = child_dims[0]
+        if any(dims != first for dims in child_dims):
+            raise ValueError(f"ODE value {field_name} must be rectangular, not ragged.")
+        return (len(value), *first)
+    for item in value:
+        if not (_is_numeric_scalar(item, allow_bool=allow_bool) or _is_casadi_scalar(item)):
+            raise TypeError(f"ODE array {field_name} must contain only numeric values.")
+    return (len(value),)
 
 
-def _unflatten_at(values: Sequence[float], shape: Any, offset: int) -> tuple[Any, int]:
-    if shape is None:
-        return values[offset], offset + 1
-    kind, children = cast(tuple[str, tuple[Any, ...]], shape)
-    items = []
-    cursor = offset
-    for child in children:
-        value, cursor = _unflatten_at(values, child, cursor)
-        items.append(value)
-    if kind == "tuple":
-        return tuple(items), cursor
-    if kind == "list":
-        return items, cursor
-    raise ValueError(f"Unknown ODE state shape kind: {kind!r}.")
+def _restore_value(values: Sequence[float], shape: _ShapeSpec) -> Any:
+    if len(values) != shape.size:
+        raise ValueError("Wrong number of values while unpacking ODE state.")
+    floats = [float(value) for value in values]
+    if shape.kind == "scalar":
+        return floats[0]
+    if shape.kind == "ndarray":
+        return np.asarray(floats, dtype=float).reshape(shape.dims)
+    if len(shape.dims) == 1:
+        if shape.kind == "list":
+            return list(floats)
+        if shape.kind == "tuple":
+            return tuple(floats)
+    if len(shape.dims) == 2:
+        rows, cols = shape.dims
+        matrix = [floats[row * cols : (row + 1) * cols] for row in range(rows)]
+        if shape.kind == "list":
+            return matrix
+        if shape.kind == "tuple":
+            return tuple(tuple(row) for row in matrix)
+    raise ValueError(f"Unknown or unsupported ODE shape: {shape!r}.")
+
+
+def _casadi_view(values: Sequence[Any], shape: _ShapeSpec) -> Any:
+    if len(values) != shape.size:
+        raise ValueError("Wrong number of values while building CasADi ODE value.")
+    if shape.kind == "scalar":
+        return values[0]
+    if len(shape.dims) == 1:
+        return ca.vertcat(*values)
+    if len(shape.dims) == 2:
+        rows, cols = shape.dims
+        return ca.vertcat(
+            *[
+                ca.horzcat(*values[row * cols : (row + 1) * cols])
+                for row in range(rows)
+            ]
+        )
+    raise ValueError(f"Unsupported CasADi ODE shape: {shape!r}.")
+
+
+def _is_numeric_scalar(value: Any, *, allow_bool: bool) -> bool:
+    if isinstance(value, (bool, np.bool_)):
+        return allow_bool
+    return isinstance(value, (int, float, np.integer, np.floating))
+
+
+def _is_casadi_scalar(value: Any) -> bool:
+    return _is_casadi_value(value) and value.shape == (1, 1)
 
 
 def _casadi_vector(value: ca.DM) -> list[float]:

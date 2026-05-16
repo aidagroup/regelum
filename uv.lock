@@ -1139,6 +1139,7 @@ source = { editable = "." }
 dependencies = [
     { name = "casadi" },
     { name = "matplotlib" },
+    { name = "numpy" },
     { name = "scienceplots" },
     { name = "scipy" },
     { name = "z3-solver" },
@@ -1162,6 +1163,7 @@ docs = [
 requires-dist = [
     { name = "casadi", specifier = ">=3.7.2" },
     { name = "matplotlib", specifier = ">=3.10.0" },
+    { name = "numpy", specifier = ">=2.3.0" },
     { name = "scienceplots", specifier = ">=2.1.1" },
     { name = "scipy", specifier = ">=1.17.1" },
     { name = "z3-solver", specifier = ">=4.16.0.0" },

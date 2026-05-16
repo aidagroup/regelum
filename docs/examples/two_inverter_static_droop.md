@@ -72,9 +72,11 @@ The example keeps the same conceptual network but writes the electrical plant as
 split into regular `rg.Node` blocks: droop, PI loops, PLL, inverse droop, and
 current control all keep their memory in `NodeState`.
 
-First, the standalone script imports the framework as `rg`:
+First, the standalone script imports NumPy for the three-phase vectors and the
+framework as `rg`:
 
 ```python
+import numpy as np
 import regelum as rg
 ```
 
@@ -84,8 +86,8 @@ plant and publishes frequency, voltage setpoint, and phase:
 ```python
 class MasterDroop(rg.Node):
     class Inputs(rg.NodeInputs):
-        current: PhaseVector = rg.Input(src=lambda: Lc1Filter.State.inductor_i)
-        voltage: PhaseVector = rg.Input(src=lambda: Lc1Filter.State.capacitor_v)
+        current: np.ndarray = rg.Input(src=lambda: Lc1Filter.State.inductor_i)
+        voltage: np.ndarray = rg.Input(src=lambda: Lc1Filter.State.capacitor_v)
 
     class State(rg.NodeState):
         frequency_hz: float = rg.Var(init=50.0)
@@ -102,14 +104,14 @@ anti-windup terms are explicit state variables:
 ```python
 class MasterVoltagePI(rg.Node):
     class Inputs(rg.NodeInputs):
-        voltage: PhaseVector = rg.Input(src=lambda: Lc1Filter.State.capacitor_v)
+        voltage: np.ndarray = rg.Input(src=lambda: Lc1Filter.State.capacitor_v)
         phase: float = rg.Input(src=MasterDroop.State.phase)
         voltage_setpoint: float = rg.Input(src=MasterDroop.State.voltage_setpoint)
 
     class State(rg.NodeState):
-        current_setpoint_dq0: PhaseVector = rg.Var(init=zeros3)
-        integral: PhaseVector = rg.Var(init=zeros3)
-        windup: PhaseVector = rg.Var(init=zeros3)
+        current_setpoint_dq0: np.ndarray = rg.Var(init=zero_abc)
+        integral: np.ndarray = rg.Var(init=zero_abc)
+        windup: np.ndarray = rg.Var(init=zero_abc)
 ```
 
 The slave side is also explicit. The PLL estimates phase/frequency, inverse
@@ -132,29 +134,34 @@ Two small inverter nodes convert controller modulation into phase voltages:
 ```python
 class Inverter1(rg.Node):
     class Inputs(rg.NodeInputs):
-        modulation: PhaseVector = rg.Input(src=MasterCurrentPI.State.modulation)
+        modulation: np.ndarray = rg.Input(src=MasterCurrentPI.State.modulation)
 
     class State(rg.NodeState):
-        phase_v: PhaseVector = rg.Var(init=zeros3)
+        phase_v: np.ndarray = rg.Var(init=zero_abc)
 ```
 
 The physical network is the continuous part. `Lc1Filter`, `Lcl1Filter`,
-`Lc2Filter`, and `Rl1Load` are `rg.ODENode` classes. For example, the master LC
-filter declares continuous state and returns derivatives in `dstate(...)`:
+`Lc2Filter`, and `Rl1Load` are `rg.ODENode` classes. Their state is declared as
+NumPy arrays, and Regelum traces those arrays as CasADi `MX` vectors inside
+`dstate(...)`. For example, the master LC filter is ordinary vector algebra:
 
 ```python
 class Lc1Filter(rg.ODENode):
     class Inputs(rg.NodeInputs):
-        inverter_v: PhaseVector = rg.Input(src=Inverter1.State.phase_v)
-        lcl1_grid_side_i: PhaseVector = rg.Input(src=lambda: Lcl1Filter.State.grid_side_i)
-        lc2_inductor_i: PhaseVector = rg.Input(src=lambda: Lc2Filter.State.inductor_i)
+        inverter_v: np.ndarray = rg.Input(src=Inverter1.State.phase_v)
+        lcl1_grid_side_i: np.ndarray = rg.Input(src=lambda: Lcl1Filter.State.grid_side_i)
+        lc2_inductor_i: np.ndarray = rg.Input(src=lambda: Lc2Filter.State.inductor_i)
 
     class State(rg.NodeState):
-        capacitor_v: PhaseVector = rg.Var(init=zeros3)
-        inductor_i: PhaseVector = rg.Var(init=zeros3)
+        capacitor_v: np.ndarray = rg.Var(init=zero_abc)
+        inductor_i: np.ndarray = rg.Var(init=zero_abc)
 
     def dstate(self, inputs: Inputs, state: State) -> State:
-        ...
+        return self.State(
+            capacitor_v=(state.inductor_i + inputs.lcl1_grid_side_i - inputs.lc2_inductor_i)
+            / self.capacitance,
+            inductor_i=(inputs.inverter_v - state.capacitor_v) / self.inductance,
+        )
 ```
 
 The LCL slave branch is also an ODE node. Its capacitor voltage is what the plot
@@ -163,19 +170,46 @@ records:
 ```python
 class Lcl1Filter(rg.ODENode):
     class State(rg.NodeState):
-        capacitor_v: PhaseVector = rg.Var(init=zeros3)
-        inverter_side_i: PhaseVector = rg.Var(init=zeros3)
-        grid_side_i: PhaseVector = rg.Var(init=zeros3)
+        capacitor_v: np.ndarray = rg.Var(init=zero_abc)
+        inverter_side_i: np.ndarray = rg.Var(init=zero_abc)
+        grid_side_i: np.ndarray = rg.Var(init=zero_abc)
 ```
 
-`Lc2Filter` and `Rl1Load` complete the load-side network. `Rl1Load.dstate(...)`
-uses the ODE time argument to change the resistance after `0.2` seconds:
+`Lc2Filter` and `Rl1Load` complete the load-side network. The load resistance is
+not embedded as symbolic branching inside the ODE; it is a normal discrete
+scenario node. For a 2000-step run, the first third uses `R`, the second third
+uses `2R`, and the final third returns to `R`:
 
 ```python
+class ResistanceScenario(rg.Node):
+    class Inputs(rg.NodeInputs):
+        tick: int = rg.Input(src=rg.Clock.tick)
+
+    class State(rg.NodeState):
+        resistance: float = rg.Var(init=20.0)
+
+    def update(self, inputs: Inputs) -> State:
+        if inputs.tick < self.first_switch_tick:
+            resistance = self.base_resistance
+        elif inputs.tick < self.second_switch_tick:
+            resistance = 2.0 * self.base_resistance
+        else:
+            resistance = self.base_resistance
+        return self.State(resistance=resistance)
+
+
 class Rl1Load(rg.ODENode):
-    def dstate(self, inputs: Inputs, state: State, *, time: float) -> State:
-        resistance = ca.if_else(time < 0.2, self.resistance, 2.0 * self.resistance)
-        ...
+    class Inputs(rg.NodeInputs):
+        capacitor_v: np.ndarray = rg.Input(src=Lc2Filter.State.capacitor_v)
+        resistance: float = rg.Input(src=ResistanceScenario.State.resistance)
+
+    class State(rg.NodeState):
+        load_i: np.ndarray = rg.Var(init=zero_abc)
+
+    def dstate(self, inputs: Inputs, state: State) -> State:
+        return self.State(
+            load_i=(inputs.capacitor_v - inputs.resistance * state.load_i) / self.inductance,
+        )
 ```
 
 ## Build The System
@@ -185,7 +219,7 @@ network is one `rg.ODESystem`, so Regelum integrates the coupled ODE nodes
 together on the base electrical step.
 
 ```python
-def build_system() -> rg.PhasedReactiveSystem:
+def build_system(*, steps: int = 2000) -> rg.PhasedReactiveSystem:
     master_droop = MasterDroop()
     master_voltage_pi = MasterVoltagePI()
     master_current_pi = MasterCurrentPI()
@@ -194,6 +228,10 @@ def build_system() -> rg.PhasedReactiveSystem:
     slave_current_pi = SlaveCurrentPI()
     inverter1 = Inverter1()
     inverter2 = Inverter2()
+    resistance = ResistanceScenario(
+        first_switch_tick=steps // 3,
+        second_switch_tick=2 * steps // 3,
+    )
     lc1 = Lc1Filter()
     lcl1 = Lcl1Filter()
     lc2 = Lc2Filter()
@@ -201,7 +239,9 @@ def build_system() -> rg.PhasedReactiveSystem:
     electrical = rg.ODESystem(
         nodes=(lc1, lcl1, lc2, rl1),
         dt="0.00005",
-        method="LSODA",
+        backend="casadi",
+        method="cvodes",
+        options={"abstol": 1e-9, "reltol": 1e-8},
     )
     logger = ODEAPIMicrogridLogger()
 
@@ -220,7 +260,8 @@ def build_system() -> rg.PhasedReactiveSystem:
                 transitions=(rg.Goto("inverters"),),
                 is_initial=True,
             ),
-            rg.Phase("inverters", nodes=(inverter1, inverter2), transitions=(rg.Goto("electrical"),)),
+            rg.Phase("inverters", nodes=(inverter1, inverter2), transitions=(rg.Goto("scenario"),)),
+            rg.Phase("scenario", nodes=(resistance,), transitions=(rg.Goto("electrical"),)),
             rg.Phase("electrical", nodes=(electrical,), transitions=(rg.Goto("log"),)),
             rg.Phase("log", nodes=(logger,), transitions=(rg.Goto(rg.terminate),)),
         ],
@@ -228,9 +269,10 @@ def build_system() -> rg.PhasedReactiveSystem:
 ```
 
 This order is deliberate. The control phase resolves the controller DAG from
-measurements to modulation, then the inverter nodes compute phase voltages, then
-`electrical` integrates the continuous LC/LCL/load ODEs, and finally the logger
-records the LCL capacitor voltage.
+measurements to modulation, the inverter nodes compute phase voltages, the
+scenario node publishes the sampled load resistance, `electrical` integrates the
+continuous LC/LCL/load ODEs, and finally the logger records the LCL capacitor
+voltage plus the active resistance.
 
 ## Phase Graph
 
@@ -238,16 +280,19 @@ records the LCL capacitor voltage.
 flowchart LR
     init([init]) --> control["control<br/>droop + PI + PLL nodes"]
     control --> inverters["inverters<br/>Inverter1 + Inverter2"]
-    inverters --> electrical["electrical<br/>ODESystem(dt = 0.00005)"]
+    inverters --> scenario["scenario<br/>ResistanceScenario"]
+    scenario --> electrical["electrical<br/>ODESystem(dt = 0.00005, backend = casadi)"]
     electrical --> log["log<br/>ODEAPIMicrogridLogger"]
     log --> done([⊥])
 
     classDef control fill:#d9770622,stroke:#d97706,color:#111318
     classDef inverters fill:#2f6fed22,stroke:#2f6fed,color:#111318
+    classDef scenario fill:#7c3aed22,stroke:#7c3aed,color:#111318
     classDef electrical fill:#15803d22,stroke:#15803d,color:#111318
     classDef log fill:#64748b22,stroke:#64748b,color:#111318
     class control control
     class inverters inverters
+    class scenario scenario
     class electrical electrical
     class log log
 ```
@@ -267,13 +312,14 @@ flowchart LR
     slaveInverseDroop --> slaveCurrentPI["SlaveCurrentPI"]
     slavePLL --> slaveCurrentPI
     slaveCurrentPI --> inv2["Inverter2"]
+    scenario["ResistanceScenario"] --> rl1["Rl1Load<br/>ODENode"]
 
     inv1 --> lc1["Lc1Filter<br/>ODENode"]
     inv2 --> lcl1["Lcl1Filter<br/>ODENode"]
     lcl1 --> lc1
     lc1 --> lcl1
     lc1 --> lc2["Lc2Filter<br/>ODENode"]
-    lc2 --> rl1["Rl1Load<br/>ODENode"]
+    lc2 --> rl1
     rl1 --> lc2
     lc1 --> masterDroop
     lc1 --> masterVoltagePI
@@ -294,17 +340,20 @@ flowchart LR
     lc2_state(("state")) -.-> lc2
     rl1_state(("state")) -.-> rl1
     logger_state(("state")) -.-> logger
+    scenario_state(("state")) -.-> scenario
 
     classDef control fill:#d9770622,stroke:#d97706,color:#111318
     classDef inverters fill:#2f6fed22,stroke:#2f6fed,color:#111318
+    classDef scenarioPhase fill:#7c3aed22,stroke:#7c3aed,color:#111318
     classDef electrical fill:#15803d22,stroke:#15803d,color:#111318
     classDef log fill:#64748b22,stroke:#64748b,color:#111318
     classDef state fill:#94a3b822,stroke:#94a3b8,stroke-dasharray:3 3,color:#111318
     class masterDroop,masterVoltagePI,masterCurrentPI,slavePLL,slaveInverseDroop,slaveCurrentPI control
     class inv1,inv2 inverters
+    class scenario scenarioPhase
     class lc1,lcl1,lc2,rl1 electrical
     class logger log
-    class master_droop_state,master_voltage_pi_state,master_current_pi_state,slave_pll_state,slave_inverse_state,slave_current_pi_state,lc1_state,lcl1_state,lc2_state,rl1_state,logger_state state
+    class master_droop_state,master_voltage_pi_state,master_current_pi_state,slave_pll_state,slave_inverse_state,slave_current_pi_state,scenario_state,lc1_state,lcl1_state,lc2_state,rl1_state,logger_state state
 ```
 
 ## Phase Table
@@ -313,8 +362,9 @@ flowchart LR
 |---|---|---|
 | <span class="phase-label phase-label--control">control</span> | `MasterDroop`, `MasterVoltagePI`, `MasterCurrentPI`, `SlavePLL`, `SlaveInverseDroop`, `SlaveCurrentPI` | Computes master voltage-forming and slave current-sourcing modulation as a DAG of stateful nodes. |
 | <span class="phase-label phase-label--branches">inverters</span> | `Inverter1`, `Inverter2` | Converts modulation into three-phase inverter voltages. |
+| scenario | `ResistanceScenario` | Publishes the sampled load resistance: `R`, then `2R`, then `R`. |
 | <span class="phase-label phase-label--bus">electrical</span> | `ODESystem(Lc1Filter, Lcl1Filter, Lc2Filter, Rl1Load)` | Integrates the coupled electrical differential equations. |
-| <span class="phase-label phase-label--log">log</span> | `ODEAPIMicrogridLogger` | Stores the LCL capacitor voltages for plotting. |
+| <span class="phase-label phase-label--log">log</span> | `ODEAPIMicrogridLogger` | Stores the LCL capacitor voltages and resistance for plotting. |
 
 ## Node Table
 
@@ -328,11 +378,12 @@ flowchart LR
 | <span class="node-label phase-label--control">SlaveCurrentPI</span> | slave modulation, PI integral, windup | `Lcl1Filter` current, `SlavePLL` phase, `SlaveInverseDroop` setpoint |
 | <span class="node-label phase-label--branches">Inverter1</span> | `phase_v` | Master modulation |
 | <span class="node-label phase-label--branches">Inverter2</span> | `phase_v` | Slave modulation |
+| `ResistanceScenario` | `resistance` | `rg.Clock.tick` |
 | <span class="node-label phase-label--bus">Lc1Filter</span> | `capacitor_v`, `inductor_i` | Master inverter voltage, `Lcl1Filter.grid_side_i`, `Lc2Filter.inductor_i` |
 | <span class="node-label phase-label--bus">Lcl1Filter</span> | `capacitor_v`, `inverter_side_i`, `grid_side_i` | Slave inverter voltage and `Lc1Filter.capacitor_v` |
 | <span class="node-label phase-label--bus">Lc2Filter</span> | `capacitor_v`, `inductor_i` | `Lc1Filter.capacitor_v`, `Rl1Load.load_i` |
-| <span class="node-label phase-label--bus">Rl1Load</span> | `load_i` | `Lc2Filter.capacitor_v` and ODE `time` |
-| <span class="node-label phase-label--log">ODEAPIMicrogridLogger</span> | `samples: list[VoltageSample]` | Built-in `rg.Clock.time` and `Lcl1Filter.capacitor_v` |
+| <span class="node-label phase-label--bus">Rl1Load</span> | `load_i` | `Lc2Filter.capacitor_v` and `ResistanceScenario.resistance` |
+| <span class="node-label phase-label--log">ODEAPIMicrogridLogger</span> | `samples` | Built-in `rg.Clock.time`, `Lcl1Filter.capacitor_v`, and resistance |
 
 ## Simulation Result
 
@@ -340,15 +391,15 @@ The documentation plot is generated by:
 
 ```bash
 uv run python examples/two_inverter_static_droop/standalone.py \
-  --steps 1000 \
-  --output docs/assets/examples/two_inverter_static_droop/lcl1_capacitor_voltages.svg
+  --steps 2000
 ```
 
-The plotted signal is the three-phase capacitor voltage of the slave LCL filter.
-It is the same signal family that the OpenModelica example suggests inspecting
-with `viz_cols=['*.m[dq0]', 'slave.freq', 'lcl1.*']`.
+The plotted signal combines the three-phase capacitor voltage of the slave LCL
+filter and the sampled load resistance. The resistance scenario occupies equal
+thirds of the run: nominal resistance, doubled resistance, and nominal
+resistance again.
 
-![LCL capacitor voltages](../assets/examples/two_inverter_static_droop/lcl1_capacitor_voltages.svg)
+![LCL capacitor voltages and resistance](../assets/examples/two_inverter_static_droop/lcl1_voltage_and_resistance.svg)
 
 The full standalone listing below is the concrete executable example: helper
 math, controllers, Regelum node definitions, PRS construction, simulation, and
