@@ -512,6 +512,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#vector-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vector State
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#ode-systems" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -807,6 +818,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#vector-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vector State
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#ode-systems" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -881,20 +903,25 @@ An ODE node declares a <code>State</code> namespace instead of ordinary <code>St
 State variables are created with <code>rg.Var(init=...)</code>, are readable by
 other nodes, and are committed back into system state after integration.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">casadi</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ca</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">regelum</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rg</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">regelum</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rg</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">Integrator</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">ODENode</span><span class="p">):</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">u</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Controller</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">u</span><span class="p">)</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        <span class="n">x</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">dstate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Inputs</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">time</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">inputs</span><span class="o">.</span><span class="n">u</span> <span class="o">+</span> <span class="n">ca</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">time</span><span class="p">))</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">Integrator</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">ODENode</span><span class="p">):</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="n">u</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Controller</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">u</span><span class="p">)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">dstate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Inputs</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">time</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">A</span> <span class="o">@</span> <span class="n">state</span><span class="o">.</span><span class="n">x</span> <span class="o">+</span> <span class="n">inputs</span><span class="o">.</span><span class="n">u</span> <span class="o">+</span> <span class="n">ca</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">time</span><span class="p">))</span>
 </code></pre></div>
 <p><code>dstate(...)</code> returns the derivative in the same <code>State</code> shape.
+<code>Var(init=...)</code> is the shape contract for continuous state. Scalars, 1D
+vectors, and 2D matrices are supported. The runtime accepts <code>float</code>,
+<code>list</code>, <code>tuple</code>, and <code>numpy.ndarray</code> values, but ODE state is always integrated
+as floating point data.
 Declare only the arguments the node actually needs.
 The ODE runtime resolves <code>inputs</code> and <code>state</code> by name or by annotation.
 <code>time</code> is a reserved name and is resolved by name.
@@ -913,7 +940,10 @@ Arguments may be declared in any order, so these forms are supported:</p>
 </code></pre></div>
 <p><code>time</code> may also be keyword-only, for example
 <code>dstate(self, inputs, state, *, time)</code>.
-The <code>time</code> value is the continuous solver time, not a sampled node state variable.</p>
+The <code>time</code> value is continuous physical time inside the solver interval. It is
+not the same thing as an input sourced from <code>rg.Clock.time</code>: <code>Input(src=Clock.time)</code>
+is sampled once at the beginning of the ODE step, while <code>dstate(..., time)</code> varies
+continuously during integration.</p>
 <p>When <code>dstate</code> declares input ports directly, those parameter names become the
 ODE node input names and can be connected like ordinary inputs:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Plant</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">ODENode</span><span class="p">):</span>
@@ -936,19 +966,44 @@ ODE node input names and can be connected like ordinary inputs:</p>
 <a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="o">...</span>
 </code></pre></div>
-<p>The ODE backend is CasADi-only.
-Use CasADi primitives directly inside <code>dstate</code>, for example <code>ca.sin</code>,
-<code>ca.cos</code>, <code>ca.sqrt</code>, and <code>ca.if_else</code>.
-Python <code>if</code>, <code>math</code>, and NumPy operations over symbolic state or input values
-are not traceable by the backend.</p>
+<p>The ODE graph backend is CasADi. Regelum traces <code>dstate(...)</code> with <code>ca.MX</code>
+values, including vector and matrix state. Use CasADi primitives directly inside
+<code>dstate</code>, for example <code>ca.sin</code>, <code>ca.cos</code>, <code>ca.sqrt</code>, and <code>ca.if_else</code>.
+Python <code>if</code>, <code>math</code>, and NumPy functions over symbolic state or input values are
+not traceable. Plain vector algebra such as <code>A @ state.x</code>, <code>state.x + inputs.u</code>,
+and scalar multiplication is supported when operands are CasADi-compatible.</p>
+<h2 id="vector-state">Vector State</h2>
+<p>Use <code>np.ndarray</code> when the model is naturally vector-valued:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Filter</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">ODENode</span><span class="p">):</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>        <span class="n">voltage</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Inverter</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">phase_v</span><span class="p">)</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeState</span><span class="p">):</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">current</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Var</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">dstate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">:</span> <span class="n">Inputs</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">State</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">State</span><span class="p">:</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="n">current</span><span class="o">=</span><span class="p">(</span><span class="n">inputs</span><span class="o">.</span><span class="n">voltage</span> <span class="o">-</span> <span class="n">R</span> <span class="o">*</span> <span class="n">state</span><span class="o">.</span><span class="n">current</span><span class="p">)</span> <span class="o">/</span> <span class="n">L</span><span class="p">)</span>
+</code></pre></div>
+<p>For CasADi tracing, <code>init=np.zeros(3)</code> becomes <code>MX(3, 1)</code> inside <code>dstate</code>.
+<code>init=np.zeros((2, 3))</code> becomes <code>MX(2, 3)</code>.
+After integration, Regelum converts the result back to the runtime type implied
+by <code>init</code>, so <code>np.ndarray</code> state remains <code>np.ndarray</code> in <code>snapshot()</code> and
+<code>read(...)</code>.</p>
+<p><code>list</code> and <code>tuple</code> state are also accepted. They are interpreted as CasADi
+vectors/matrices during tracing and converted back to the same top-level
+container after integration. Empty arrays, ragged nested lists, and rank greater
+than 2 are rejected.</p>
+<p>Input shapes are fixed when the CasADi graph is first traced. If an ODE input
+later changes shape, Regelum raises an error instead of rebuilding the graph
+silently.</p>
 <h2 id="ode-systems">ODE Systems</h2>
 <p>Group one or more <code>ODENode</code> instances into an <code>rg.ODESystem</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">plant</span> <span class="o">=</span> <span class="n">Integrator</span><span class="p">()</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">electrical</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">ODESystem</span><span class="p">(</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">plant</span><span class="p">,),</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">dt</span><span class="o">=</span><span class="s2">&quot;0.001&quot;</span><span class="p">,</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;LSODA&quot;</span><span class="p">,</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">plant</span> <span class="o">=</span> <span class="n">Integrator</span><span class="p">()</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">electrical</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">ODESystem</span><span class="p">(</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">plant</span><span class="p">,),</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">dt</span><span class="o">=</span><span class="s2">&quot;0.001&quot;</span><span class="p">,</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;LSODA&quot;</span><span class="p">,</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">)</span>
 </code></pre></div>
 <p><code>dt</code> is required for <code>ODESystem</code>.
 Pass it as a <code>Fraction</code>, an integer, or a decimal string.
@@ -957,14 +1012,31 @@ Do not put <code>dt</code> on <code>ODENode</code>.
 An <code>ODENode</code> is an equation block inside an <code>ODESystem</code>, not a separately
 scheduled node; both instance-level <code>Integrator(dt="0.001")</code> and class-level
 <code>class Integrator(rg.ODENode): dt = "0.001"</code> are rejected.</p>
+<p><code>backend</code> selects the numerical integrator:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">electrical</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">ODESystem</span><span class="p">(</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">plant</span><span class="p">,),</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">dt</span><span class="o">=</span><span class="s2">&quot;0.001&quot;</span><span class="p">,</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;casadi&quot;</span><span class="p">,</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">method</span><span class="o">=</span><span class="s2">&quot;cvodes&quot;</span><span class="p">,</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;abstol&quot;</span><span class="p">:</span> <span class="mf">1e-9</span><span class="p">,</span> <span class="s2">&quot;reltol&quot;</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">},</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="p">)</span>
+</code></pre></div>
+<p>The default is still <code>backend="scipy", method="LSODA"</code> for compatibility.
+For <code>backend="scipy"</code>, <code>options</code> are passed to <code>scipy.integrate.solve_ivp</code>.
+For <code>backend="casadi"</code>, <code>options</code> are passed to <code>casadi.integrator</code>.
+<code>backend="casadi"</code> requires a CasADi integrator plugin such as <code>"cvodes"</code> or
+<code>"rk"</code>; <code>"LSODA"</code> is a SciPy method and is rejected for the CasADi backend.</p>
+<p>Regelum owns the integration interval. Do not pass CasADi time options
+<code>t0</code>, <code>tf</code>, <code>grid</code>, or <code>output_t0</code>; they are rejected because the interval comes
+from the PRS clock.</p>
 <p>An ODE phase contains only ODE systems:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">system</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">phases</span><span class="o">=</span><span class="p">[</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>        <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span><span class="s2">&quot;control&quot;</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">controller</span><span class="p">,),</span> <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;plant&quot;</span><span class="p">),),</span> <span class="n">is_initial</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>        <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span><span class="s2">&quot;plant&quot;</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">electrical</span><span class="p">,),</span> <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;log&quot;</span><span class="p">),)),</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>        <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span><span class="s2">&quot;log&quot;</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">logger</span><span class="p">,),</span> <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">terminate</span><span class="p">),)),</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="p">],</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">system</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">phases</span><span class="o">=</span><span class="p">[</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>        <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span><span class="s2">&quot;control&quot;</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">controller</span><span class="p">,),</span> <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;plant&quot;</span><span class="p">),),</span> <span class="n">is_initial</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>        <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span><span class="s2">&quot;plant&quot;</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">electrical</span><span class="p">,),</span> <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="s2">&quot;log&quot;</span><span class="p">),)),</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        <span class="n">rg</span><span class="o">.</span><span class="n">Phase</span><span class="p">(</span><span class="s2">&quot;log&quot;</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">logger</span><span class="p">,),</span> <span class="n">transitions</span><span class="o">=</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Goto</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">terminate</span><span class="p">),)),</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="p">],</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="p">)</span>
 </code></pre></div>
 <p>A phase may not mix <code>ODESystem</code> objects with ordinary <code>Node</code> objects.
 For now, one <code>PhasedReactiveSystem</code> supports at most one continuous phase.
@@ -987,11 +1059,11 @@ When the runtime reaches a continuous phase:</p>
 <p>The integer <code>Clock.tick</code> advances only after the full PRS tick terminates.
 That means a logger after a continuous phase sees the new physical time and
 the old tick index:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Logger</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>        <span class="n">tick</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">tick</span><span class="p">)</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="n">x</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Integrator</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">x</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Logger</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>        <span class="n">tick</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">tick</span><span class="p">)</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>        <span class="n">x</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">Integrator</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">x</span><span class="p">)</span>
 </code></pre></div>
 <p>Multiple <code>ODESystem</code> objects in the same continuous phase are treated as
 separate systems. They are valid only when they are independent. Continuous
@@ -1007,6 +1079,10 @@ that can terminate without the continuous phase, or can reach it twice, is a
 compile error. Integrate continuous dynamics every base tick; use ordinary
 <code>Node.dt</code> for slower discrete controllers whose state is sampled and held by
 the plant.</p>
+<p>With the CasADi numeric backend, Regelum caches <code>casadi.integrator</code> functions by
+step duration. The integrator itself runs over local time <code>tau = 0..duration</code>;
+the <code>time</code> argument passed to <code>dstate</code> is <code>time_start + tau</code>, so user equations
+still see absolute physical time from the global clock.</p>
 <h2 id="base-time-and-scheduling">Base Time And Scheduling</h2>
 <p>Every system has a base time step.
 The default is <code>base_dt="auto"</code>.</p>
@@ -1018,19 +1094,19 @@ divisor of all explicit discrete node <code>dt</code> values and all <code>ODESy
 values. <code>ODESystem.dt</code> contributes to the common time grid; runtime integration
 still happens every tick over <code>base_dt</code>.
 Every node period must be an integer multiple of <code>base_dt</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">controller</span> <span class="o">=</span> <span class="n">Controller</span><span class="p">(</span><span class="n">dt</span><span class="o">=</span><span class="s2">&quot;0.01&quot;</span><span class="p">)</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">electrical</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">ODESystem</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">plant</span><span class="p">,),</span> <span class="n">dt</span><span class="o">=</span><span class="s2">&quot;0.001&quot;</span><span class="p">)</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">system</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">phases</span><span class="o">=</span><span class="n">phases</span><span class="p">,</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">base_dt</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>  <span class="c1"># Fraction(1, 1000)</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">controller</span> <span class="o">=</span> <span class="n">Controller</span><span class="p">(</span><span class="n">dt</span><span class="o">=</span><span class="s2">&quot;0.01&quot;</span><span class="p">)</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">electrical</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">ODESystem</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="p">(</span><span class="n">plant</span><span class="p">,),</span> <span class="n">dt</span><span class="o">=</span><span class="s2">&quot;0.001&quot;</span><span class="p">)</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="n">system</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">PhasedReactiveSystem</span><span class="p">(</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">phases</span><span class="o">=</span><span class="n">phases</span><span class="p">,</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">base_dt</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>  <span class="c1"># Fraction(1, 1000)</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="p">)</span>
 </code></pre></div>
 <p>Discrete nodes with <code>dt</code> use sample-and-hold semantics.
 If a node is not due on the current base tick, it is skipped and its previous
 state variables remain in state.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">fast</span> <span class="o">=</span> <span class="n">Sensor</span><span class="p">()</span>          <span class="c1"># due every base tick</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">slow</span> <span class="o">=</span> <span class="n">Controller</span><span class="p">(</span><span class="n">dt</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># due on ticks 0, 2, 4, ...</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">fast</span> <span class="o">=</span> <span class="n">Sensor</span><span class="p">()</span>          <span class="c1"># due every base tick</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">slow</span> <span class="o">=</span> <span class="n">Controller</span><span class="p">(</span><span class="n">dt</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># due on ticks 0, 2, 4, ...</span>
 </code></pre></div>
 <p>Continuous systems are not skipped by their own <code>dt</code>.
 Each <code>ODESystem</code> in the continuous phase integrates every tick on <code>base_dt</code>.
@@ -1040,12 +1116,12 @@ updates.</p>
 <h2 id="system-clock">System Clock</h2>
 <p>The system clock is a reserved source, not a node.
 Use <code>rg.Clock.tick</code> and <code>rg.Clock.time</code> in inputs and guards:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Sampler</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">tick</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">rg</span><span class="o">.</span><span class="n">terminate</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Sampler</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Node</span><span class="p">):</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Inputs</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">NodeInputs</span><span class="p">):</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">rg</span><span class="o">.</span><span class="n">Input</span><span class="p">(</span><span class="n">src</span><span class="o">=</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="n">rg</span><span class="o">.</span><span class="n">If</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">V</span><span class="p">(</span><span class="n">rg</span><span class="o">.</span><span class="n">Clock</span><span class="o">.</span><span class="n">tick</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">rg</span><span class="o">.</span><span class="n">terminate</span><span class="p">)</span>
 </code></pre></div>
 <p><code>snapshot()</code> returns user node state variables and ODE state values.
 Use <code>read(rg.Clock.tick)</code> or <code>read(rg.Clock.time)</code> to inspect clock fields.</p>
