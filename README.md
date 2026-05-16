@@ -17,25 +17,26 @@
 
 # regelum
 
-`regelum` is a framework for prototyping and simulating dynamic systems and
-general dataflows. It introduces **Phased Reactive Systems** (PRS): systems
-that execute one tick at a time, activate different groups of nodes in
-different phases, and move between phases with explicit transitions.
+`regelum` is a framework for designing and simulating dynamic systems, feedback
+loops, DAGs, and dataflows as **Phased Reactive Systems** (PRS). A PRS has two
+levels of abstraction: low-level computational primitives called **nodes**, and
+high-level execution stages called **phases**. Nodes declare `Inputs` for values
+read from other nodes or system sources and `State` for values they own and
+publish; phases group node instances into executable slices, resolve their
+dependency graph, and move execution through explicit transitions. These
+transitions can be unconditional or conditional, so execution can branch to
+different phases depending on current system state.
 
-Any algorithm written with `regelum` can be decomposed into a graph of phases
-with conditional transitions. Each phase is represented as a DAG of
-computational primitives called **nodes**: stateful computation units with two
-namespaces, `Inputs` and `State`. A state variable written by one node can be
-used as an input of another node, while a node can also read its own previous
-state directly in `update`.
-
-`regelum` deliberately leans on Python syntax sugar. The API is inspired by
-frameworks such as FastAPI, Typer, Pydantic, SQLModel, SQLAlchemy, FastStream,
-and others that made Python annotations, descriptors, nested classes, and
-declarative function signatures into compact framework DSLs. In `regelum`,
-`Node`, `State`, `Var`, `Input(src=...)`, and `update(...)` provide a concise
-way to write computation nodes while the built-in compiler/resolver derives
-the execution order and validates the graph.
+The API is intentionally built from Python's own language features: type
+annotations, nested classes, descriptors, declarative function signatures,
+operator overloading, and ordinary Python objects. It is inspired by frameworks
+such as [FastAPI](https://fastapi.tiangolo.com/),
+[Typer](https://typer.tiangolo.com/), [Pydantic](https://docs.pydantic.dev/),
+[SQLModel](https://sqlmodel.tiangolo.com/), [SQLAlchemy](https://www.sqlalchemy.org/),
+and [FastStream](https://faststream.ag2.ai/latest/). The goal is to make system
+models look like regular Python while still giving the compiler enough
+structure to resolve dependencies, validate the graph, schedule execution, and
+integrate continuous dynamics.
 
 ## Overview
 
