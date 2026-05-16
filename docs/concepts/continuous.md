@@ -14,21 +14,26 @@ other nodes, and are committed back into system state after integration.
 
 ```python
 import casadi as ca
+import numpy as np
 import regelum as rg
 
 
 class Integrator(rg.ODENode):
     class Inputs(rg.NodeInputs):
-        u: float = rg.Input(src=Controller.State.u)
+        u: np.ndarray = rg.Input(src=Controller.State.u)
 
     class State(rg.NodeState):
-        x: float = rg.Var(init=0.0)
+        x: np.ndarray = rg.Var(init=lambda: np.zeros(3))
 
     def dstate(self, inputs: Inputs, state: State, *, time: object) -> State:
-        return self.State(x=inputs.u + ca.sin(time))
+        return self.State(x=A @ state.x + inputs.u + ca.sin(time))
 ```
 
 `dstate(...)` returns the derivative in the same `State` shape.
+`Var(init=...)` is the shape contract for continuous state. Scalars, 1D
+vectors, and 2D matrices are supported. The runtime accepts `float`,
+`list`, `tuple`, and `numpy.ndarray` values, but ODE state is always integrated
+as floating point data.
 Declare only the arguments the node actually needs.
 The ODE runtime resolves `inputs` and `state` by name or by annotation.
 `time` is a reserved name and is resolved by name.
@@ -50,7 +55,10 @@ def dstate(self, state): ...
 
 `time` may also be keyword-only, for example
 `dstate(self, inputs, state, *, time)`.
-The `time` value is the continuous solver time, not a sampled node state variable.
+The `time` value is continuous physical time inside the solver interval. It is
+not the same thing as an input sourced from `rg.Clock.time`: `Input(src=Clock.time)`
+is sampled once at the beginning of the ODE step, while `dstate(..., time)` varies
+continuously during integration.
 
 When `dstate` declares input ports directly, those parameter names become the
 ODE node input names and can be connected like ordinary inputs:
@@ -80,11 +88,43 @@ def dstate(
     ...
 ```
 
-The ODE backend is CasADi-only.
-Use CasADi primitives directly inside `dstate`, for example `ca.sin`,
-`ca.cos`, `ca.sqrt`, and `ca.if_else`.
-Python `if`, `math`, and NumPy operations over symbolic state or input values
-are not traceable by the backend.
+The ODE graph backend is CasADi. Regelum traces `dstate(...)` with `ca.MX`
+values, including vector and matrix state. Use CasADi primitives directly inside
+`dstate`, for example `ca.sin`, `ca.cos`, `ca.sqrt`, and `ca.if_else`.
+Python `if`, `math`, and NumPy functions over symbolic state or input values are
+not traceable. Plain vector algebra such as `A @ state.x`, `state.x + inputs.u`,
+and scalar multiplication is supported when operands are CasADi-compatible.
+
+## Vector State
+
+Use `np.ndarray` when the model is naturally vector-valued:
+
+```python
+class Filter(rg.ODENode):
+    class Inputs(rg.NodeInputs):
+        voltage: np.ndarray = rg.Input(src=Inverter.State.phase_v)
+
+    class State(rg.NodeState):
+        current: np.ndarray = rg.Var(init=lambda: np.zeros(3))
+
+    def dstate(self, inputs: Inputs, state: State) -> State:
+        return self.State(current=(inputs.voltage - R * state.current) / L)
+```
+
+For CasADi tracing, `init=np.zeros(3)` becomes `MX(3, 1)` inside `dstate`.
+`init=np.zeros((2, 3))` becomes `MX(2, 3)`.
+After integration, Regelum converts the result back to the runtime type implied
+by `init`, so `np.ndarray` state remains `np.ndarray` in `snapshot()` and
+`read(...)`.
+
+`list` and `tuple` state are also accepted. They are interpreted as CasADi
+vectors/matrices during tracing and converted back to the same top-level
+container after integration. Empty arrays, ragged nested lists, and rank greater
+than 2 are rejected.
+
+Input shapes are fixed when the CasADi graph is first traced. If an ODE input
+later changes shape, Regelum raises an error instead of rebuilding the graph
+silently.
 
 ## ODE Systems
 
@@ -106,6 +146,28 @@ Do not put `dt` on `ODENode`.
 An `ODENode` is an equation block inside an `ODESystem`, not a separately
 scheduled node; both instance-level `Integrator(dt="0.001")` and class-level
 `class Integrator(rg.ODENode): dt = "0.001"` are rejected.
+
+`backend` selects the numerical integrator:
+
+```python
+electrical = rg.ODESystem(
+    nodes=(plant,),
+    dt="0.001",
+    backend="casadi",
+    method="cvodes",
+    options={"abstol": 1e-9, "reltol": 1e-8},
+)
+```
+
+The default is still `backend="scipy", method="LSODA"` for compatibility.
+For `backend="scipy"`, `options` are passed to `scipy.integrate.solve_ivp`.
+For `backend="casadi"`, `options` are passed to `casadi.integrator`.
+`backend="casadi"` requires a CasADi integrator plugin such as `"cvodes"` or
+`"rk"`; `"LSODA"` is a SciPy method and is rejected for the CasADi backend.
+
+Regelum owns the integration interval. Do not pass CasADi time options
+`t0`, `tf`, `grid`, or `output_t0`; they are rejected because the interval comes
+from the PRS clock.
 
 An ODE phase contains only ODE systems:
 
@@ -166,6 +228,11 @@ that can terminate without the continuous phase, or can reach it twice, is a
 compile error. Integrate continuous dynamics every base tick; use ordinary
 `Node.dt` for slower discrete controllers whose state is sampled and held by
 the plant.
+
+With the CasADi numeric backend, Regelum caches `casadi.integrator` functions by
+step duration. The integrator itself runs over local time `tau = 0..duration`;
+the `time` argument passed to `dstate` is `time_start + tau`, so user equations
+still see absolute physical time from the global clock.
 
 ## Base Time And Scheduling
 
