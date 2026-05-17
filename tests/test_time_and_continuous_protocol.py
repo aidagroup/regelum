@@ -189,6 +189,28 @@ def test_explicit_base_dt_warns_when_schedule_has_idle_ticks() -> None:
     )
 
 
+def test_discrete_node_accepts_class_dt() -> None:
+    class SlowCounter(Node):
+        dt = "2"
+
+        def __init__(self) -> None:
+            self.count = 0
+
+        class State(NodeState):
+            value: int = Var(init=0)
+
+        def update(self) -> State:
+            self.count += 1
+            return self.State(value=self.count)
+
+    counter = SlowCounter()
+    system = _one_phase_system(counter, base_dt=1)
+
+    system.run(steps=3)
+
+    assert counter.count == 2
+
+
 def test_float_dt_is_rejected_for_discrete_and_ode_nodes() -> None:
     with pytest.raises(TypeError, match="must not be a float"):
         ScheduledCounter(dt=cast(Any, 0.1))
@@ -535,8 +557,7 @@ def test_compile_rejects_feasible_path_that_reaches_continuous_phase_twice() -> 
         )
 
     assert any(
-        "continuous phase contract violation" in issue.message
-        and "more than once" in issue.message
+        "continuous phase contract violation" in issue.message and "more than once" in issue.message
         for issue in exc_info.value.report.issues
     )
 
@@ -699,8 +720,7 @@ def test_continuous_contract_rejects_non_symbolic_guard_before_mandatory_plant()
         )
 
     assert any(
-        issue.location == "route.python-guard"
-        and "non-symbolic transition guards" in issue.message
+        issue.location == "route.python-guard" and "non-symbolic transition guards" in issue.message
         for issue in exc_info.value.report.issues
     )
 
@@ -753,8 +773,7 @@ def test_continuous_contract_rejects_deep_branch_that_can_skip_plant_after_rejoi
         )
 
     assert any(
-        "a -> b1 -> c1" in issue.location
-        and "without reaching a continuous phase" in issue.message
+        "a -> b1 -> c1" in issue.location and "without reaching a continuous phase" in issue.message
         for issue in exc_info.value.report.issues
     )
 

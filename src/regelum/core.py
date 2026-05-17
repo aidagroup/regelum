@@ -606,9 +606,7 @@ class Node:
         cls._state_namespace_cls = output_namespace_cls
         cls._update_state_parameter_names = update_state_parameters
         if nested_inputs and update_inputs:
-            cls._input_declaration_error = (
-                "define inputs either as a NodeInputs namespace or as update(...) parameters, not both"
-            )
+            cls._input_declaration_error = "define inputs either as a NodeInputs namespace or as update(...) parameters, not both"
             cls._run_input_mode = "object"
             cls._inputs = nested_inputs
         elif update_inputs:
@@ -669,8 +667,12 @@ class Node:
         self.node_id = name or class_name or self.__class__.__name__
         self.name = self.node_id
         self._name_is_explicit = name is not None
+        class_dt = self.__class__.__dict__.get("dt") if dt is None else None
+        schedule_dt = dt if dt is not None else class_dt
         self._schedule_dt = (
-            _parse_time_step(dt, field_name=f"{self.node_id}.dt") if dt is not None else None
+            _parse_time_step(schedule_dt, field_name=f"{self.node_id}.dt")
+            if schedule_dt is not None
+            else None
         )
         if self._schedule_dt is not None and not getattr(
             self.__class__,

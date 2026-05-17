@@ -1,8 +1,10 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
+#     "casadi>=3.7.2",
 #     "marimo>=0.23.5",
 #     "matplotlib>=3.10.0",
+#     "numpy>=2.3.0",
 #     "regelum>=0.3.1",
 # ]
 # ///
@@ -19,105 +21,78 @@ def _():
 
     import casadi as ca
     import matplotlib.pyplot as plt
+    import numpy as np
 
     import regelum as rg
 
-    return ca, cast, math, plt, rg
+    return ca, cast, math, np, plt, rg
 
 
 @app.cell
-def _(ca, cast, math, rg):
-    BASE_DT = "0.01"
-    CONTROL_DT = "0.05"
-    GRAVITY = 9.81
-    LENGTH = 1.0
-    MASS = 1.0
-    DAMPING = 0.08
+def _(ca, cast, math, np, rg):
+    class PendulumODE(rg.ODENode):
+        mass: float = 1.0
+        length: float = 1.0
+        gravity: float = 9.81
 
-    def wrap_angle(angle: float) -> float:
-        return math.atan2(math.sin(angle), math.cos(angle))
-
-    class ControlledPendulum(rg.ODENode):
-        def __init__(
-            self,
-            *,
-            theta0: float = 0.2,
-            omega0: float = 0.0,
-            gravity: float = GRAVITY,
-            length: float = LENGTH,
-            mass: float = MASS,
-            damping: float = DAMPING,
-        ) -> None:
+        def __init__(self, theta0: float, omega0: float):
             self.theta0 = theta0
             self.omega0 = omega0
-            self.gravity = gravity
-            self.length = length
-            self.mass = mass
-            self.damping = damping
 
         class State(rg.NodeState):
-            theta: float = rg.Var(init=lambda self: cast(ControlledPendulum, self).theta0)
-            omega: float = rg.Var(init=lambda self: cast(ControlledPendulum, self).omega0)
+            theta: float = rg.Var(init=lambda self: cast(PendulumODE, self).theta0)
+            omega: float = rg.Var(init=lambda self: cast(PendulumODE, self).omega0)
 
-        def dstate(  # ty: ignore[invalid-method-override]
+        def dstate(
             self,
             state: State,
-            torque: float = rg.Input(src=lambda: SwingUpController.State.torque),
+            tau: float = rg.Input(src=lambda: Controller.State.tau),
         ) -> State:
-            inertia = self.mass * self.length * self.length / 3.0
-            theta_dot = state.omega
-            omega_dot = (
-                -(3.0 * self.gravity) / (2.0 * self.length) * ca.sin(state.theta)
-                - self.damping * state.omega
-                + torque / inertia
+            tau_c = 3.0 / (self.mass * self.length**2)
+            g_c = (3.0 * self.gravity) / (2.0 * self.length)
+            return self.State(
+                theta=state.omega,
+                omega=g_c * ca.sin(state.theta) + tau_c * tau,
             )
-            return self.State(theta=theta_dot, omega=omega_dot)
 
     class Observer(rg.Node):
         class State(rg.NodeState):
-            sin_angle: float
-            cos_angle: float
-            angular_velocity: float
+            sin_theta: float
+            cos_theta: float
+            omega: float
 
-        def update(
-            self,
-            theta: float = rg.Input(src=ControlledPendulum.State.theta),
-            omega: float = rg.Input(src=ControlledPendulum.State.omega),
-        ) -> State:
+        class Inputs(rg.NodeInputs):
+            theta: float = rg.Input(src=PendulumODE.State.theta)
+            omega: float = rg.Input(src=PendulumODE.State.omega)
+
+        def update(self, inputs: Inputs) -> State:
             return self.State(
-                sin_angle=math.sin(theta),
-                cos_angle=math.cos(theta),
-                angular_velocity=omega,
+                sin_theta=math.sin(inputs.theta),
+                cos_theta=math.cos(inputs.theta),
+                omega=inputs.omega,
             )
 
-    class SwingUpController(rg.Node):
-        class State(rg.NodeState):
-            torque: float = rg.Var(init=0.0)
+    class Controller(rg.Node):
+        dt: str = "0.05"
+        tau_max: float = 4.0
 
-        def __init__(
-            self,
-            *,
-            kp: float = 14.0,
-            kd: float = 4.0,
-            torque_limit: float = 4.0,
-            dt: str = CONTROL_DT,
-        ) -> None:
-            super().__init__(dt=dt)
+        def __init__(self, kp: float, kd: float):
             self.kp = kp
             self.kd = kd
-            self.torque_limit = torque_limit
+
+        class State(rg.NodeState):
+            tau: float
 
         def update(
             self,
-            sin_angle: float = rg.Input(src=Observer.State.sin_angle),
-            cos_angle: float = rg.Input(src=Observer.State.cos_angle),
-            angular_velocity: float = rg.Input(src=Observer.State.angular_velocity),
+            sin_theta: float = rg.Input(src=Observer.State.sin_theta),
+            cos_theta: float = rg.Input(src=Observer.State.cos_theta),
+            omega: float = rg.Input(src=Observer.State.omega),
         ) -> State:
-            theta = math.atan2(sin_angle, cos_angle)
-            error = wrap_angle(theta - math.pi)
-            raw = -self.kp * error - self.kd * angular_velocity
-            torque = max(-self.torque_limit, min(self.torque_limit, raw))
-            return self.State(torque=torque)
+            theta = math.atan2(sin_theta, cos_theta)
+            raw = -self.kp * theta - self.kd * omega
+            tau = float(np.clip(raw, -self.tau_max, self.tau_max))
+            return self.State(tau=tau)
 
     class Logger(rg.Node):
         class State(rg.NodeState):
@@ -125,23 +100,29 @@ def _(ca, cast, math, rg):
 
         def update(
             self,
-            prev_state: State,
+            state: State,
             time: float = rg.Input(src=rg.Clock.time),
-            theta: float = rg.Input(src=ControlledPendulum.State.theta),
-            omega: float = rg.Input(src=ControlledPendulum.State.omega),
-            torque: float = rg.Input(src=SwingUpController.State.torque),
+            theta: float = rg.Input(src=PendulumODE.State.theta),
+            omega: float = rg.Input(src=PendulumODE.State.omega),
+            tau: float = rg.Input(src=Controller.State.tau),
         ) -> State:
-            sample = (time, theta, omega, torque)
-            prev_state.samples.append(sample)
-            return self.State(samples=prev_state.samples)
+            state.samples.append((time, theta, omega, tau))
+            return self.State(samples=state.samples)
 
-    def build_system() -> rg.PhasedReactiveSystem:
-        pendulum = ControlledPendulum()
+    def run(
+        theta0: float = math.pi,
+        omega0: float = 0.0,
+        kp: float = 14.0,
+        kd: float = 4.0,
+        steps: int = 700,
+    ) -> list[tuple[float, float, float, float]]:
+        pendulum = PendulumODE(theta0=theta0, omega0=omega0)
+        plant = rg.ODESystem(nodes=(pendulum,), dt="0.01")
         observer = Observer()
-        controller = SwingUpController()
+        controller = Controller(kp=kp, kd=kd)
         logger = Logger()
-        plant = rg.ODESystem(nodes=(pendulum,), dt=BASE_DT)
-        return rg.PhasedReactiveSystem(
+
+        system = rg.PhasedReactiveSystem(
             phases=[
                 rg.Phase(
                     "observe_and_control",
@@ -155,44 +136,47 @@ def _(ca, cast, math, rg):
                     transitions=(rg.Goto(rg.terminate),),
                 ),
             ],
-            base_dt=BASE_DT,
         )
-
-    def run_response(steps: int = 1000) -> list[tuple[float, float, float, float]]:
-        system = build_system()
         system.run(steps)
         return cast(
             list[tuple[float, float, float, float]],
             system.read(Logger.State.samples),
         )
 
-    return (run_response,)
+    return (run,)
 
 
 @app.cell
-def _(math, plt, run_response):
-    samples = run_response()
+def _(math, plt, run):
+    samples = run()
     time = [sample[0] for sample in samples]
     theta = [sample[1] for sample in samples]
     omega = [sample[2] for sample in samples]
-    torque = [sample[3] for sample in samples]
+    tau = [sample[3] for sample in samples]
 
     plt.style.use("default")
-    fig, axes = plt.subplots(3, 1, figsize=(9.0, 7.2), sharex=True)
-    axes[0].plot(time, theta, label=r"$\theta$", color="#7c3aed")
-    axes[0].axhline(math.pi, color="#111318", linestyle="--", linewidth=1.0, label=r"$\pi$")
-    axes[0].set_ylabel("angle [rad]")
+    fig, axes = plt.subplots(3, 1, figsize=(7.0, 5.2), sharex=True)
+
+    axes[0].plot(time, theta, label=r"$\theta$", color="#2563eb", linewidth=1.8)
+    axes[0].axhline(0.0, color="#111827", linestyle="--", linewidth=0.9, label="target")
+    axes[0].set_ylabel(r"$\theta$ [rad]")
     axes[0].grid(alpha=0.25)
-    axes[0].legend(loc="upper right")
-    axes[1].plot(time, omega, label=r"$\omega$", color="#15803d")
-    axes[1].set_ylabel("angular velocity [rad/s]")
+    axes[0].legend(loc="upper right", frameon=False)
+
+    axes[1].plot(time, omega, label=r"$\omega$", color="#16a34a", linewidth=1.8)
+    axes[1].axhline(0.0, color="#111827", linestyle="--", linewidth=0.9)
+    axes[1].set_ylabel(r"$\omega$ [rad/s]")
     axes[1].grid(alpha=0.25)
-    axes[1].legend(loc="upper right")
-    axes[2].plot(time, torque, drawstyle="steps-post", label=r"$\tau$", color="#d97706")
+    axes[1].legend(loc="upper right", frameon=False)
+
+    axes[2].plot(time, tau, drawstyle="steps-post", label=r"$\tau$", color="#dc2626", linewidth=1.8)
+    axes[2].axhline(4.0, color="#6b7280", linestyle=":", linewidth=0.9)
+    axes[2].axhline(-4.0, color="#6b7280", linestyle=":", linewidth=0.9)
     axes[2].set_xlabel("time [s]")
-    axes[2].set_ylabel("torque [N m]")
+    axes[2].set_ylabel(r"$\tau$ [N m]")
     axes[2].grid(alpha=0.25)
-    axes[2].legend(loc="upper right")
+    axes[2].legend(loc="upper right", frameon=False)
+
     fig.tight_layout()
     fig
     return

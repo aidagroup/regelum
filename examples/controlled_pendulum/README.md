@@ -1,6 +1,6 @@
 # Controlled Pendulum
 
-This example adds a swing-up controller to the pendulum plant. The plant is
+This example stabilizes a pendulum with a clipped PD controller. The plant is
 integrated with `dt=0.01`; the controller runs with `dt=0.05`, so its torque
 state is sampled and held between controller updates.
 
@@ -14,4 +14,10 @@ Run the same example as standalone Python:
 
 ```bash
 uv run python examples/controlled_pendulum/standalone.py
+```
+
+Save the response plot:
+
+```bash
+uv run python examples/controlled_pendulum/standalone.py --output artifacts/controlled_pendulum_response.png
 ```
