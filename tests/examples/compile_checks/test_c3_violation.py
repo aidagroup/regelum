@@ -9,6 +9,6 @@ def test_c3_violation_example_fails_c3() -> None:
         build_system()
 
     assert any(
-        issue.location == "ambiguous" and issue.message.startswith("C3 violation")
+        issue.location == "phi" and issue.message.startswith("C3 violation")
         for issue in exc_info.value.report.issues
     )

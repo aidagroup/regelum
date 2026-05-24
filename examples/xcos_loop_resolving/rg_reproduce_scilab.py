@@ -1,3 +1,10 @@
+"""Reproduce the Scilab/Xcos algebraic-loop example with Regelum phases.
+
+Companion screenshots:
+- scilab_algebraic_loop.png: literal feedback diagram rejected by Xcos.
+- scilab_resolved.png: Xcos repair with an explicit fixed-delay block.
+"""
+
 import regelum as rg
 
 
@@ -82,12 +89,9 @@ def main() -> None:
     print(f"compile ok = {system.compile_report.ok}")
     for tick in range(1, 6):
         system.step()
-        snapshot = system.snapshot()
+        s = system.snapshot()
         print(
-            f"tick {tick}: "
-            f"sum={snapshot['Sum.total']}, "
-            f"gain={snapshot['Gain.output']}, "
-            f"trash={snapshot['Trash.last']}"
+            f"tick {tick}: sum={s['Sum.total']}, gain={s['Gain.output']}, trash={s['Trash.last']}"
         )
 
 

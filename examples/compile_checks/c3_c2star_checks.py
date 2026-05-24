@@ -21,40 +21,56 @@ class Y(rg.Node):
         return self.State(y=y & bool(random.getrandbits(1)))
 
 
-def build_system(
-    p_x: float = 0.5,
-    p_y: float = 0.5,
-    seed: int | None = 0,
-) -> rg.PhasedReactiveSystem:
-    del p_x, p_y, seed
+def build_c3_violation() -> rg.PhasedReactiveSystem:
     return rg.PhasedReactiveSystem(
         phases=[
             rg.Phase(
-                "phi0",
+                "phi",
                 nodes=(X(),),
                 transitions=(
-                    rg.If(~rg.V(X.State.x) & ~rg.V(Y.State.y), "phi1"),
+                    rg.If(~rg.V(X.State.x), rg.terminate),
+                    rg.If(~rg.V(X.State.x), rg.terminate),
+                ),
+                is_initial=True,
+            )
+        ]
+    )
+
+
+def build_c2star_system() -> rg.PhasedReactiveSystem:
+    return rg.PhasedReactiveSystem(
+        phases=[
+            rg.Phase(
+                "0",
+                nodes=(X(),),
+                transitions=(
+                    rg.If(~rg.V(X.State.x) & ~rg.V(Y.State.y), "1"),
                     rg.Else(rg.terminate),
                 ),
                 is_initial=True,
             ),
             rg.Phase(
-                "phi1",
+                "1",
                 nodes=(Y(),),
                 transitions=(
-                    rg.If(~rg.V(X.State.x) & rg.V(Y.State.y), "phi0"),
+                    rg.If(~rg.V(X.State.x) & rg.V(Y.State.y), "0"),
                     rg.Else(rg.terminate),
                 ),
             ),
-        ],
+        ]
     )
 
 
 def main() -> None:
-    system = build_system()
+    try:
+        build_c3_violation()
+    except rg.CompileError as exc:
+        issue = exc.report.issues[0]
+        print(f"{issue.location}: {issue.message}")
+
+    system = build_c2star_system()
     print(f"compile ok = {system.compile_report.ok}")
     print("C2*(2) status = pass")
-    print("cycle phi0 -> phi1 -> phi0 is dead after one traversal")
 
 
 if __name__ == "__main__":

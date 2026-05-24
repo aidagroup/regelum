@@ -3,21 +3,20 @@ from __future__ import annotations
 import regelum as rg
 
 
-class ModeSource(rg.Node):
+class X(rg.Node):
     class State(rg.NodeState):
-        ready: bool = rg.var(init=False)
+        x: bool = rg.var(init=False)
 
 
 def build_system() -> rg.PhasedReactiveSystem:
-    mode = ModeSource()
     return rg.PhasedReactiveSystem(
         phases=[
             rg.Phase(
-                "ambiguous",
-                nodes=(mode,),
+                "phi",
+                nodes=(X(),),
                 transitions=(
-                    rg.If(rg.V("ModeSource.ready"), rg.terminate, name="ready"),
-                    rg.If(rg.V("ModeSource.ready"), rg.terminate, name="also-ready"),
+                    rg.If(~rg.V(X.State.x), rg.terminate),
+                    rg.If(~rg.V(X.State.x), rg.terminate),
                 ),
                 is_initial=True,
             )
@@ -31,8 +30,6 @@ def main() -> None:
     except rg.CompileError as exc:
         for issue in exc.report.issues:
             print(f"{issue.location}: {issue.message}")
-        return
-    raise RuntimeError("Expected C3 violation, but system compiled.")
 
 
 if __name__ == "__main__":
