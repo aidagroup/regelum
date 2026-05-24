@@ -11,7 +11,7 @@ import casadi as ca
 import numpy as np
 from scipy.integrate import solve_ivp
 
-from regelum.core import (
+from regelum.core._base import (
     _MISSING,
     BoundVarPort,
     InputPort,
@@ -167,9 +167,7 @@ class ODESystem(Node):
         stop = float(time_stop)
         if self.backend == "scipy":
             result = solve_ivp(
-                lambda time_s, state: _casadi_vector(
-                    graph.rhs_function(time_s, state, parameters)
-                ),
+                lambda time_s, state: _casadi_vector(graph.rhs_function(time_s, state, parameters)),
                 (start, stop),
                 x0,
                 method=self.method,
@@ -224,7 +222,8 @@ class ODESystem(Node):
 
         derivatives: list[Any] = []
         fields_by_node = {
-            node: tuple(field for field in self._fields if field.node is node) for node in self.nodes
+            node: tuple(field for field in self._fields if field.node is node)
+            for node in self.nodes
         }
         for node in self.nodes:
             inputs = _build_node_inputs(node, snapshot)
@@ -364,8 +363,7 @@ class ODESystem(Node):
                     f"to {shape.dims}; input shapes must stay fixed after graph build."
                 )
             values.extend(
-                float(value)
-                for value in _flatten(value, field_name=field.path, allow_bool=True)
+                float(value) for value in _flatten(value, field_name=field.path, allow_bool=True)
             )
         return values
 
@@ -395,7 +393,7 @@ def _install_dstate_input_ports(node_cls: type[ODENode]) -> None:
     if node_cls._inputs:
         node_cls._input_declaration_error = (
             "define ODE inputs either as a NodeInputs namespace or as dstate(...) "
-            "Input parameters, not both"
+            "src parameters, not both"
         )
         return
     inputs_cls = type("Inputs", (NodeInputs,), dict(dstate_inputs))
@@ -475,11 +473,11 @@ def _call_dstate(
                 raise TypeError(
                     "ODENode.dstate parameters must be named inputs, state, or time; "
                     "annotated as the node's Inputs/State namespace; or declared as "
-                    f"a dstate Input parameter; got required parameter {parameter.name!r}."
+                    f"a dstate src parameter; got required parameter {parameter.name!r}."
                 )
             if isinstance(parameter.default, InputPort):
                 raise TypeError(
-                    f"ODENode.dstate Input parameter {parameter.name!r} was not registered."
+                    f"ODENode.dstate src parameter {parameter.name!r} was not registered."
                 )
             continue
         if parameter.kind in (
@@ -622,7 +620,9 @@ def _shape(value: Any, *, field_name: str, allow_bool: bool = False) -> _ShapeSp
         if value.size == 0:
             raise ValueError(f"ODE value {field_name} must not be an empty array.")
         if value.ndim > 2:
-            raise ValueError(f"ODE value {field_name} must be scalar, 1D, or 2D; got {value.ndim}D.")
+            raise ValueError(
+                f"ODE value {field_name} must be scalar, 1D, or 2D; got {value.ndim}D."
+            )
         for item in value.reshape((-1,)):
             if not _is_numeric_scalar(item, allow_bool=allow_bool):
                 raise TypeError(f"ODE array {field_name} must contain only numeric values.")
@@ -705,10 +705,7 @@ def _casadi_view(values: Sequence[Any], shape: _ShapeSpec) -> Any:
     if len(shape.dims) == 2:
         rows, cols = shape.dims
         return ca.vertcat(
-            *[
-                ca.horzcat(*values[row * cols : (row + 1) * cols])
-                for row in range(rows)
-            ]
+            *[ca.horzcat(*values[row * cols : (row + 1) * cols]) for row in range(rows)]
         )
     raise ValueError(f"Unsupported CasADi ODE shape: {shape!r}.")
 

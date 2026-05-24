@@ -38,18 +38,6 @@ models look like regular Python while still giving the compiler enough
 structure to resolve dependencies, validate the graph, schedule execution, and
 integrate continuous dynamics.
 
-## Overview
-
-- **Nodes** declare typed inputs and state variables, then compute their next
-  state in `update`.
-- **Phases** decide which node instances are active together and how control
-  moves between phases.
-- **Continuous nodes** declare ODE state and are integrated through
-  `ODESystem` phases.
-- **Compilation** resolves links, schedules nodes, and catches structural
-  mistakes before runtime: unresolved inputs, ambiguous references, invalid
-  phase graphs, and computations that cannot be guaranteed to resolve.
-
 The best entry point is the Learn overview:
 
 - Docs: <https://aidagroup.github.io/regelum/>
@@ -63,7 +51,7 @@ import regelum as rg
 
 class TemperatureSensor(rg.Node):
     class State(rg.NodeState):
-        temperature: float = rg.Var(init=19.0)
+        temperature: float = rg.var(init=19.0)
 
     def update(self) -> State:
         return self.State(temperature=21.5)
@@ -71,9 +59,7 @@ class TemperatureSensor(rg.Node):
 
 class HeaterController(rg.Node):
     class Inputs(rg.NodeInputs):
-        temperature: float = rg.Input(
-            src=TemperatureSensor.State.temperature,
-        )
+        temperature: float = rg.src(TemperatureSensor.State.temperature)
 
     class State(rg.NodeState):
         heater_on: bool
@@ -84,10 +70,10 @@ class HeaterController(rg.Node):
 
 class HeatingCycles(rg.Node):
     class Inputs(rg.NodeInputs):
-        heater_on: bool = rg.Input(src=HeaterController.State.heater_on)
+        heater_on: bool = rg.src(HeaterController.State.heater_on)
 
     class State(rg.NodeState):
-        count: int = rg.Var(init=0)
+        count: int = rg.var(init=0)
 
     def update(self, inputs: Inputs, prev_state: State) -> State:
         return self.State(
@@ -127,14 +113,13 @@ For local development from this repository:
 ```bash
 uv sync --all-groups
 uv run pytest tests
-uv run ty check src tests
 uv run mkdocs serve
 ```
 
 ## Examples
 
 ```bash
-uv run regelum-pendulum
+uv run regelum-controlled-pendulum
 uv run marimo edit examples/free_pendulum/rg-examples-free-pendulum.py
 uv run marimo edit examples/controlled_pendulum/rg-examples-controlled-pendulum.py
 uv run regelum-video-player

@@ -1,2 +1,1 @@
 """Free pendulum marimo example."""
-

@@ -88,10 +88,10 @@ flowchart LR
     class controller_state,session_state,logger_state state;
 ```
 
-??? example "Full code listing: `examples/video_player.py`"
+??? example "Full code listing: `examples/video_player/video_player.py`"
 
     ```python
-    --8<-- "examples/video_player.py"
+    --8<-- "examples/video_player/video_player.py"
     ```
 
 This page zooms in on how those phases are declared: which node instances

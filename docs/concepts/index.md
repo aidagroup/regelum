@@ -217,10 +217,10 @@ This is where the framework's actual work happens: writing node classes,
 declaring their inputs and state variables, assigning instances to phases, and
 attaching predicates to transitions.
 
-??? example "Full code listing: `examples/video_player.py`"
+??? example "Full code listing: `examples/video_player/video_player.py`"
 
     ```python
-    --8<-- "examples/video_player.py"
+    --8<-- "examples/video_player/video_player.py"
     ```
 
 ## Where to go next

@@ -9,7 +9,7 @@ all objects in `Phase.nodes` are `rg.ODESystem` instances.
 
 Define continuous state with `rg.ODENode`.
 An ODE node declares a `State` namespace instead of ordinary `State`.
-State variables are created with `rg.Var(init=...)`, are readable by
+State variables are created with `rg.var(init=...)`, are readable by
 other nodes, and are committed back into system state after integration.
 
 ```python
@@ -20,17 +20,17 @@ import regelum as rg
 
 class Integrator(rg.ODENode):
     class Inputs(rg.NodeInputs):
-        u: np.ndarray = rg.Input(src=Controller.State.u)
+        u: np.ndarray = rg.src(Controller.State.u)
 
     class State(rg.NodeState):
-        x: np.ndarray = rg.Var(init=lambda: np.zeros(3))
+        x: np.ndarray = rg.var(init=lambda: np.zeros(3))
 
     def dstate(self, inputs: Inputs, state: State, *, time: object) -> State:
         return self.State(x=A @ state.x + inputs.u + ca.sin(time))
 ```
 
 `dstate(...)` returns the derivative in the same `State` shape.
-`Var(init=...)` is the shape contract for continuous state. Scalars, 1D
+`var(init=...)` is the shape contract for continuous state. Scalars, 1D
 vectors, and 2D matrices are supported. The runtime accepts `float`,
 `list`, `tuple`, and `numpy.ndarray` values, but ODE state is always integrated
 as floating point data.
@@ -38,14 +38,14 @@ Declare only the arguments the node actually needs.
 The ODE runtime resolves `inputs` and `state` by name or by annotation.
 `time` is a reserved name and is resolved by name.
 Individual input ports can also be declared directly on `dstate` with
-`rg.Input(...)`.
+`rg.src(...)`.
 Arguments may be declared in any order, so these forms are supported:
 
 ```python
 def dstate(self, inputs, state, time): ...
 def dstate(self, time, state: State, inputs: Inputs): ...
 def dstate(self, control: Inputs, memory: State): ...
-def dstate(self, time, state: State, a=rg.Input(...), b=rg.Input(...)): ...
+def dstate(self, time, state: State, a=rg.src(...), b=rg.src(...)): ...
 def dstate(self, inputs, state): ...
 def dstate(self, inputs, time): ...
 def dstate(self, time): ...
@@ -56,7 +56,7 @@ def dstate(self, state): ...
 `time` may also be keyword-only, for example
 `dstate(self, inputs, state, *, time)`.
 The `time` value is continuous physical time inside the solver interval. It is
-not the same thing as an input sourced from `rg.Clock.time`: `Input(src=Clock.time)`
+not the same thing as an input sourced from `rg.Clock.time`: `src(Clock.time)`
 is sampled once at the beginning of the ODE step, while `dstate(..., time)` varies
 continuously during integration.
 
@@ -66,13 +66,13 @@ ODE node input names and can be connected like ordinary inputs:
 ```python
 class Plant(rg.ODENode):
     class State(rg.NodeState):
-        x: float = rg.Var(init=0.0)
+        x: float = rg.var(init=0.0)
 
     def dstate(
         self,
         time,
         state: State,
-        u: float = rg.Input(src=Controller.State.u),
+        u: float = rg.src(Controller.State.u),
     ) -> State:
         return self.State(x=u - state.x + ca.sin(time))
 ```
@@ -83,7 +83,7 @@ Sources may be lazy references, just like ordinary node inputs:
 def dstate(
     self,
     state: State,
-    load: float = rg.Input(src=lambda: Load.State.current),
+    load: float = rg.src(lambda: Load.State.current),
 ) -> State:
     ...
 ```
@@ -102,10 +102,10 @@ Use `np.ndarray` when the model is naturally vector-valued:
 ```python
 class Filter(rg.ODENode):
     class Inputs(rg.NodeInputs):
-        voltage: np.ndarray = rg.Input(src=Inverter.State.phase_v)
+        voltage: np.ndarray = rg.src(Inverter.State.phase_v)
 
     class State(rg.NodeState):
-        current: np.ndarray = rg.Var(init=lambda: np.zeros(3))
+        current: np.ndarray = rg.var(init=lambda: np.zeros(3))
 
     def dstate(self, inputs: Inputs, state: State) -> State:
         return self.State(current=(inputs.voltage - R * state.current) / L)
@@ -208,9 +208,9 @@ the old tick index:
 ```python
 class Logger(rg.Node):
     class Inputs(rg.NodeInputs):
-        tick: int = rg.Input(src=rg.Clock.tick)
-        time: float = rg.Input(src=rg.Clock.time)
-        x: float = rg.Input(src=Integrator.State.x)
+        tick: int = rg.src(rg.Clock.tick)
+        time: float = rg.src(rg.Clock.time)
+        x: float = rg.src(Integrator.State.x)
 ```
 
 Multiple `ODESystem` objects in the same continuous phase are treated as
@@ -282,7 +282,7 @@ Use `rg.Clock.tick` and `rg.Clock.time` in inputs and guards:
 ```python
 class Sampler(rg.Node):
     class Inputs(rg.NodeInputs):
-        time: float = rg.Input(src=rg.Clock.time)
+        time: float = rg.src(rg.Clock.time)
 
 
 rg.If(rg.V(rg.Clock.tick) >= 100, rg.terminate)

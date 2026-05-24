@@ -17,18 +17,19 @@ dependencies = [
 ]
 
 [project.scripts]
-regelum-pendulum = "regelum.examples.pendulum:main"
-regelum-instance-connect = "regelum.examples.instance_connect:main"
-regelum-json-enrichment = "regelum.examples.json_enrichment:main"
-regelum-dubuisson2019 = "regelum.examples.dubuisson2019_water_treatment:main"
-regelum-dubuisson2019-calibrate = "regelum.examples.dubuisson2019_calibration:main"
-regelum-dubuisson2019-digitize = "regelum.examples.dubuisson2019_digitize_pdf:main"
-regelum-video-player = "regelum.examples.video_player:main"
-regelum-openmodelica-static-droop = "regelum.examples.openmodelica_microgrid_static_droop:main"
-regelum-native-two-inverter-microgrid = "regelum.examples.native_two_inverter_microgrid:main"
-regelum-native-one-to-one-microgrid = "regelum.examples.native_one_to_one_microgrid:main"
-regelum-native-one-to-one-microgrid-ode-api = "regelum.examples.native_one_to_one_microgrid_ode_api:main"
-regelum-compare-one-to-one-microgrid = "regelum.examples.compare_one_to_one_microgrid:main"
+regelum-controlled-pendulum = "examples.controlled_pendulum.standalone:main"
+regelum-free-pendulum = "examples.free_pendulum.standalone:main"
+regelum-instance-connect = "examples.instance_connect.instance_connect:main"
+regelum-simulink-feedback-loop = "examples.xcos_loop_resolving.regelum:main"
+regelum-two-inverter-static-droop = "examples.two_inverter_static_droop.standalone:main"
+regelum-video-player = "examples.video_player.video_player:main"
+
+[tool.hatch.build]
+exclude = [
+    "**/__pycache__",
+    "**/*.pyc",
+    "examples/two_inverter_static_droop/archive",
+]
 
 [tool.hatch.build.targets.sdist]
 only-include = ["src", "examples", "README.md", "pyproject.toml"]

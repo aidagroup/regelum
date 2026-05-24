@@ -1,2 +1,1 @@
 """Controlled pendulum marimo example."""
-

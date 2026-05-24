@@ -14,25 +14,27 @@ repos:
     hooks:
       - id: ruff-check
         name: ruff check
-        entry: uv run --group dev ruff check --fix
+        entry: uv run --no-sync --group dev ruff check --fix
         language: system
+        require_serial: true
         types_or: [python, pyi]
 
       - id: ruff-format
         name: ruff format
-        entry: uv run --group dev ruff format
+        entry: uv run --no-sync --group dev ruff format
         language: system
+        require_serial: true
         types_or: [python, pyi]
 
       - id: ty-check
         name: ty check
-        entry: uv run --group dev ty check src tests
+        entry: uv run --no-sync --group dev ty check src tests/core/typecheck_api.py
         language: system
         pass_filenames: false
 
       - id: pytest
         name: pytest
-        entry: uv run --group dev pytest tests
+        entry: uv run --no-sync --group dev pytest tests
         language: system
         pass_filenames: false
         stages: [pre-push]

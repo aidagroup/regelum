@@ -87,10 +87,10 @@ flowchart LR
     class controller_state,session_state,logger_state state;
 ```
 
-??? example "Full code listing: `examples/video_player.py`"
+??? example "Full code listing: `examples/video_player/video_player.py`"
 
     ```python
-    --8<-- "examples/video_player.py"
+    --8<-- "examples/video_player/video_player.py"
     ```
 
 Those declarations are still just Python objects.
@@ -214,7 +214,7 @@ print(report.required_initial_state_vars)
 
 `minimal_initial_state_vars` is the smallest set of state variables that must have a
 tick-zero value for this compiled graph.
-Those values may come from `rg.Var(init=...)`, from a callable
+Those values may come from `rg.var(init=...)`, from a callable
 initializer, or from a runtime `initial_state` override.
 
 `required_initial_state_vars` is the subset that still has no declared initial

@@ -67,7 +67,7 @@ import regelum as rg
 
 class TemperatureSensor(rg.Node):
     class State(rg.NodeState):
-        temperature: float = rg.Var(init=19.0)
+        temperature: float = rg.var(init=19.0)
 
     def update(self) -> State:
         return self.State(temperature=21.5)
@@ -75,9 +75,7 @@ class TemperatureSensor(rg.Node):
 
 class HeaterController(rg.Node):
     class Inputs(rg.NodeInputs):
-        temperature: float = rg.Input(
-            src=TemperatureSensor.State.temperature,
-        )
+        temperature: float = rg.src(TemperatureSensor.State.temperature)
 
     class State(rg.NodeState):
         heater_on: bool
@@ -88,10 +86,10 @@ class HeaterController(rg.Node):
 
 class HeatingCycles(rg.Node):
     class Inputs(rg.NodeInputs):
-        heater_on: bool = rg.Input(src=HeaterController.State.heater_on)
+        heater_on: bool = rg.src(HeaterController.State.heater_on)
 
     class State(rg.NodeState):
-        count: int = rg.Var(init=0)
+        count: int = rg.var(init=0)
 
     def update(self, inputs: Inputs, prev_state: State) -> State:
         return self.State(

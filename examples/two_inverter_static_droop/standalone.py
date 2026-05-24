@@ -81,8 +81,7 @@ def abc_to_dq0_cos_sin(abc: np.ndarray, cos_value: float, sin_value: float) -> n
     return np.array(
         [
             (2.0 / 3.0) * (cos_value * abc[0] + cos_shift_neg * abc[1] + cos_shift_pos * abc[2]),
-            (2.0 / 3.0)
-            * (-sin_value * abc[0] - sin_shift_neg * abc[1] - sin_shift_pos * abc[2]),
+            (2.0 / 3.0) * (-sin_value * abc[0] - sin_shift_neg * abc[1] - sin_shift_pos * abc[2]),
             float(np.sum(abc) / 3.0),
         ],
         dtype=float,
@@ -93,13 +92,13 @@ def abc_to_dq0(abc: np.ndarray, theta: float) -> np.ndarray:
     return abc_to_dq0_cos_sin(abc, *cos_sin(theta))
 
 
-def inst_power(voltage: np.ndarray, current: np.ndarray) -> float:
-    return float(np.dot(voltage, current))
+def inst_power(v_abc: np.ndarray, i_abc: np.ndarray) -> float:
+    return float(np.dot(v_abc, i_abc))
 
 
-def inst_reactive(voltage: np.ndarray, current: np.ndarray) -> float:
-    quadrature_voltage = np.roll(voltage, -1) - np.roll(voltage, -2)
-    return float(-0.5773502691896258 * np.dot(quadrature_voltage, current))
+def inst_reactive(v_abc: np.ndarray, i_abc: np.ndarray) -> float:
+    quadrature_v = np.roll(v_abc, -1) - np.roll(v_abc, -2)
+    return float(-0.5773502691896258 * np.dot(quadrature_v, i_abc))
 
 
 def pi_update(
@@ -150,12 +149,13 @@ def save_lcl1_plot(samples: list[VoltageResistanceSample], output: Path) -> None
     resistance = [row[4] for row in samples]
 
     fig, voltage_ax = plt.subplots(figsize=(8.0, 4.8), dpi=100)
-    voltage_ax.plot(time, v1, label="lcl1.capacitor_v[0]", linewidth=1.0)
-    voltage_ax.plot(time, v2, label="lcl1.capacitor_v[1]", linewidth=1.0)
-    voltage_ax.plot(time, v3, label="lcl1.capacitor_v[2]", linewidth=1.0)
+    voltage_ax.plot(time, v1, label="AC phase A voltage", linewidth=1.2)
+    voltage_ax.plot(time, v2, label="AC phase B voltage", linewidth=1.2)
+    voltage_ax.plot(time, v3, label="AC phase C voltage", linewidth=1.2)
     voltage_ax.set_xlabel("time, s")
-    voltage_ax.set_ylabel("LCL capacitor voltage, V")
+    voltage_ax.set_ylabel("AC phase voltage, V")
     voltage_ax.set_xlim(min(time), max(time))
+    voltage_ax.grid(True, alpha=0.25)
 
     resistance_ax = voltage_ax.twinx()
     resistance_ax.step(
@@ -167,16 +167,19 @@ def save_lcl1_plot(samples: list[VoltageResistanceSample], output: Path) -> None
         linewidth=1.2,
         label="load resistance",
     )
-    resistance_ax.set_ylabel("load resistance, ohm")
+    resistance_ax.set_ylabel("load resistance, Ohm")
 
     voltage_lines, voltage_labels = voltage_ax.get_legend_handles_labels()
     resistance_lines, resistance_labels = resistance_ax.get_legend_handles_labels()
-    voltage_ax.legend(
+    fig.legend(
         voltage_lines + resistance_lines,
         voltage_labels + resistance_labels,
-        loc="upper right",
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.99),
+        ncol=4,
+        frameon=False,
     )
-    fig.tight_layout()
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.92))
     fig.savefig(output)
     plt.close(fig)
 
@@ -194,19 +197,19 @@ class MasterDroop(rg.Node):
         self.freq_nom = freq_nom
 
     class Inputs(rg.NodeInputs):
-        current: np.ndarray = rg.Input(src=lambda: Lc1Filter.State.inductor_i)
-        voltage: np.ndarray = rg.Input(src=lambda: Lc1Filter.State.capacitor_v)
+        lc1_i_abc: np.ndarray = rg.src(lambda: Lc1.State.i_abc)
+        lc1_v_abc: np.ndarray = rg.src(lambda: Lc1.State.v_abc)
 
     class State(rg.NodeState):
-        frequency_hz: float = rg.Var(init=50.0)
-        voltage_setpoint: float = rg.Var(init=230.0 * math.sqrt(2.0))
-        phase: float = rg.Var(init=0.0)
-        phase_turns: float = rg.Var(init=0.0)
-        p_filter: float = rg.Var(init=0.0)
-        q_filter: float = rg.Var(init=0.0)
+        frequency_hz: float = rg.var(init=50.0)
+        voltage_setpoint_v: float = rg.var(init=230.0 * math.sqrt(2.0))
+        ac_phase_rad: float = rg.var(init=0.0)
+        ac_phase_turns: float = rg.var(init=0.0)
+        p_filter: float = rg.var(init=0.0)
+        q_filter: float = rg.var(init=0.0)
 
     def update(self, inputs: Inputs, prev_state: State) -> State:
-        instant_power = -inst_power(inputs.voltage, inputs.current)
+        instant_power = -inst_power(inputs.lc1_v_abc, inputs.lc1_i_abc)
         p_filter = pt1_update(
             value=instant_power,
             integral=prev_state.p_filter,
@@ -216,7 +219,7 @@ class MasterDroop(rg.Node):
         )
         frequency_hz = p_filter + self.freq_nom
 
-        instant_q = -inst_reactive(inputs.voltage, inputs.current)
+        instant_q = -inst_reactive(inputs.lc1_v_abc, inputs.lc1_i_abc)
         q_filter = pt1_update(
             value=instant_q,
             integral=prev_state.q_filter,
@@ -224,38 +227,37 @@ class MasterDroop(rg.Node):
             tau=0.002,
             dt=self.dt,
         )
-        voltage_setpoint = q_filter + self.v_nom
-        phase_turns = advance_phase_turns(prev_state.phase_turns, frequency_hz, self.dt)
+        voltage_setpoint_v = q_filter + self.v_nom
+        ac_phase_turns = advance_phase_turns(prev_state.ac_phase_turns, frequency_hz, self.dt)
         return self.State(
             frequency_hz=frequency_hz,
-            voltage_setpoint=voltage_setpoint,
-            phase=phase_turns * 2.0 * math.pi,
-            phase_turns=phase_turns,
+            voltage_setpoint_v=voltage_setpoint_v,
+            ac_phase_rad=ac_phase_turns * 2.0 * math.pi,
+            ac_phase_turns=ac_phase_turns,
             p_filter=p_filter,
             q_filter=q_filter,
         )
 
 
-class MasterVoltagePI(rg.Node):
+class MasterLc1VPI(rg.Node):
     def __init__(self, *, dt: float = 0.5e-4, i_lim: float = 30.0) -> None:
         self.dt = dt
         self.i_lim = i_lim
 
     class Inputs(rg.NodeInputs):
-        current: np.ndarray = rg.Input(src=lambda: Lc1Filter.State.inductor_i)
-        voltage: np.ndarray = rg.Input(src=lambda: Lc1Filter.State.capacitor_v)
-        phase: float = rg.Input(src=MasterDroop.State.phase)
-        voltage_setpoint: float = rg.Input(src=MasterDroop.State.voltage_setpoint)
+        lc1_v_abc: np.ndarray = rg.src(lambda: Lc1.State.v_abc)
+        ac_phase_rad: float = rg.src(MasterDroop.State.ac_phase_rad)
+        voltage_setpoint_v: float = rg.src(MasterDroop.State.voltage_setpoint_v)
 
     class State(rg.NodeState):
-        current_setpoint_dq0: np.ndarray = rg.Var(init=zero_abc)
-        integral: np.ndarray = rg.Var(init=zero_abc)
-        windup: np.ndarray = rg.Var(init=zero_abc)
+        i_ref_dq0: np.ndarray = rg.var(init=zero_abc)
+        integral: np.ndarray = rg.var(init=zero_abc)
+        windup: np.ndarray = rg.var(init=zero_abc)
 
     def update(self, inputs: Inputs, prev_state: State) -> State:
-        voltage_dq0 = abc_to_dq0(inputs.voltage, inputs.phase)
-        voltage_setpoint_dq0 = np.array([inputs.voltage_setpoint, 0.0, 0.0], dtype=float)
-        current_setpoint_dq0, integral, windup = pi_update(
+        voltage_dq0 = abc_to_dq0(inputs.lc1_v_abc, inputs.ac_phase_rad)
+        voltage_setpoint_dq0 = np.array([inputs.voltage_setpoint_v, 0.0, 0.0], dtype=float)
+        i_ref_dq0, integral, windup = pi_update(
             setpoint=voltage_setpoint_dq0,
             measured=voltage_dq0,
             integral=prev_state.integral,
@@ -266,31 +268,31 @@ class MasterVoltagePI(rg.Node):
             dt=self.dt,
         )
         return self.State(
-            current_setpoint_dq0=current_setpoint_dq0,
+            i_ref_dq0=i_ref_dq0,
             integral=integral,
             windup=windup,
         )
 
 
-class MasterCurrentPI(rg.Node):
+class MasterLc1IPI(rg.Node):
     def __init__(self, *, dt: float = 0.5e-4) -> None:
         self.dt = dt
 
     class Inputs(rg.NodeInputs):
-        current: np.ndarray = rg.Input(src=lambda: Lc1Filter.State.inductor_i)
-        phase: float = rg.Input(src=MasterDroop.State.phase)
-        current_setpoint_dq0: np.ndarray = rg.Input(src=MasterVoltagePI.State.current_setpoint_dq0)
+        lc1_i_abc: np.ndarray = rg.src(lambda: Lc1.State.i_abc)
+        ac_phase_rad: float = rg.src(MasterDroop.State.ac_phase_rad)
+        i_ref_dq0: np.ndarray = rg.src(MasterLc1VPI.State.i_ref_dq0)
 
     class State(rg.NodeState):
-        modulation: np.ndarray = rg.Var(init=zero_abc)
-        integral: np.ndarray = rg.Var(init=zero_abc)
-        windup: np.ndarray = rg.Var(init=zero_abc)
+        modulation: np.ndarray = rg.var(init=zero_abc)
+        integral: np.ndarray = rg.var(init=zero_abc)
+        windup: np.ndarray = rg.var(init=zero_abc)
 
     def update(self, inputs: Inputs, prev_state: State) -> State:
-        current_dq0 = abc_to_dq0(inputs.current, inputs.phase)
+        i_dq0 = abc_to_dq0(inputs.lc1_i_abc, inputs.ac_phase_rad)
         modulation_dq0, integral, windup = pi_update(
-            setpoint=inputs.current_setpoint_dq0,
-            measured=current_dq0,
+            setpoint=inputs.i_ref_dq0,
+            measured=i_dq0,
             integral=prev_state.integral,
             windup=prev_state.windup,
             kp=0.012,
@@ -298,7 +300,7 @@ class MasterCurrentPI(rg.Node):
             limits=(-1.0, 1.0),
             dt=self.dt,
         )
-        modulation = np.clip(dq0_to_abc(modulation_dq0, inputs.phase), -1.0, 1.0)
+        modulation = np.clip(dq0_to_abc(modulation_dq0, inputs.ac_phase_rad), -1.0, 1.0)
         return self.State(modulation=modulation, integral=integral, windup=windup)
 
 
@@ -308,31 +310,31 @@ class SlavePLL(rg.Node):
         self.f_nom = f_nom
 
     class Inputs(rg.NodeInputs):
-        voltage: np.ndarray = rg.Input(src=lambda: Lcl1Filter.State.capacitor_v)
+        lcl1_v_abc: np.ndarray = rg.src(lambda: Lcl1.State.v_abc)
 
     class State(rg.NodeState):
-        cos_value: float = rg.Var(init=1.0)
-        sin_value: float = rg.Var(init=0.0)
-        frequency_hz: float = rg.Var(init=50.0)
-        theta: float = rg.Var(init=0.0)
-        theta_turns: float = rg.Var(init=0.0)
-        integral: float = rg.Var(init=0.0)
+        cos_ac_phase: float = rg.var(init=1.0)
+        sin_ac_phase: float = rg.var(init=0.0)
+        frequency_hz: float = rg.var(init=50.0)
+        ac_phase_rad: float = rg.var(init=0.0)
+        ac_phase_turns: float = rg.var(init=0.0)
+        integral: float = rg.var(init=0.0)
 
     def update(self, inputs: Inputs, prev_state: State) -> State:
-        normalised = normalise_abc(inputs.voltage)
+        normalised = normalise_abc(inputs.lcl1_v_abc)
         alpha_beta = abc_to_alpha_beta(normalised)
-        dphi = alpha_beta[1] * prev_state.cos_value - alpha_beta[0] * prev_state.sin_value
+        dphi = alpha_beta[1] * prev_state.cos_ac_phase - alpha_beta[0] * prev_state.sin_ac_phase
         integral = prev_state.integral + 200.0 * dphi * self.dt
         frequency_hz = 10.0 * dphi + integral + self.f_nom
-        theta_turns = advance_phase_turns(prev_state.theta_turns, frequency_hz, self.dt)
-        theta = theta_turns * 2.0 * math.pi
-        cos_value, sin_value = cos_sin(theta)
+        ac_phase_turns = advance_phase_turns(prev_state.ac_phase_turns, frequency_hz, self.dt)
+        ac_phase_rad = ac_phase_turns * 2.0 * math.pi
+        cos_ac_phase, sin_ac_phase = cos_sin(ac_phase_rad)
         return self.State(
-            cos_value=cos_value,
-            sin_value=sin_value,
+            cos_ac_phase=cos_ac_phase,
+            sin_ac_phase=sin_ac_phase,
             frequency_hz=frequency_hz,
-            theta=theta,
-            theta_turns=theta_turns,
+            ac_phase_rad=ac_phase_rad,
+            ac_phase_turns=ac_phase_turns,
             integral=integral,
         )
 
@@ -350,21 +352,21 @@ class SlaveInverseDroop(rg.Node):
         self.i_lim = i_lim
 
     class Inputs(rg.NodeInputs):
-        voltage: np.ndarray = rg.Input(src=lambda: Lcl1Filter.State.capacitor_v)
-        frequency_hz: float = rg.Input(src=SlavePLL.State.frequency_hz)
+        lcl1_v_abc: np.ndarray = rg.src(lambda: Lcl1.State.v_abc)
+        frequency_hz: float = rg.src(SlavePLL.State.frequency_hz)
 
     class State(rg.NodeState):
-        current_setpoint_dq0: np.ndarray = rg.Var(init=zero_abc)
-        p_filter: float = rg.Var(init=0.0)
-        p_previous: float = rg.Var(init=0.0)
-        q_filter: float = rg.Var(init=0.0)
-        q_previous: float = rg.Var(init=0.0)
+        i_ref_dq0: np.ndarray = rg.var(init=zero_abc)
+        p_filter: float = rg.var(init=0.0)
+        p_previous: float = rg.var(init=0.0)
+        q_filter: float = rg.var(init=0.0)
+        q_previous: float = rg.var(init=0.0)
 
     def update(self, inputs: Inputs, prev_state: State) -> State:
-        v_inst = inst_rms(inputs.voltage)
+        v_inst = inst_rms(inputs.lcl1_v_abc)
         if v_inst <= 150.0:
             return self.State(
-                current_setpoint_dq0=zero_abc(),
+                i_ref_dq0=zero_abc(),
                 p_filter=prev_state.p_filter,
                 p_previous=prev_state.p_previous,
                 q_filter=prev_state.q_filter,
@@ -389,18 +391,18 @@ class SlaveInverseDroop(rg.Node):
         )
         q_output = q_filter * 50.0 + (q_filter - prev_state.q_previous)
 
-        active_current = p_output / v_inst
-        reactive_current = q_output / v_inst
+        active_i = p_output / v_inst
+        reactive_i = q_output / v_inst
         droop = np.array(
             [
-                clip(active_current / 3.0 * math.sqrt(2.0), -self.i_lim, self.i_lim),
-                clip(reactive_current / 3.0 * math.sqrt(2.0), -self.i_lim, self.i_lim),
+                clip(active_i / 3.0 * math.sqrt(2.0), -self.i_lim, self.i_lim),
+                clip(reactive_i / 3.0 * math.sqrt(2.0), -self.i_lim, self.i_lim),
                 0.0,
             ],
             dtype=float,
         )
         return self.State(
-            current_setpoint_dq0=np.array([-droop[0], droop[1], droop[2]], dtype=float),
+            i_ref_dq0=np.array([-droop[0], droop[1], droop[2]], dtype=float),
             p_filter=p_filter,
             p_previous=p_filter,
             q_filter=q_filter,
@@ -408,26 +410,30 @@ class SlaveInverseDroop(rg.Node):
         )
 
 
-class SlaveCurrentPI(rg.Node):
+class SlaveLcl1IPI(rg.Node):
     def __init__(self, *, dt: float = 0.5e-4) -> None:
         self.dt = dt
 
     class Inputs(rg.NodeInputs):
-        current: np.ndarray = rg.Input(src=lambda: Lcl1Filter.State.inverter_side_i)
-        cos_value: float = rg.Input(src=SlavePLL.State.cos_value)
-        sin_value: float = rg.Input(src=SlavePLL.State.sin_value)
-        current_setpoint_dq0: np.ndarray = rg.Input(src=SlaveInverseDroop.State.current_setpoint_dq0)
+        lcl1_inv_i_abc: np.ndarray = rg.src(lambda: Lcl1.State.inv_i_abc)
+        cos_ac_phase: float = rg.src(SlavePLL.State.cos_ac_phase)
+        sin_ac_phase: float = rg.src(SlavePLL.State.sin_ac_phase)
+        i_ref_dq0: np.ndarray = rg.src(SlaveInverseDroop.State.i_ref_dq0)
 
     class State(rg.NodeState):
-        modulation: np.ndarray = rg.Var(init=zero_abc)
-        integral: np.ndarray = rg.Var(init=zero_abc)
-        windup: np.ndarray = rg.Var(init=zero_abc)
+        modulation: np.ndarray = rg.var(init=zero_abc)
+        integral: np.ndarray = rg.var(init=zero_abc)
+        windup: np.ndarray = rg.var(init=zero_abc)
 
     def update(self, inputs: Inputs, prev_state: State) -> State:
-        current_dq0 = abc_to_dq0_cos_sin(inputs.current, inputs.cos_value, inputs.sin_value)
+        i_dq0 = abc_to_dq0_cos_sin(
+            inputs.lcl1_inv_i_abc,
+            inputs.cos_ac_phase,
+            inputs.sin_ac_phase,
+        )
         modulation_dq0, integral, windup = pi_update(
-            setpoint=inputs.current_setpoint_dq0,
-            measured=current_dq0,
+            setpoint=inputs.i_ref_dq0,
+            measured=i_dq0,
             integral=prev_state.integral,
             windup=prev_state.windup,
             kp=0.005,
@@ -436,7 +442,7 @@ class SlaveCurrentPI(rg.Node):
             dt=self.dt,
         )
         modulation = np.clip(
-            dq0_to_abc_cos_sin(modulation_dq0, inputs.cos_value, inputs.sin_value),
+            dq0_to_abc_cos_sin(modulation_dq0, inputs.cos_ac_phase, inputs.sin_ac_phase),
             -1.0,
             1.0,
         )
@@ -448,13 +454,13 @@ class Inverter1(rg.Node):
         self.gain = 0.5 * v_dc
 
     class Inputs(rg.NodeInputs):
-        modulation: np.ndarray = rg.Input(src=MasterCurrentPI.State.modulation)
+        modulation: np.ndarray = rg.src(MasterLc1IPI.State.modulation)
 
     class State(rg.NodeState):
-        phase_v: np.ndarray = rg.Var(init=zero_abc)
+        v_abc: np.ndarray = rg.var(init=zero_abc)
 
     def update(self, inputs: Inputs) -> State:
-        return self.State(phase_v=inputs.modulation * self.gain)
+        return self.State(v_abc=inputs.modulation * self.gain)
 
 
 class Inverter2(rg.Node):
@@ -462,13 +468,13 @@ class Inverter2(rg.Node):
         self.gain = 0.5 * v_dc
 
     class Inputs(rg.NodeInputs):
-        modulation: np.ndarray = rg.Input(src=SlaveCurrentPI.State.modulation)
+        modulation: np.ndarray = rg.src(SlaveLcl1IPI.State.modulation)
 
     class State(rg.NodeState):
-        phase_v: np.ndarray = rg.Var(init=zero_abc)
+        v_abc: np.ndarray = rg.var(init=zero_abc)
 
     def update(self, inputs: Inputs) -> State:
-        return self.State(phase_v=inputs.modulation * self.gain)
+        return self.State(v_abc=inputs.modulation * self.gain)
 
 
 class ResistanceScenario(rg.Node):
@@ -484,10 +490,10 @@ class ResistanceScenario(rg.Node):
         self.second_switch_tick = second_switch_tick
 
     class Inputs(rg.NodeInputs):
-        tick: int = rg.Input(src=rg.Clock.tick)
+        tick: int = rg.src(rg.Clock.tick)
 
     class State(rg.NodeState):
-        resistance: float = rg.Var(init=20.0)
+        resistance: float = rg.var(init=20.0)
 
     def update(self, inputs: Inputs) -> State:
         if inputs.tick < self.first_switch_tick:
@@ -499,102 +505,104 @@ class ResistanceScenario(rg.Node):
         return self.State(resistance=resistance)
 
 
-class Lc1Filter(rg.ODENode):
+class Lc1(rg.ODENode):
     def __init__(self, *, inductance: float = 0.001, capacitance: float = 1.0e-5) -> None:
         self.inductance = inductance
         self.capacitance = capacitance
 
-    class Inputs(rg.NodeInputs):
-        inverter_v: np.ndarray = rg.Input(src=Inverter1.State.phase_v)
-        lcl1_grid_side_i: np.ndarray = rg.Input(src=lambda: Lcl1Filter.State.grid_side_i)
-        lc2_inductor_i: np.ndarray = rg.Input(src=lambda: Lc2Filter.State.inductor_i)
-
     class State(rg.NodeState):
-        capacitor_v: np.ndarray = rg.Var(init=zero_abc)
-        inductor_i: np.ndarray = rg.Var(init=zero_abc)
+        v_abc: np.ndarray = rg.var(init=zero_abc)
+        i_abc: np.ndarray = rg.var(init=zero_abc)
 
-    def dstate(self, inputs: Inputs, state: State) -> State:  # ty: ignore[invalid-method-override]
+    def dstate(
+        self,
+        state: State,
+        inverter_v_abc: np.ndarray = rg.src(Inverter1.State.v_abc),
+        lcl1_bus_i_abc: np.ndarray = rg.src(lambda: Lcl1.State.bus_i_abc),
+        lc2_i_abc: np.ndarray = rg.src(lambda: Lc2.State.i_abc),
+    ) -> State:  # ty: ignore[invalid-method-override]
         return self.State(
-            capacitor_v=(state.inductor_i + inputs.lcl1_grid_side_i - inputs.lc2_inductor_i)
-            / self.capacitance,
-            inductor_i=(inputs.inverter_v - state.capacitor_v) / self.inductance,
+            v_abc=(state.i_abc + lcl1_bus_i_abc - lc2_i_abc) / self.capacitance,
+            i_abc=(inverter_v_abc - state.v_abc) / self.inductance,
         )
 
 
-class Lcl1Filter(rg.ODENode):
+class Lcl1(rg.ODENode):
     def __init__(self, *, inductance: float = 0.001, capacitance: float = 1.0e-5) -> None:
         self.inductance = inductance
         self.capacitance = capacitance
 
-    class Inputs(rg.NodeInputs):
-        inverter_v: np.ndarray = rg.Input(src=Inverter2.State.phase_v)
-        bus_v: np.ndarray = rg.Input(src=Lc1Filter.State.capacitor_v)
-
     class State(rg.NodeState):
-        capacitor_v: np.ndarray = rg.Var(init=zero_abc)
-        inverter_side_i: np.ndarray = rg.Var(init=zero_abc)
-        grid_side_i: np.ndarray = rg.Var(init=zero_abc)
+        v_abc: np.ndarray = rg.var(init=zero_abc)
+        inv_i_abc: np.ndarray = rg.var(init=zero_abc)
+        bus_i_abc: np.ndarray = rg.var(init=zero_abc)
 
-    def dstate(self, inputs: Inputs, state: State) -> State:  # ty: ignore[invalid-method-override]
+    def dstate(
+        self,
+        state: State,
+        inverter_v_abc: np.ndarray = rg.src(Inverter2.State.v_abc),
+        bus_v_abc: np.ndarray = rg.src(Lc1.State.v_abc),
+    ) -> State:  # ty: ignore[invalid-method-override]
         return self.State(
-            capacitor_v=(state.inverter_side_i - state.grid_side_i) / self.capacitance,
-            inverter_side_i=(inputs.inverter_v - state.capacitor_v) / self.inductance,
-            grid_side_i=(state.capacitor_v - inputs.bus_v) / self.inductance,
+            v_abc=(state.inv_i_abc - state.bus_i_abc) / self.capacitance,
+            inv_i_abc=(inverter_v_abc - state.v_abc) / self.inductance,
+            bus_i_abc=(state.v_abc - bus_v_abc) / self.inductance,
         )
 
 
-class Lc2Filter(rg.ODENode):
+class Lc2(rg.ODENode):
     def __init__(self, *, inductance: float = 0.001, capacitance: float = 1.0e-5) -> None:
         self.inductance = inductance
         self.capacitance = capacitance
 
-    class Inputs(rg.NodeInputs):
-        bus_v: np.ndarray = rg.Input(src=Lc1Filter.State.capacitor_v)
-        load_i: np.ndarray = rg.Input(src=lambda: Rl1Load.State.load_i)
-
     class State(rg.NodeState):
-        capacitor_v: np.ndarray = rg.Var(init=zero_abc)
-        inductor_i: np.ndarray = rg.Var(init=zero_abc)
+        v_abc: np.ndarray = rg.var(init=zero_abc)
+        i_abc: np.ndarray = rg.var(init=zero_abc)
 
-    def dstate(self, inputs: Inputs, state: State) -> State:  # ty: ignore[invalid-method-override]
+    def dstate(
+        self,
+        state: State,
+        bus_v_abc: np.ndarray = rg.src(Lc1.State.v_abc),
+        rl1_i_abc: np.ndarray = rg.src(lambda: Rl1.State.i_abc),
+    ) -> State:  # ty: ignore[invalid-method-override]
         return self.State(
-            capacitor_v=(state.inductor_i - inputs.load_i) / self.capacitance,
-            inductor_i=(inputs.bus_v - state.capacitor_v) / self.inductance,
+            v_abc=(state.i_abc - rl1_i_abc) / self.capacitance,
+            i_abc=(bus_v_abc - state.v_abc) / self.inductance,
         )
 
 
-class Rl1Load(rg.ODENode):
+class Rl1(rg.ODENode):
     def __init__(self, *, inductance: float = 0.001) -> None:
         self.inductance = inductance
 
     class Inputs(rg.NodeInputs):
-        capacitor_v: np.ndarray = rg.Input(src=Lc2Filter.State.capacitor_v)
-        resistance: float = rg.Input(src=ResistanceScenario.State.resistance)
+        lc2_v_abc: np.ndarray = rg.src(Lc2.State.v_abc)
+        resistance: float = rg.src(ResistanceScenario.State.resistance)
 
     class State(rg.NodeState):
-        load_i: np.ndarray = rg.Var(init=zero_abc)
+        i_abc: np.ndarray = rg.var(init=zero_abc)
 
     def dstate(self, inputs: Inputs, state: State) -> State:  # ty: ignore[invalid-method-override]
         return self.State(
-            load_i=(inputs.capacitor_v - inputs.resistance * state.load_i) / self.inductance,
+            i_abc=(inputs.lc2_v_abc - inputs.resistance * state.i_abc) / self.inductance,
         )
 
 
-class ODEAPIMicrogridLogger(rg.Node):
+class Logger(rg.Node):
     class Inputs(rg.NodeInputs):
-        time_s: float = rg.Input(src=rg.Clock.time)
-        lcl1_capacitor_v: np.ndarray = rg.Input(src=Lcl1Filter.State.capacitor_v)
-        resistance: float = rg.Input(src=ResistanceScenario.State.resistance)
+        time_s: float = rg.src(rg.Clock.time)
+        lcl1_v_abc: np.ndarray = rg.src(Lcl1.State.v_abc)
+        resistance: float = rg.src(ResistanceScenario.State.resistance)
 
     class State(rg.NodeState):
-        samples: list[VoltageResistanceSample] = rg.Var(init=list)
+        samples: list[VoltageResistanceSample] = rg.var(init=list)
 
     def update(self, inputs: Inputs, prev_state: State) -> State:
         sample = (
             inputs.time_s,
-            float(inputs.lcl1_capacitor_v[0]),
-            float(inputs.lcl1_capacitor_v[1]),
-            float(inputs.lcl1_capacitor_v[2]),
+            float(inputs.lcl1_v_abc[0]),
+            float(inputs.lcl1_v_abc[1]),
+            float(inputs.lcl1_v_abc[2]),
             inputs.resistance,
         )
         prev_state.samples.append(sample)
@@ -603,21 +611,21 @@ class ODEAPIMicrogridLogger(rg.Node):
 
 def build_system(*, steps: int = 2000) -> rg.PhasedReactiveSystem:
     master_droop = MasterDroop()
-    master_voltage_pi = MasterVoltagePI()
-    master_current_pi = MasterCurrentPI()
+    master_lc1_v_pi = MasterLc1VPI()
+    master_lc1_i_pi = MasterLc1IPI()
     slave_pll = SlavePLL()
     slave_inverse_droop = SlaveInverseDroop()
-    slave_current_pi = SlaveCurrentPI()
+    slave_lcl1_i_pi = SlaveLcl1IPI()
     inverter1 = Inverter1()
     inverter2 = Inverter2()
     resistance = ResistanceScenario(
         first_switch_tick=steps // 3,
         second_switch_tick=2 * steps // 3,
     )
-    lc1 = Lc1Filter()
-    lcl1 = Lcl1Filter()
-    lc2 = Lc2Filter()
-    rl1 = Rl1Load()
+    lc1 = Lc1()
+    lcl1 = Lcl1()
+    lc2 = Lc2()
+    rl1 = Rl1()
     electrical = rg.ODESystem(
         nodes=(lc1, lcl1, lc2, rl1),
         dt="0.00005",
@@ -625,7 +633,7 @@ def build_system(*, steps: int = 2000) -> rg.PhasedReactiveSystem:
         method="cvodes",
         options={"abstol": 1e-9, "reltol": 1e-8},
     )
-    logger = ODEAPIMicrogridLogger()
+    logger = Logger()
 
     return rg.PhasedReactiveSystem(
         phases=[
@@ -633,11 +641,11 @@ def build_system(*, steps: int = 2000) -> rg.PhasedReactiveSystem:
                 "control",
                 nodes=(
                     master_droop,
-                    master_voltage_pi,
-                    master_current_pi,
+                    master_lc1_v_pi,
+                    master_lc1_i_pi,
                     slave_pll,
                     slave_inverse_droop,
-                    slave_current_pi,
+                    slave_lcl1_i_pi,
                 ),
                 transitions=(rg.Goto("inverters"),),
                 is_initial=True,
@@ -673,7 +681,7 @@ def main() -> None:
     system = build_system(steps=args.steps)
     system.run(args.steps)
     snapshot = system.snapshot()
-    samples = snapshot["ODEAPIMicrogridLogger.samples"]
+    samples = snapshot["Logger.samples"]
     save_lcl1_plot(samples, args.output)
     args.docs_output.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(args.output, args.docs_output)

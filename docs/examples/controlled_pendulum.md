@@ -70,13 +70,13 @@ class PendulumODE(rg.ODENode):
         self.omega0 = omega0
 
     class State(rg.NodeState):
-        theta: float = rg.Var(init=lambda self: cast(PendulumODE, self).theta0)
-        omega: float = rg.Var(init=lambda self: cast(PendulumODE, self).omega0)
+        theta: float = rg.var(init=lambda self: cast(PendulumODE, self).theta0)
+        omega: float = rg.var(init=lambda self: cast(PendulumODE, self).omega0)
 
     def dstate(
         self,
         state: State,
-        tau: float = rg.Input(src=lambda: Controller.State.tau),
+        tau: float = rg.src(lambda: Controller.State.tau),
     ) -> State:
         tau_c = 3.0 / (self.mass * self.length**2)
         g_c = (3.0 * self.gravity) / (2.0 * self.length)
@@ -91,7 +91,7 @@ instance is passed to the initializer, so the constructor values become the
 initial ODE state.
 
 The torque input uses a lazy source reference:
-`rg.Input(src=lambda: Controller.State.tau)`. The lambda only delays evaluation
+`rg.src(lambda: Controller.State.tau)`. The lambda only delays evaluation
 until `Controller` exists in the Python module. Semantically it is still a
 plain state-port read.
 
@@ -108,8 +108,8 @@ class Observer(rg.Node):
         omega: float
 
     class Inputs(rg.NodeInputs):
-        theta: float = rg.Input(src=PendulumODE.State.theta)
-        omega: float = rg.Input(src=PendulumODE.State.omega)
+        theta: float = rg.src(PendulumODE.State.theta)
+        omega: float = rg.src(PendulumODE.State.omega)
 
     def update(self, inputs: Inputs) -> State:
         return self.State(
@@ -141,9 +141,9 @@ class Controller(rg.Node):
 
     def update(
         self,
-        sin_theta: float = rg.Input(src=Observer.State.sin_theta),
-        cos_theta: float = rg.Input(src=Observer.State.cos_theta),
-        omega: float = rg.Input(src=Observer.State.omega),
+        sin_theta: float = rg.src(Observer.State.sin_theta),
+        cos_theta: float = rg.src(Observer.State.cos_theta),
+        omega: float = rg.src(Observer.State.omega),
     ) -> State:
         theta = math.atan2(sin_theta, cos_theta)
         raw = -self.kp * theta - self.kd * omega
@@ -164,15 +164,15 @@ the latest committed `Controller.State.tau`.
 ```python
 class Logger(rg.Node):
     class State(rg.NodeState):
-        samples: list[tuple[float, float, float, float]] = rg.Var(init=list)
+        samples: list[tuple[float, float, float, float]] = rg.var(init=list)
 
     def update(
         self,
         state: State,
-        time: float = rg.Input(src=rg.Clock.time),
-        theta: float = rg.Input(src=PendulumODE.State.theta),
-        omega: float = rg.Input(src=PendulumODE.State.omega),
-        tau: float = rg.Input(src=Controller.State.tau),
+        time: float = rg.src(rg.Clock.time),
+        theta: float = rg.src(PendulumODE.State.theta),
+        omega: float = rg.src(PendulumODE.State.omega),
+        tau: float = rg.src(Controller.State.tau),
     ) -> State:
         state.samples.append((time, theta, omega, tau))
         return self.State(samples=state.samples)

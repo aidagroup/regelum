@@ -37,8 +37,8 @@ state. The `dstate(...)` method returns the right-hand side of the ODE.
 ```python
 class FreePendulum(rg.ODENode):
     class State(rg.NodeState):
-        theta: float = rg.Var(init=lambda self: cast(FreePendulum, self).theta0)
-        omega: float = rg.Var(init=lambda self: cast(FreePendulum, self).omega0)
+        theta: float = rg.var(init=lambda self: cast(FreePendulum, self).theta0)
+        omega: float = rg.var(init=lambda self: cast(FreePendulum, self).omega0)
 
     def dstate(self, state: State) -> State:
         theta_dot = state.omega
@@ -66,8 +66,8 @@ angle.
 ```python
 class Observer(rg.Node):
     class Inputs(rg.NodeInputs):
-        theta: float = rg.Input(src=FreePendulum.State.theta)
-        omega: float = rg.Input(src=FreePendulum.State.omega)
+        theta: float = rg.src(FreePendulum.State.theta)
+        omega: float = rg.src(FreePendulum.State.omega)
 
     class State(rg.NodeState):
         sin_angle: float
@@ -88,14 +88,14 @@ to its own `samples` state.
 ```python
 class Logger(rg.Node):
     class Inputs(rg.NodeInputs):
-        time: float = rg.Input(src=rg.Clock.time)
-        theta: float = rg.Input(src=FreePendulum.State.theta)
-        sin_angle: float = rg.Input(src=Observer.State.sin_angle)
-        cos_angle: float = rg.Input(src=Observer.State.cos_angle)
-        angular_velocity: float = rg.Input(src=Observer.State.angular_velocity)
+        time: float = rg.src(rg.Clock.time)
+        theta: float = rg.src(FreePendulum.State.theta)
+        sin_angle: float = rg.src(Observer.State.sin_angle)
+        cos_angle: float = rg.src(Observer.State.cos_angle)
+        angular_velocity: float = rg.src(Observer.State.angular_velocity)
 
     class State(rg.NodeState):
-        samples: list[tuple[float, float, float, float, float]] = rg.Var(init=list)
+        samples: list[tuple[float, float, float, float, float]] = rg.var(init=list)
 
     def update(self, inputs: Inputs, prev_state: State) -> State:
         sample = (

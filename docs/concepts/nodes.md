@@ -89,10 +89,10 @@ flowchart LR
     class controller_state,session_state,logger_state state;
 ```
 
-??? example "Full code listing: `examples/video_player.py`"
+??? example "Full code listing: `examples/video_player/video_player.py`"
 
     ```python
-    --8<-- "examples/video_player.py"
+    --8<-- "examples/video_player/video_player.py"
     ```
 
 This page zooms in on those nodes — what a node is, how it declares its
@@ -139,13 +139,11 @@ class MediaSession(rg.Node):
     """The plant. Buffer fills with newly fetched video, drains with playback."""
 
     class Inputs(rg.NodeInputs):
-        previous: float = rg.Input(
-            src=lambda: MediaSession.State.buffer_seconds
-        )
-        fetched: float = rg.Input(src=Decoder.State.fetched_seconds)
+        previous: float = rg.src(lambda: MediaSession.State.buffer_seconds)
+        fetched: float = rg.src(Decoder.State.fetched_seconds)
 
     class State(rg.NodeState):
-        buffer_seconds: float = rg.Var(init=10.0)
+        buffer_seconds: float = rg.var(init=10.0)
 
     def update(self, inputs: Inputs) -> State:
         next_buffer = inputs.previous + inputs.fetched - TICK_DT_SECONDS
@@ -167,10 +165,10 @@ buffer value before `MediaSession` has updated.
 Finally, `update` receives the input snapshot and returns a state variable snapshot:
 the node computes the next buffer level and writes it as `buffer_seconds`.
 
-??? example "Full file: `examples/video_player.py`"
+??? example "Full file: `examples/video_player/video_player.py`"
 
     ```python
-    --8<-- "examples/video_player.py"
+    --8<-- "examples/video_player/video_player.py"
     ```
 
 ## Node API
@@ -193,10 +191,10 @@ declaration time, even before `session = MediaSession()` is constructed.
 ```python
 class MediaSession(rg.Node):
     class Inputs(rg.NodeInputs):
-        fetched: float = rg.Input(src=Decoder.State.fetched_seconds)
+        fetched: float = rg.src(Decoder.State.fetched_seconds)
 
     class State(rg.NodeState):
-        buffer_seconds: float = rg.Var(init=10.0)
+        buffer_seconds: float = rg.var(init=10.0)
 ```
 
 The runtime detects these namespaces by base class, not by name.
@@ -206,7 +204,7 @@ at most one input namespace and at most one state namespace.
 ### Inputs and state references
 
 An input is connected to the state variable it reads.
-The common form is `rg.Input(src=...)`, where `src` points at a state variable:
+The common form is `rg.src(...)`, where `src` points at a state variable:
 
 ```python
 class Network(rg.Node):
@@ -215,7 +213,7 @@ class Network(rg.Node):
 
 class Decoder(rg.Node):
     class Inputs(rg.NodeInputs):
-        bandwidth_kbps: float = rg.Input(src=Network.State.bandwidth_kbps)
+        bandwidth_kbps: float = rg.src(Network.State.bandwidth_kbps)
 ```
 
 `Network.State.bandwidth_kbps` is a class-level reference.
@@ -236,9 +234,7 @@ network_backup = Network(name="backup")
 
 class Decoder(rg.Node):
     class Inputs(rg.NodeInputs):
-        bandwidth_kbps: float = rg.Input(
-            src=network_main.State.bandwidth_kbps
-        )
+        bandwidth_kbps: float = rg.src(network_main.State.bandwidth_kbps)
 ```
 
 Here `Decoder` reads from the concrete `network_main` instance.
@@ -256,7 +252,7 @@ This is equivalent to:
 
 ```python
 class Inputs(rg.NodeInputs):
-    value: float = rg.Input()
+    value: float = rg.src()
 ```
 
 Unconnected inputs are compile errors unless connected later with
@@ -273,9 +269,7 @@ Use a zero-argument callable for those cases:
 ```python
 class MediaSession(rg.Node):
     class Inputs(rg.NodeInputs):
-        previous: float = rg.Input(
-            src=lambda: MediaSession.State.buffer_seconds
-        )
+        previous: float = rg.src(lambda: MediaSession.State.buffer_seconds)
 ```
 
 The `lambda` is not a different kind of connection.
@@ -297,7 +291,7 @@ This rules out write/write races by construction.
 
 ```python
 class State(rg.NodeState):
-    buffer_seconds: float = rg.Var(init=10.0)
+    buffer_seconds: float = rg.var(init=10.0)
 ```
 
 A bare state variable annotation is shorthand for a state variable without an initial value:
@@ -352,7 +346,7 @@ node runs.
 ```python
 class MediaSession(rg.Node):
     class State(rg.NodeState):
-        buffer_seconds: float = rg.Var(init=10.0)
+        buffer_seconds: float = rg.var(init=10.0)
 ```
 
 `buffer_seconds` is read by `QualityPolicy` in `decide` before
@@ -365,7 +359,7 @@ Initial values can be written in three forms.
 Use a direct value when the value is static:
 
 ```python
-buffer_seconds: float = rg.Var(init=10.0)
+buffer_seconds: float = rg.var(init=10.0)
 ```
 
 Use a zero-argument callable for fresh mutable objects.
@@ -374,7 +368,7 @@ This avoids accidentally sharing one list between systems:
 ```python
 class Logger(rg.Node):
     class State(rg.NodeState):
-        history: list[Logger.Sample] = rg.Var(init=lambda: [])
+        history: list[Logger.Sample] = rg.var(init=lambda: [])
 ```
 
 Use a one-argument callable when the initial value depends on the node
@@ -397,7 +391,7 @@ class MediaSession(rg.Node):
         self.initial_buffer = initial_buffer
 
     class State(rg.NodeState):
-        buffer_seconds: float = rg.Var(
+        buffer_seconds: float = rg.var(
             init=lambda self: cast(MediaSession, self).initial_buffer,
         )
 
@@ -458,11 +452,11 @@ nodes with one or two inputs:
 ```python
 class TickCounter(rg.Node):
     class State(rg.NodeState):
-        tick: int = rg.Var(init=0)
+        tick: int = rg.var(init=0)
 
     def update(
         self,
-        tick: int = rg.Input(src=lambda: TickCounter.State.tick),
+        tick: int = rg.src(lambda: TickCounter.State.tick),
     ) -> State:
         return self.State(tick=tick + 1)
 ```
@@ -479,8 +473,8 @@ Read it through `rg.Clock.tick` and `rg.Clock.time`:
 ```python
 class Network(rg.Node):
     class Inputs(rg.NodeInputs):
-        tick: int = rg.Input(src=rg.Clock.tick)
-        time: float = rg.Input(src=rg.Clock.time)
+        tick: int = rg.src(rg.Clock.tick)
+        time: float = rg.src(rg.Clock.time)
 ```
 
 `Clock.tick` is the integer tick index. `Clock.time` is the physical time
@@ -500,12 +494,10 @@ the same list back as the next state variable value.
 ```python
 class Logger(rg.Node):
     class Inputs(rg.NodeInputs):
-        history: list[Logger.Sample] = rg.Input(
-            src=lambda: Logger.State.history
-        )
+        history: list[Logger.Sample] = rg.src(lambda: Logger.State.history)
 
     class State(rg.NodeState):
-        history: list[Logger.Sample] = rg.Var(init=lambda: [])
+        history: list[Logger.Sample] = rg.var(init=lambda: [])
 
     def update(self, inputs: Inputs) -> State:
         inputs.history.append(record)
@@ -539,10 +531,10 @@ session_b = MediaSession()
 session_c = MediaSession(name="archive")
 ```
 
-??? example "Full file: `examples/video_player.py`"
+??? example "Full file: `examples/video_player/video_player.py`"
 
     ```python
-    --8<-- "examples/video_player.py"
+    --8<-- "examples/video_player/video_player.py"
     ```
 
 Custom constructors should forward `name` to `Node`.
