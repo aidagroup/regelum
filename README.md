@@ -119,11 +119,12 @@ uv run mkdocs serve
 ## Examples
 
 ```bash
-uv run regelum-controlled-pendulum
+uv run python examples/controlled_pendulum/standalone.py
+uv run python examples/free_pendulum/standalone.py
 uv run marimo edit examples/free_pendulum/rg-examples-free-pendulum.py
 uv run marimo edit examples/controlled_pendulum/rg-examples-controlled-pendulum.py
-uv run regelum-video-player
-uv run regelum-instance-connect
+uv run python examples/video_player/video_player.py
+uv run python examples/instance_connect/instance_connect.py
 ```
 
 ## Release Process
