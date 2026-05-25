@@ -116,27 +116,8 @@ uv run pytest tests
 uv run mkdocs serve
 ```
 
-## Examples
-
-```bash
-uv run python examples/controlled_pendulum/standalone.py
-uv run python examples/free_pendulum/standalone.py
-uv run marimo edit examples/free_pendulum/rg-examples-free-pendulum.py
-uv run marimo edit examples/controlled_pendulum/rg-examples-controlled-pendulum.py
-uv run python examples/video_player/video_player.py
-uv run python examples/instance_connect/instance_connect.py
-```
-
 ## Release Process
 
 Create a GitHub Release tagged like `v0.2.0`.
 The publish workflow builds the package, derives the version from the tag, and
 uploads artifacts to PyPI.
-
-After installation, users can verify the packaged version:
-
-```python
-import regelum
-
-print(regelum.__version__)
-```

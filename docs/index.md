@@ -41,25 +41,13 @@ models look like regular Python while still giving the compiler enough
 structure to resolve dependencies, validate the graph, schedule execution, and
 integrate continuous dynamics.
 
-## Overview
-
-- **Nodes** declare typed inputs and state variables, then compute their next
-  state in `update`.
-- **Phases** decide which node instances are active together and how control
-  moves between phases.
-- **Continuous nodes** declare ODE state and are integrated through
-  `ODESystem` phases.
-- **Compilation** resolves links, schedules nodes, and catches structural
-  mistakes before runtime: unresolved inputs, ambiguous references, invalid
-  phase graphs, and computations that cannot be guaranteed to resolve.
+## Quick Example
 
 Install from PyPI with `uv`:
 
 ```bash
 uv add regelum
 ```
-
-## Quick Example
 
 ```python
 import regelum as rg
@@ -114,33 +102,4 @@ system = rg.PhasedReactiveSystem(
 
 system.step()
 print(system.read(controller.State.heater_on))
-```
-
-## Local development
-
-Set up the repository, install hooks, and run the full local gate:
-
-```bash
-uv sync --all-groups
-uv run prek install --hook-type pre-commit --hook-type pre-push
-uv run prek run --all-files
-```
-
-The `pre-push` hook runs `pytest`, so a normal `git push` exercises the test
-suite automatically.
-
-## Local docs
-
-```bash
-uv run --group docs mkdocs serve \
-  --watch docs \
-  --watch mkdocs.yml \
-  --watch src/regelum \
-  --watch README.md
-```
-
-Build the static site:
-
-```bash
-uv run --group docs mkdocs build
 ```
