@@ -41,7 +41,7 @@ integrate continuous dynamics.
 The best entry point is the Learn overview:
 
 - Docs: <https://aidagroup.github.io/regelum/>
-- Learn overview: <https://aidagroup.github.io/regelum/concepts/>
+- Learn overview: <https://aidagroup.github.io/regelum/latest/concepts/>
 
 ## Quick Example
 
