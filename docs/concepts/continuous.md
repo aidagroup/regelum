@@ -7,10 +7,22 @@ all objects in `Phase.nodes` are `rg.ODESystem` instances.
 
 ## Continuous Nodes
 
-Define continuous state with `rg.ODENode`.
-An ODE node declares a `State` namespace instead of ordinary `State`.
-State variables are created with `rg.var(init=...)`, are readable by
-other nodes, and are committed back into system state after integration.
+Regelum simulates continuous dynamics with `rg.ODENode`.
+An `ODENode` is the place where you define the right-hand side of an ODE
+system: its `State` namespace declares the continuous state variables, and its
+`dstate(...)` method returns their derivatives.
+The [controlled pendulum example](../examples/controlled_pendulum.md) shows a
+complete model; this page focuses on the API.
+
+The workflow is:
+
+1. define the ODE right-hand side in an `ODENode`;
+2. wrap one or more `ODENode` instances in an `rg.ODESystem`;
+3. choose the integration backend and method on the `ODESystem`;
+4. put the `ODESystem` into a continuous phase.
+
+State variables are created with `rg.var(init=...)`, are readable by other
+nodes, and are committed back into system state after integration.
 
 ```python
 import casadi as ca
@@ -28,6 +40,13 @@ class Integrator(rg.ODENode):
     def dstate(self, inputs: Inputs, state: State, *, time: object) -> State:
         return self.State(x=A @ state.x + inputs.u + ca.sin(time))
 ```
+
+`dstate(...)` is traced symbolically by the CasADi backend.
+During tracing, `state`, ODE inputs, and `time` are CasADi symbolic values
+(`ca.MX`), so code inside `dstate(...)` should be written as symbolic algebra.
+Use CasADi primitives such as `ca.sin`, `ca.cos`, `ca.sqrt`, and `ca.if_else`;
+avoid Python `if`, `math`, and NumPy functions over symbolic state or input
+values.
 
 `dstate(...)` returns the derivative in the same `State` shape.
 `var(init=...)` is the shape contract for continuous state. Scalars, 1D
@@ -87,13 +106,8 @@ def dstate(
 ) -> State:
     ...
 ```
-
-The ODE graph backend is CasADi. Regelum traces `dstate(...)` with `ca.MX`
-values, including vector and matrix state. Use CasADi primitives directly inside
-`dstate`, for example `ca.sin`, `ca.cos`, `ca.sqrt`, and `ca.if_else`.
-Python `if`, `math`, and NumPy functions over symbolic state or input values are
-not traceable. Plain vector algebra such as `A @ state.x`, `state.x + inputs.u`,
-and scalar multiplication is supported when operands are CasADi-compatible.
+Plain vector algebra such as `A @ state.x`, `state.x + inputs.u`, and scalar
+multiplication is supported when operands are CasADi-compatible.
 
 ## Vector State
 
@@ -128,14 +142,16 @@ silently.
 
 ## ODE Systems
 
-Group one or more `ODENode` instances into an `rg.ODESystem`:
+After defining the right-hand side, group one or more `ODENode` instances into
+an `rg.ODESystem`:
 
 ```python
 plant = Integrator()
 electrical = rg.ODESystem(
     nodes=(plant,),
     dt="0.001",
-    method="LSODA",
+    backend="casadi",
+    method="cvodes",
 )
 ```
 
@@ -147,7 +163,8 @@ An `ODENode` is an equation block inside an `ODESystem`, not a separately
 scheduled node; both instance-level `Integrator(dt="0.001")` and class-level
 `class Integrator(rg.ODENode): dt = "0.001"` are rejected.
 
-`backend` selects the numerical integrator:
+`backend` selects the numerical integration backend and `method` selects the
+backend-specific integrator:
 
 ```python
 electrical = rg.ODESystem(
