@@ -116,6 +116,15 @@ uv run pytest tests
 uv run mkdocs serve
 ```
 
+## Citation
+
+If you use `regelum` in academic work, please cite it using the metadata in
+[`CITATION.cff`](CITATION.cff).
+
+## License
+
+`regelum` is distributed under the MIT License. See [`LICENSE`](LICENSE).
+
 ## Release Process
 
 Create a GitHub Release tagged like `v0.2.0`.

@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use regelum in academic work, please cite it as below."
+title: "regelum: phased reactive systems for dynamic simulation"
+type: software
+authors:
+  - family-names: Bolychev
+    given-names: Anton
+  - family-names: Malaniya
+    given-names: Georgiy
+  - family-names: Osinenko
+    given-names: Pavel
+repository-code: "https://github.com/aidagroup/regelum"
+url: "https://aidagroup.github.io/regelum/"
+license: MIT

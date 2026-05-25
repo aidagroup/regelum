@@ -2,6 +2,8 @@
 name = "regelum"
 description = "Add your description here"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Anton Bolychev", email = "bolychev.anthon@yandex.ru" }
 ]
@@ -15,6 +17,9 @@ dependencies = [
     "scipy>=1.17.1",
     "z3-solver>=4.16.0.0",
 ]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+]
 
 [tool.hatch.build]
 exclude = [
@@ -24,7 +29,7 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.sdist]
-only-include = ["src", "README.md", "pyproject.toml"]
+only-include = ["src", "README.md", "pyproject.toml", "LICENSE", "CITATION.cff"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/regelum"]
