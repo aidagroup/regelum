@@ -14,10 +14,10 @@ from typing import (
     Generic,
     Literal,
     Protocol,
+    TypeAlias,
     TypeGuard,
     TypeVar,
     cast,
-    dataclass_transform,
     get_args,
     get_origin,
     get_type_hints,
@@ -25,6 +25,11 @@ from typing import (
 )
 
 import z3
+
+if sys.version_info >= (3, 11):
+    from typing import dataclass_transform
+else:
+    from typing_extensions import dataclass_transform
 
 T = TypeVar("T")
 StateSnapshot = dict[str, Any]
@@ -273,7 +278,7 @@ def V(var: Any) -> Expr:
     return VarExpr(_source_path(var), var_source=var)
 
 
-type Guard = Predicate | Expr
+Guard: TypeAlias = Predicate | Expr
 
 
 class VarPort(Generic[T]):
@@ -337,10 +342,6 @@ class VarPort(Generic[T]):
         return self.path
 
 
-type ResolvedVarSource[T] = VarPort[T] | BoundVarPort[T] | SystemSource | str
-type VarSource[T] = ResolvedVarSource[T] | Callable[[], ResolvedVarSource[T]]
-
-
 @dataclass(frozen=True)
 class BoundVarPort(Generic[T]):
     node: Node
@@ -356,6 +357,10 @@ class BoundVarPort(Generic[T]):
         connection = connect(input_port, self)
         connection.input.node._connections[connection.input.path] = connection
         return connection
+
+
+ResolvedVarSource: TypeAlias = VarPort[T] | BoundVarPort[T] | SystemSource | str
+VarSource: TypeAlias = ResolvedVarSource[T] | Callable[[], ResolvedVarSource[T]]
 
 
 @dataclass(frozen=True)
@@ -873,9 +878,8 @@ class StepRecord:
     state: dict[str, Any]
 
 
-type NodeRef = Node
-type PhaseRef = str | Phase | TerminateTarget | None
-type TransitionKind = Literal["if", "elseif", "else", "goto"]
+NodeRef: TypeAlias = Node
+TransitionKind: TypeAlias = Literal["if", "elseif", "else", "goto"]
 
 
 @dataclass(frozen=True)
@@ -915,6 +919,9 @@ class TerminateTarget:
 
 
 terminate = TerminateTarget()
+
+
+PhaseRef: TypeAlias = str | Phase | TerminateTarget | None
 
 
 def always(_: StateSnapshot) -> bool:
