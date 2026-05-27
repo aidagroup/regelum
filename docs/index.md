@@ -50,15 +50,17 @@ uv add regelum
 ```
 
 ```python
+import random
+
 import regelum as rg
 
 
 class TemperatureSensor(rg.Node):
     class State(rg.NodeState):
-        temperature: float = rg.var(init=19.0)
+        temperature: float
 
     def update(self) -> State:
-        return self.State(temperature=21.5)
+        return self.State(temperature=round(random.uniform(18.0, 26.0), 1))
 
 
 class HeaterController(rg.Node):
@@ -73,21 +75,22 @@ class HeaterController(rg.Node):
 
 
 class HeatingCycles(rg.Node):
-    class Inputs(rg.NodeInputs):
-        heater_on: bool = rg.src(HeaterController.State.heater_on)
-
     class State(rg.NodeState):
         count: int = rg.var(init=0)
 
-    def update(self, inputs: Inputs, prev_state: State) -> State:
+    def update(
+        self,
+        prev_state: State,
+        is_heater_on: bool = rg.src(HeaterController.State.heater_on),
+    ) -> State:
         return self.State(
-            count=prev_state.count + int(inputs.heater_on),
+            count=prev_state.count + int(is_heater_on),
         )
 
 
-sensor = TemperatureSensor(name="room_sensor")
-controller = HeaterController(name="heater_controller")
-cycles = HeatingCycles(name="heating_cycles")
+sensor = TemperatureSensor()
+controller = HeaterController()
+cycles = HeatingCycles()
 
 system = rg.PhasedReactiveSystem(
     phases=[
