@@ -23,7 +23,7 @@ def build_dead_cycle_system() -> rg.PhasedReactiveSystem:
             ),
             rg.Phase(
                 "b",
-                nodes=(mode,),
+                nodes=(),
                 transitions=(
                     rg.If(~rg.V(Mode.State.flag), "a", name="to-a"),
                     rg.If(rg.V(Mode.State.flag), rg.terminate, name="stop-b"),

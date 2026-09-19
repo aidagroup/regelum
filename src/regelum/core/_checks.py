@@ -904,26 +904,38 @@ def _check_c2star(
     depth: int | None,
     max_depth: int,
 ) -> list[CompileIssue]:
-    phase_names = [phase.name for phase in phases]
-    edges = _phase_transition_edges(phases)
-    if not _has_cycle(phase_names, edges):
-        return []
+    """Certify bounded residence in every cyclic phase SCC under F_max.
 
+    Only UNSAT certifies termination. SAT describes an arbitrary SCC entry,
+    not necessarily a reachable tick state; UNKNOWN is always inconclusive.
+    Depths count transitions, not cycle traversals.
+    """
+    for name, value in (("depth", depth), ("max_depth", max_depth)):
+        if value is None and name == "depth":
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"C2* {name} must be a positive integer")
     phase_map = {phase.name: phase for phase in phases}
     output_types = _output_types(nodes)
     domains = _finite_domains_by_path(nodes)
     issues: list[CompileIssue] = []
-    for cycle in _simple_cycles(phase_names, edges):
-        result = _check_c2star_for_cycle(
-            cycle,
-            phase_map,
-            output_types,
-            domains,
-            depth=depth,
-            max_depth=max_depth,
-        )
-        if result is not None:
-            issues.append(result)
+    for component in _cyclic_sccs(list(phase_map), _phase_transition_edges(phases)):
+        try:
+            issue = _check_scc_paths(
+                component,
+                phase_map,
+                output_types,
+                domains,
+                depth=depth,
+                max_depth=max_depth,
+            )
+        except (KeyError, TypeError, ValueError, z3.Z3Exception) as exc:
+            issue = CompileIssue(
+                location="SCC {" + ", ".join(component) + "}",
+                message=f"C2* inconclusive: unsupported symbolic encoding ({exc})",
+            )
+        if issue is not None:
+            issues.append(issue)
     return issues
 
 
@@ -968,34 +980,56 @@ def _check_phase_reachability(
     ]
 
 
-def _simple_cycles(
+def _cyclic_sccs(
     nodes: list[str],
     edges: list[tuple[str, str]],
 ) -> tuple[tuple[str, ...], ...]:
+    """Iterative Kosaraju traversal; include singleton self-loops only."""
     adjacency: dict[str, list[str]] = {node: [] for node in nodes}
+    reverse: dict[str, list[str]] = {node: [] for node in nodes}
+    edge_set = set(edges)
     for source, target in edges:
-        adjacency.setdefault(source, []).append(target)
-
-    cycles: set[tuple[str, ...]] = set()
-    for start in nodes:
-        stack: list[tuple[str, list[str]]] = [(start, [start])]
+        if source in adjacency and target in adjacency:
+            adjacency[source].append(target)
+            reverse[target].append(source)
+    seen: set[str] = set()
+    order: list[str] = []
+    for root in nodes:
+        if root in seen:
+            continue
+        seen.add(root)
+        stack = [(root, iter(adjacency[root]))]
         while stack:
-            current, path = stack.pop()
-            for target in adjacency.get(current, []):
-                if target == start:
-                    cycles.add(_canonical_cycle(tuple(path)))
-                elif target not in path:
-                    stack.append((target, [*path, target]))
-    return tuple(sorted(cycles))
+            node, targets = stack[-1]
+            target = next(targets, None)
+            if target is None:
+                order.append(node)
+                stack.pop()
+            elif target not in seen:
+                seen.add(target)
+                stack.append((target, iter(adjacency[target])))
+    seen.clear()
+    components = []
+    for root in reversed(order):
+        if root in seen:
+            continue
+        seen.add(root)
+        pending = [root]
+        component = []
+        while pending:
+            node = pending.pop()
+            component.append(node)
+            for target in reverse[node]:
+                if target not in seen:
+                    seen.add(target)
+                    pending.append(target)
+        if len(component) > 1 or (root, root) in edge_set:
+            components.append(tuple(sorted(component)))
+    return tuple(sorted(components))
 
 
-def _canonical_cycle(cycle: tuple[str, ...]) -> tuple[str, ...]:
-    rotations = [cycle[index:] + cycle[:index] for index in range(len(cycle))]
-    return min(rotations)
-
-
-def _check_c2star_for_cycle(
-    cycle: tuple[str, ...],
+def _check_scc_paths(
+    component: tuple[str, ...],
     phases: dict[str, Phase],
     output_types: dict[str, type[Any]],
     domains: dict[str, tuple[Any, ...]],
@@ -1003,114 +1037,88 @@ def _check_c2star_for_cycle(
     depth: int | None,
     max_depth: int,
 ) -> CompileIssue | None:
-    guards: list[Expr] = []
-    for index, phase_name in enumerate(cycle):
-        next_phase = cycle[(index + 1) % len(cycle)]
-        guard = _cycle_guard(phases[phase_name], next_phase)
-        if guard is None:
-            return CompileIssue(
-                location=" -> ".join((*cycle, cycle[0])),
-                message=(
-                    "C2 violation: phase graph contains a cycle, "
-                    "and C2* cannot check non-symbolic guards"
-                ),
-            )
-        guards.append(guard)
-
-    cycle_writes = frozenset(
-        output_path
-        for phase_name in cycle
-        for node_ref in phases[phase_name].nodes
-        for output_path, _ in _node_ref_outputs(node_ref)
-    )
-    guard_vars = frozenset().union(*(guard.variables for guard in guards))
-    relevant_vars = guard_vars & cycle_writes
-    traversal_count = depth
-    if traversal_count is None:
-        bound = _c2star_collapse_bound(relevant_vars, domains)
-        if bound is None:
-            return CompileIssue(
-                location=" -> ".join((*cycle, cycle[0])),
-                message=(
-                    "C2 violation: phase graph contains a cycle, "
-                    "and C2* exact bound needs finite domains for "
-                    f"{sorted(relevant_vars)}"
-                ),
-            )
-        traversal_count = bound
-    if traversal_count > max_depth:
+    location = "SCC {" + ", ".join(component) + "}"
+    internal = [
+        (source, _phase_ref_name(t.target), t.predicate)
+        for source in component
+        for t in _effective_transitions(phases[source])
+        if _phase_ref_name(t.target) in component
+    ]
+    if any(not isinstance(guard, Expr) for _, _, guard in internal):
         return CompileIssue(
-            location=" -> ".join((*cycle, cycle[0])),
-            message=(
-                "C2 violation: phase graph contains a cycle, "
-                f"and C2*({traversal_count}) exceeds max_depth={max_depth} "
-                f"for R_C={sorted(relevant_vars)}"
-            ),
+            location=location,
+            message="C2* inconclusive: cannot check non-symbolic internal guards",
         )
-
+    guards = [(source, target, cast(Expr, guard)) for source, target, guard in internal]
+    guard_vars = frozenset().union(*(g.variables for _, _, g in guards))
+    writes = {
+        name: frozenset(path for node in phases[name].nodes for path, _ in _node_ref_outputs(node))
+        & guard_vars
+        for name in component
+    }
+    relevant = frozenset().union(*writes.values())
+    bound: int | None = len(component)
+    for path in relevant:
+        if path not in domains:
+            bound = None
+            break
+        bound *= len(domains[path])
+    limit = min(max_depth, depth if depth is not None else max_depth)
+    if bound is not None:
+        limit = min(limit, max(1, bound))
     solver = z3.Solver()
     state = {
-        path: _z3_variable_for_type(output_types[path], f"initial::{path}") for path in guard_vars
+        path: _z3_variable_for_type(output_types[path], f"state::0::{path}")
+        for path in sorted(guard_vars)
     }
-    all_bindings = dict(state)
-    initial_ctx = Z3Context(output_types, domains=domains, bindings=state)
-    solver.add(*initial_ctx.domain_constraints(guard_vars))
-    for traversal in range(1, traversal_count + 1):
-        for phase_index, phase_name in enumerate(cycle, start=1):
-            phase_writes = {
-                output_path
-                for node_ref in phases[phase_name].nodes
-                for output_path, _ in _node_ref_outputs(node_ref)
-            }
-            for path in sorted(phase_writes & guard_vars):
-                variable = _z3_variable_for_type(
-                    output_types[path],
-                    f"write::{traversal}::{phase_index}::{path}",
+    ctx = Z3Context(output_types, domains=domains, bindings=state)
+    solver.add(*ctx.domain_constraints(guard_vars))
+    phase_ids = {name: i for i, name in enumerate(component)}
+    current = z3.Int("phase::0")
+    solver.add(z3.Or(*(current == i for i in phase_ids.values())))
+    for step in range(1, limit + 1):
+        following = z3.Int(f"phase::{step}")
+        post = {
+            path: _z3_variable_for_type(output_types[path], f"state::{step}::{path}")
+            if path in relevant
+            else state[path]
+            for path in sorted(guard_vars)
+        }
+        ctx = Z3Context(output_types, domains=domains, bindings=post)
+        solver.add(*ctx.domain_constraints(relevant))
+        branches = []
+        for source in component:
+            branches.append(
+                z3.And(
+                    current == phase_ids[source],
+                    *(post[path] == state[path] for path in sorted(relevant - writes[source])),
+                    z3.Or(
+                        *(
+                            z3.And(following == phase_ids[cast(str, target)], guard.to_z3(ctx))
+                            for origin, target, guard in guards
+                            if origin == source
+                        )
+                    ),
                 )
-                state[path] = variable
-                all_bindings[f"{path}@{traversal}.{phase_index}"] = variable
-            ctx = Z3Context(output_types, domains=domains, bindings=dict(state))
-            solver.add(*ctx.domain_constraints(phase_writes & guard_vars))
-            solver.add(guards[phase_index - 1].to_z3(ctx))
-
-    if solver.check() != z3.sat:
-        return None
-    model_ctx = Z3Context(output_types, domains=domains, bindings=all_bindings)
-    return CompileIssue(
-        location=" -> ".join((*cycle, cycle[0])),
-        message=(
-            f"C2*({traversal_count}) violation: cycle is feasible for "
-            f"{traversal_count} traversal(s), R_C={sorted(relevant_vars)}, "
-            f"witness={_model_snapshot(solver.model(), model_ctx, limit=16)}"
-        ),
-    )
-
-
-def _cycle_guard(phase: Phase, target: str) -> Expr | None:
-    guards = [
-        transition.predicate
-        for transition in _effective_transitions(phase)
-        if _phase_ref_name(transition.target) == target
-    ]
-    if not guards or not all(isinstance(guard, Expr) for guard in guards):
-        return None
-    expr = cast(Expr, guards[0])
-    for guard in guards[1:]:
-        expr = expr | cast(Expr, guard)
-    return expr
-
-
-def _c2star_collapse_bound(
-    relevant_vars: frozenset[str],
-    domains: dict[str, tuple[Any, ...]],
-) -> int | None:
-    bound = 1
-    for path in relevant_vars:
-        domain = domains.get(path)
-        if domain is None:
+            )
+        solver.add(z3.Or(*branches))
+        result = solver.check()
+        if result == z3.unsat:
             return None
-        bound *= len(domain)
-    return bound
+        if result == z3.unknown:
+            return CompileIssue(
+                location=location,
+                message=f"C2* inconclusive at depth {step}: solver UNKNOWN ({solver.reason_unknown()})",
+            )
+        state, current = post, following
+    if bound is not None and limit >= bound:
+        detail = (
+            f"SAT at finite bound N_S={bound}; infinite local residence is possible, "
+            "but global nontermination requires a reachable entry"
+        )
+    else:
+        detail = f"SAT through depth {limit}; checking budget exhausted, termination unproved"
+    return CompileIssue(location=location, message=f"C2*: {detail}")
 
 
 def _check_c3_for_phase(

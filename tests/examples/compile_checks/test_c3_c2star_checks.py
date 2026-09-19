@@ -14,7 +14,7 @@ def test_c3_c2star_checks_example_status(capsys: pytest.CaptureFixture[str]) -> 
     assert capsys.readouterr().out.splitlines() == [
         "phi: C3 violation: transitions 'if' and 'if' overlap at state {'X.x': 'False'}",
         "compile ok = True",
-        "C2*(2) status = pass",
+        "C2* status = pass",
     ]
 
 

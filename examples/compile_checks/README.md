@@ -20,7 +20,7 @@ and [symbolic phase guards](../../docs/concepts/phases.md#branch-chains).
 | --- | --- | --- |
 | `c1_violation.py` | C1 | Two nodes in one phase read each other's current state, so the phase dependency graph is cyclic. |
 | `c3_violation.py` | C3 | Two identical guards overlap, so the next phase is ambiguous. |
-| `c3_c2star_checks.py` | C3 and C2* | Prints an overlapping-guard diagnostic, then a cycle that passes bounded C2* reasoning. |
+| `c3_c2star_checks.py` | C3 and C2* | Prints an overlapping-guard diagnostic, then an SCC certified by bounded C2* path checking. |
 | `c2star_cycle.py` | C2* | Compares a dead symbolic cycle with a live cycle that must be rejected. |
 | `c2star_split_writes.py` | C2* | Shows a two-phase cycle that is semantically dead after one traversal. |
 | `unconditional_cycle.py` | C2 and C2* | Shows an unconditional phase cycle that is a definite infinite loop. |

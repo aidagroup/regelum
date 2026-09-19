@@ -165,6 +165,6 @@ def test_c2star_uses_effective_elseif_guards() -> None:
         )
 
     assert any(
-        "C2*" in issue.message and "a -> b -> a" in issue.location
+        "C2*" in issue.message and "SCC {a, b}" in issue.location
         for issue in exc_info.value.report.issues
     )

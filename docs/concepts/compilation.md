@@ -109,18 +109,36 @@ The formal conditions are:
 | `C1` | Every phase-local node dependency graph is acyclic. | Nodes in one phase cannot require each other's current output in a circular order. |
 | `C2` | The phase-transition graph is acyclic. | A tick cannot loop forever by following phase edges. |
 | `C3` | For every phase and state, exactly one outgoing transition is enabled. | A phase cannot have either no next step or multiple possible next steps. |
-| `C2*` | A semantic cycle check: a phase cycle is allowed only when the guards cannot be satisfied for enough consecutive traversals. | Dead or self-blocking cycles can be accepted while live infinite loops are rejected. |
+| `C2*(n)` | No path of `n` internal transitions exists in any cyclic strongly connected component. | Together with C1 and C3, certifies tick termination even when execution alternates between cycles. |
 
-`C1`, `C2`, and `C3` are syntactic sufficient conditions.
-They are intentionally conservative: if all three hold, the compiled system has
-an executable node order, a terminating tick graph, and deterministic branch
-selection.
-`C2*` is a less conservative termination check for cyclic phase graphs.
-Instead of rejecting every phase cycle, it asks whether a cycle can actually be
-followed repeatedly under the symbolic guards that lead around the cycle.
-The finite bound is computed from `R_C`, the guard-relevant cycle-state set:
-state variables that are both read by cycle guards and written by phases in the
-same cycle.
+`C1`, `C2`, and `C3` are sufficient structural conditions. For cyclic phase
+graphs, Regelum uses `C2*(n)` instead of independent simple-cycle checks.
+The solver checks all routes within each SCC, using symbolic phase identifiers,
+post-update guards, and preservation of state not written by the current phase.
+Node updates are conservatively allowed to choose any domain-valid values.
+
+The checker increases `n` one transition at a time and passes a component only
+on UNSAT. If all writable internal-guard variables `R_S` have finite domains,
+the stopping bound is `N_S = number_of_phases * product_of_domain_sizes`.
+Read-only guard variables remain fixed throughout each path.
+All cyclic components must pass. A singleton is checked only if it has a self-loop.
+
+Configure `c2star_depth` and `c2star_max_depth` (default budget: 64 transitions).
+The effective budget is the minimum of the supplied limits and the finite bound,
+when available. Earlier UNSAT can certify a component even when its finite bound
+exceeds the budget or some domains are infinite.
+The parameters count **internal SCC transitions, not cycle traversals**.
+The name `C2*` denotes this SCC criterion throughout the current documentation.
+
+SAT at the finite bound establishes possible infinite **local** residence, not
+necessarily a reachable infinite tick. SAT below the bound, solver UNKNOWN,
+unsupported internal guards, and exhausted budgets leave termination unproved.
+These produce compile issues (and `CompileError` in strict mode); they never
+produce a termination certificate. The checker is sufficient, not complete for
+termination from reachable tick entries.
+
+See [Tick termination with C2*(n)](termination.md) for the definition,
+solver encoding, budget settings, diagnostics, and migration details.
 
 Current Regelum checks these items concretely:
 
@@ -142,13 +160,9 @@ Current Regelum checks these items concretely:
   that their disjunction covers the relevant state space. For callable guards,
   it samples finite state domains when possible. A failure reports either an
   overlapping transition pair or a state where no transition is enabled.
-- **C2 and C2* tick termination.** If the phase graph has no cycles, it satisfies
-  C2 directly. If the graph has cycles, Regelum extracts each simple cycle and
-  tries C2*: every edge around that cycle must have symbolic guards, and all
-  variables in `R_C` must have finite domains. The checker asks Z3 whether the
-  cycle can be traversed for `|D^{R_C}|` consecutive traversals. If such a
-  witness exists, the cycle is rejected; if the formula is unsatisfiable, the
-  cycle is accepted as dead or self-blocking.
+- **C2 and C2* tick termination.** An acyclic graph passes immediately.
+  Otherwise, iterative SCC traversal finds the cyclic components and Z3 checks
+  bounded internal paths as described above. No simple cycles are enumerated.
 - **Continuous-phase contract.** When a system has a continuous phase, Regelum
   also checks that a tick reaches exactly one continuous phase on every
   feasible path. This avoids silently choosing semantics for repeated
@@ -455,8 +469,8 @@ output in the same phase.
 
 C2 is syntactic: it rejects every cycle in the phase-transition graph.
 That is safe, but conservative.
-C2* is more precise: it checks whether the cycle can actually be traversed
-repeatedly under the symbolic guards.
+C2* checks whether execution can remain in the entire component for a
+bounded number of transitions, including switching between cycles.
 
 The split-write example has a cycle in the phase graph:
 
@@ -490,7 +504,7 @@ system:
 
 ```text
 compile ok = True
-C2*(2) status = pass
+C2* status = pass
 cycle phi0 -> phi1 -> phi0 is dead after one traversal
 ```
 
@@ -530,10 +544,10 @@ which `Mode.flag` remains true on every traversal. Regelum rejects the cycle:
     ```
 
 ```text
-a -> b -> a: C2*(2) violation: cycle is feasible for 2 traversal(s), R_C=['Mode.flag'], witness={...}
+SCC {a, b}: C2*: SAT at finite bound N_S=4; infinite local residence is possible, but global nontermination requires a reachable entry
 ```
 
-The important part is `R_C=['Mode.flag']`: the cycle controls the same state
+Here `R_S=['Mode.flag']`: the component controls the same state
 variable that its continuation guards read. Since the two-phase cycle can keep
 choosing values that satisfy the cycle guards, it is a possible infinite loop.
 
@@ -562,10 +576,10 @@ C2 fails because the phase graph is cyclic, and C2* also fails immediately:
     ```
 
 ```text
-a -> b -> a: C2*(1) violation: cycle is feasible for 1 traversal(s), R_C=[], witness={}
+SCC {a, b}: C2*: SAT at finite bound N_S=2; infinite local residence is possible, but global nontermination requires a reachable entry
 ```
 
-`R_C=[]` means no cycle-owned state variable is needed to keep the loop alive;
+`R_S=[]` means no cycle-owned state variable is needed to keep the loop alive;
 the unconditional edges alone are enough.
 
 ## Runtime

@@ -9,8 +9,8 @@ def test_unconditional_cycle_example_fails_c2star() -> None:
         build_system()
 
     assert any(
-        issue.location == "a -> b -> a"
+        issue.location == "SCC {a, b}"
         and issue.message
-        == "C2*(1) violation: cycle is feasible for 1 traversal(s), R_C=[], witness={}"
+        == "C2*: SAT at finite bound N_S=2; infinite local residence is possible, but global nontermination requires a reachable entry"
         for issue in exc_info.value.report.issues
     )

@@ -53,7 +53,7 @@ def build_system(
 def main() -> None:
     system = build_system()
     print(f"compile ok = {system.compile_report.ok}")
-    print("C2*(2) status = pass")
+    print("C2* status = pass")
     print("cycle phi0 -> phi1 -> phi0 is dead after one traversal")
 
 

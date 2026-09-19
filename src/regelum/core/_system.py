@@ -66,6 +66,16 @@ from regelum.core._checks import (
 
 
 class PhasedReactiveSystem:
+    """Compile and run a phase-reactive system.
+
+    ``c2star_depth`` optionally limits the number of internal SCC transitions
+    considered by the termination check; ``c2star_max_depth`` caps that depth
+    (default 64). Both count transitions, not complete cycle traversals.
+    Only an UNSAT result certifies a cyclic component. Uncertified components
+    produce compile issues, raising ``CompileError`` when ``strict=True``.
+    ``max_phase_steps`` is a separate runtime limit, not a solver budget.
+    """
+
     def __init__(
         self,
         *,

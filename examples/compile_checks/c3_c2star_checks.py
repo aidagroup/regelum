@@ -70,7 +70,7 @@ def main() -> None:
 
     system = build_c2star_system()
     print(f"compile ok = {system.compile_report.ok}")
-    print("C2*(2) status = pass")
+    print("C2* status = pass")
 
 
 if __name__ == "__main__":

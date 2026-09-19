@@ -64,6 +64,7 @@ nav:
       - Phases: concepts/phases.md
       - Continuous Dynamics: concepts/continuous.md
       - Create, Compile, and Run: concepts/compilation.md
+      - Tick Termination — C2*: concepts/termination.md
   - Examples:
       - Free Pendulum: examples/free_pendulum.md
       - Controlled Pendulum: examples/controlled_pendulum.md
